@@ -26,19 +26,45 @@ ACCOUNT_NAME_MAP = {
     "기본계좌": "종합매매"
 }
 
-def get_connection():
+from psycopg2 import pool
+
+@st.cache_resource
+def get_connection_pool():
     try:
         pg_url = st.secrets["SUPABASE_URL"]
-    except FileNotFoundError:
-        # Fallback if secrets.toml isn't loaded (e.g. running outside Streamlit)
+    except Exception:
+        # Fallback if secrets.toml isn't loaded via st.secrets
         import toml
         secrets_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
         with open(secrets_path, "r", encoding="utf-8") as f:
             secrets = toml.load(f)
             pg_url = secrets["SUPABASE_URL"]
             
-    conn = psycopg2.connect(pg_url)
-    return conn
+    # 최소 1개, 최대 20개의 커넥션을 유지하는 풀 생성
+    return psycopg2.pool.ThreadedConnectionPool(1, 20, pg_url)
+
+class PoolConnectionWrapper:
+    def __init__(self, pool_obj, conn):
+        self.pool = pool_obj
+        self.conn = conn
+        
+    def cursor(self, *args, **kwargs):
+        return self.conn.cursor(*args, **kwargs)
+        
+    def commit(self):
+        self.conn.commit()
+        
+    def rollback(self):
+        self.conn.rollback()
+        
+    def close(self):
+        # close 호출 시 진짜로 연결을 끊지 않고 풀에 반환
+        self.pool.putconn(self.conn)
+
+def get_connection():
+    pool_obj = get_connection_pool()
+    conn = pool_obj.getconn()
+    return PoolConnectionWrapper(pool_obj, conn)
 
 def sanitize_account_names(acc_list):
     clean_set = set()
