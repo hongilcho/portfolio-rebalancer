@@ -131,13 +131,13 @@ with st.sidebar:
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             if not accounts_df.empty:
-                zip_file.writestr("accounts.csv", accounts_df.to_csv(index=False, encoding='utf-8-sig'))
+                zip_file.writestr("accounts.csv", accounts_df.to_csv(index=False).encode('utf-8-sig'))
             if not assets_df.empty:
-                zip_file.writestr("assets.csv", assets_df.to_csv(index=False, encoding='utf-8-sig'))
+                zip_file.writestr("assets.csv", assets_df.to_csv(index=False).encode('utf-8-sig'))
             if not holdings_df.empty:
-                zip_file.writestr("holdings.csv", holdings_df.to_csv(index=False, encoding='utf-8-sig'))
+                zip_file.writestr("holdings.csv", holdings_df.to_csv(index=False).encode('utf-8-sig'))
             if not trades_df.empty:
-                zip_file.writestr("trade_history.csv", trades_df.to_csv(index=False, encoding='utf-8-sig'))
+                zip_file.writestr("trade_history.csv", trades_df.to_csv(index=False).encode('utf-8-sig'))
         
         zip_buffer.seek(0)
         return zip_buffer
