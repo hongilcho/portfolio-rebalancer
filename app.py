@@ -2,9 +2,11 @@ import streamlit as st
 import pandas as pd
 import os
 import shutil
+import io
+import zipfile
 from data_manager import (
     init_db, get_all_assets, get_all_accounts, add_account, update_account, delete_account,
-    add_asset, update_asset, delete_asset, get_holdings_by_account, save_account_holdings,
+    add_asset, update_asset, delete_asset, get_holdings_by_account, get_all_holdings, save_account_holdings,
     execute_trade, get_trade_history, delete_trade,
     ACCOUNT_TYPES, update_account_settings, update_account_priorities
 )
@@ -115,47 +117,41 @@ if "price_data" not in st.session_state:
 
 # 사이드바: 데이터 백업 및 복구
 with st.sidebar:
-    st.header("💾 데이터 백업 및 복구")
-    st.write("현재 계좌, 종목, 매매 기록 등 장부 전체를 파일로 저장하거나 복구할 수 있습니다.")
+    st.header("💾 데이터 내보내기 (CSV)")
+    st.write("현재 계좌, 종목, 보유 수량, 매매 기록을 엑셀에서 분석할 수 있도록 CSV 압축 파일로 다운로드합니다.")
     
-    # 1. 다운로드 (백업)
-    db_path = os.path.join(os.path.dirname(__file__), 'data', 'portfolio.db')
-    if os.path.exists(db_path):
-        with open(db_path, "rb") as f:
-            st.download_button(
-                label="📥 현재 DB 다운로드 (백업)",
-                data=f,
-                file_name=f"portfolio_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
-                mime="application/octet-stream",
-                use_container_width=True
-            )
-            
+    # 1. 다운로드 (CSV Zip)
+    def generate_csv_zip():
+        # fetch data
+        accounts_df = pd.DataFrame(get_all_accounts())
+        assets_df = pd.DataFrame(get_all_assets())
+        holdings_df = pd.DataFrame(get_all_holdings())
+        trades_df = pd.DataFrame(get_trade_history())
+        
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            if not accounts_df.empty:
+                zip_file.writestr("accounts.csv", accounts_df.to_csv(index=False, encoding='utf-8-sig'))
+            if not assets_df.empty:
+                zip_file.writestr("assets.csv", assets_df.to_csv(index=False, encoding='utf-8-sig'))
+            if not holdings_df.empty:
+                zip_file.writestr("holdings.csv", holdings_df.to_csv(index=False, encoding='utf-8-sig'))
+            if not trades_df.empty:
+                zip_file.writestr("trade_history.csv", trades_df.to_csv(index=False, encoding='utf-8-sig'))
+        
+        zip_buffer.seek(0)
+        return zip_buffer
+        
+    st.download_button(
+        label="📥 CSV 분석용 데이터 다운로드",
+        data=generate_csv_zip(),
+        file_name=f"portfolio_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+        mime="application/zip",
+        use_container_width=True
+    )
+    
     st.divider()
-    
-    # 2. 업로드 (복구)
-    st.write("복구할 DB 파일(.db)을 업로드하세요.")
-    st.warning("⚠️ 복구 시 현재 장부 데이터는 모두 삭제되고 업로드한 파일의 내용으로 완전히 덮어써집니다!")
-    uploaded_file = st.file_uploader("DB 파일 업로드", type=['db'], accept_multiple_files=False)
-    
-    if uploaded_file is not None:
-        if st.button("🚨 덮어쓰기 및 복구 실행", type="primary", use_container_width=True):
-            try:
-                temp_db_path = db_path + ".temp"
-                if os.path.exists(db_path):
-                    shutil.copy2(db_path, temp_db_path)
-                
-                with open(db_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                    
-                if os.path.exists(temp_db_path):
-                    os.remove(temp_db_path)
-                    
-                st.success("데이터베이스 복구가 완료되었습니다. 앱을 새로고침합니다!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"복구 중 오류 발생: {str(e)}")
-                if os.path.exists(temp_db_path):
-                    shutil.move(temp_db_path, db_path)
+    st.caption("※ 클라우드 DB 연동 중이므로 매일 자동으로 안전하게 백업됩니다. 파일 덮어쓰기를 통한 복구 기능은 제외되었습니다.")
 
 # 커스텀 CSS
 st.markdown("""
