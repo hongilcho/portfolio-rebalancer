@@ -150,7 +150,7 @@ def fetch_asset_prices(assets, usd_krw=None):
             "ticker": asset['ticker'],
             "market": asset['market'],
             "target_weight": asset['target_weight'],
-            "account_name": asset['account_name'],
+            "allowed_accounts": asset.get('allowed_accounts', []),
             "price_native": raw_price if raw_price else 0.0,
             "price_krw": price_krw,
             "usd_krw": usd_krw,
