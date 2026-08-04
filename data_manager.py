@@ -157,6 +157,7 @@ def init_db():
 # ---------------------------------------------------------
 # Accounts CRUD
 # ---------------------------------------------------------
+@st.cache_data(ttl=2)
 def get_all_accounts():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -250,6 +251,7 @@ def delete_account(account_id):
 # ---------------------------------------------------------
 # Assets Helpers
 # ---------------------------------------------------------
+@st.cache_data(ttl=2)
 def get_all_assets():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -327,6 +329,7 @@ def delete_asset(asset_id):
 # ---------------------------------------------------------
 # Holdings Helpers
 # ---------------------------------------------------------
+@st.cache_data(ttl=2)
 def get_holdings_by_account(account_id):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -340,6 +343,7 @@ def get_holdings_by_account(account_id):
     conn.close()
     return [dict(r) for r in rows]
 
+@st.cache_data(ttl=2)
 def get_all_holdings():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -432,6 +436,7 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price)
     finally:
         conn.close()
 
+@st.cache_data(ttl=2)
 def get_trade_history():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
