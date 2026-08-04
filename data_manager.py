@@ -7,23 +7,25 @@ from datetime import datetime
 import streamlit as st
 
 # 사용자 정의 6가지 표준 계좌 유형
+from enums import AccountType
+
 ACCOUNT_TYPES = {
-    "종합매매": {"annual_limit": 0, "tax_limit": 0, "max_risk_pct": 100},
-    "CMA": {"annual_limit": 0, "tax_limit": 0, "max_risk_pct": 100},
-    "연금저축계좌": {"annual_limit": 15000000, "tax_limit": 6000000, "max_risk_pct": 100},
-    "ISA": {"annual_limit": 20000000, "tax_limit": 0, "max_risk_pct": 100},
-    "금현물": {"annual_limit": 0, "tax_limit": 0, "max_risk_pct": 100},
-    "IRP": {"annual_limit": 3000000, "tax_limit": 3000000, "max_risk_pct": 70}
+    AccountType.GENERAL: {"annual_limit": 0, "tax_limit": 0, "max_risk_pct": 100},
+    AccountType.PENSION: {"annual_limit": 18000000, "tax_limit": 6000000, "max_risk_pct": 100},
+    AccountType.IRP: {"annual_limit": 18000000, "tax_limit": 9000000, "max_risk_pct": 70},
+    AccountType.ISA: {"annual_limit": 20000000, "tax_limit": 0, "max_risk_pct": 100},
+    AccountType.CMA: {"annual_limit": 0, "tax_limit": 0, "max_risk_pct": 100},
+    AccountType.GOLD: {"annual_limit": 0, "tax_limit": 0, "max_risk_pct": 100},
 }
 
-ACCOUNT_NAME_MAP = {
-    "ISA 계좌": "ISA",
-    "개인형 IRP": "IRP",
-    "해외주식 일반계좌": "종합매매",
-    "국내주식 일반계좌": "종합매매",
-    "해외주식계좌": "종합매매",
-    "일반계좌": "종합매매",
-    "기본계좌": "종합매매"
+ACCOUNT_TYPE_ALIASES = {
+    "해외주식 일반계좌": AccountType.GENERAL,
+    "국내주식 일반계좌": AccountType.GENERAL,
+    "해외주식계좌": AccountType.GENERAL,
+    "일반계좌": AccountType.GENERAL,
+    "기본계좌": AccountType.GENERAL,
+    "ISA 계좌": AccountType.ISA,
+    "개인형 IRP": AccountType.IRP
 }
 
 from psycopg2 import pool
