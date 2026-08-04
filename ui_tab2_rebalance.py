@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import plotly.express as px
-import plotly.graph_objects as go
 from data_manager import (
     get_all_assets, get_all_accounts, get_holdings_by_account, get_all_holdings,
     save_account_holdings, add_account, update_account, delete_account,
