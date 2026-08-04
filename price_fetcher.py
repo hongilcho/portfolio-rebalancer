@@ -39,13 +39,13 @@ def get_kr_stock_price(ticker_code):
         import yfinance as yf
         # KOSPI 종목 시도 (.KS)
         ticker_ks = yf.Ticker(f"{ticker_code}.KS")
-        hist_ks = ticker_ks.history(period="1d")
+        hist_ks = ticker_ks.history(period="5d").dropna(subset=['Close'])
         if not hist_ks.empty:
             return float(hist_ks['Close'].iloc[-1]), None
             
         # KOSDAQ 종목 시도 (.KQ)
         ticker_kq = yf.Ticker(f"{ticker_code}.KQ")
-        hist_kq = ticker_kq.history(period="1d")
+        hist_kq = ticker_kq.history(period="5d").dropna(subset=['Close'])
         if not hist_kq.empty:
             return float(hist_kq['Close'].iloc[-1]), None
             
@@ -88,7 +88,7 @@ def get_us_stock_price(ticker_symbol):
     """미국 주식/ETF 실시간 시세 수집 (yfinance)"""
     try:
         ticker = yf.Ticker(ticker_symbol)
-        hist = ticker.history(period="5d")
+        hist = ticker.history(period="5d").dropna(subset=['Close'])
         if not hist.empty:
             price = float(hist['Close'].iloc[-1])
             return price, None
