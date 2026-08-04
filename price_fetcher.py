@@ -5,6 +5,7 @@ from datetime import datetime
 from lxml import html
 import urllib3
 import streamlit as st
+import math
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_exchange_rate_usd_krw():
@@ -88,10 +89,21 @@ def get_us_stock_price(ticker_symbol):
     """미국 주식/ETF 실시간 시세 수집 (yfinance)"""
     try:
         ticker = yf.Ticker(ticker_symbol)
+        
+        # 1. 시도: fast_info에서 최신 실시간 가격 가져오기 (NaN 버그 우회 및 가장 최신)
+        try:
+            last_price = getattr(ticker.fast_info, 'last_price', None)
+            if last_price is not None and not math.isnan(last_price):
+                return float(last_price), None
+        except Exception:
+            pass
+            
+        # 2. 폴백: history에서 NaN 제외한 가장 최근 종가 가져오기
         hist = ticker.history(period="5d").dropna(subset=['Close'])
         if not hist.empty:
             price = float(hist['Close'].iloc[-1])
             return price, None
+            
     except Exception as e:
         return None, str(e)
     return None, "시세를 찾을 수 없습니다."
