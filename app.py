@@ -1085,7 +1085,10 @@ with tab4:
         else:
             st.warning("최소 1개의 행은 있어야 합니다.")
 
-    t_date = st.date_input("일괄 체결 일자", datetime.date.today())
+    import datetime
+    KST = datetime.timezone(datetime.timedelta(hours=9))
+    today_kst = datetime.datetime.now(KST).date()
+    t_date = st.date_input("일괄 체결 일자", today_kst)
     
     col_buy, col_sell = st.columns(2)
     
@@ -1200,8 +1203,11 @@ with tab4:
         with col_f1:
             # 기본적으로 최근 3개월 조회를 기본값으로 세팅
             import datetime
-            default_start = max(min_date, datetime.date.today() - datetime.timedelta(days=90))
-            date_range = st.date_input("조회 기간", value=(default_start, max_date), min_value=min_date, max_value=max_date)
+            KST = datetime.timezone(datetime.timedelta(hours=9))
+            today_kst = datetime.datetime.now(KST).date()
+            
+            default_start = max(min_date, today_kst - datetime.timedelta(days=90))
+            date_range = st.date_input("조회 기간", value=(default_start, max(max_date, today_kst)))
             
         with col_f2:
             all_accounts = ["전체"] + list(df_trades['계좌'].unique())
