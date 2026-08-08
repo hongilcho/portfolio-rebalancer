@@ -223,27 +223,27 @@ if st.session_state.price_data:
 # ---------------------------------------------------------
 
 # ---------------------------------------------------------
-# 메인 탭 구성
+# 단일 페이지 라우팅 (Single Page Routing)으로 성능 최적화
 # ---------------------------------------------------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+menus = [
     "📊 1. 포트폴리오 현황",
     "🎯 2. 목표 비중 설정",
     "⚖️ 3. 리밸런싱 전략",
     "📝 4. 매매 기록",
     "⚙️ 5. 기초 환경 세팅"
-])
+]
 
-with tab1:
+# st.pills가 최신 버전에 있지만, 호환성을 위해 horizontal radio 사용
+selected_menu = st.radio("메뉴 선택", menus, horizontal=True, label_visibility="collapsed")
+st.markdown("<hr style='margin-top: 0px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+
+if selected_menu == menus[0]:
     render_tab1()
-
-with tab2:
+elif selected_menu == menus[1]:
     render_tab2()
-
-with tab3:
+elif selected_menu == menus[2]:
     render_tab3()
-
-with tab4:
+elif selected_menu == menus[3]:
     render_tab4()
-
-with tab5:
+elif selected_menu == menus[4]:
     render_tab5()
