@@ -36,9 +36,11 @@ def check_password():
     """Returns `True` if the user had the correct password."""
     
     def password_entered():
-        if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
+        pwd = st.session_state.get("password", "")
+        if pwd == st.secrets.get("APP_PASSWORD", ""):
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # 보안을 위해 입력한 암호는 세션에서 즉시 삭제
+            if "password" in st.session_state:
+                del st.session_state["password"]  # 보안을 위해 입력한 암호는 세션에서 즉시 삭제
         else:
             st.session_state["password_correct"] = False
 
