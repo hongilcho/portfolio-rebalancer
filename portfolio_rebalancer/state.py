@@ -14,6 +14,7 @@ class AppState(rx.State):
     price_data: dict[str, dict] = {}
     password_correct: bool = False
     password_input: str = ""
+    login_failed: bool = False
     
     def on_load(self):
         """Called when the app loads to initialize basic data."""
@@ -34,9 +35,11 @@ class AppState(rx.State):
         
         if self.password_input == correct_password:
             self.password_correct = True
+            self.login_failed = False
             self.password_input = ""  # Clear it for security
         else:
             self.password_correct = False
+            self.login_failed = True
             
     def logout(self):
         """Log the user out."""
