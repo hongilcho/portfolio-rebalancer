@@ -225,6 +225,14 @@ def render_tab1():
                     return 'color: #4dabf7; font-weight: 700; font-size: 15px;'
             return 'font-weight: 700; font-size: 15px;'
 
+        def style_profit_string(val):
+            if isinstance(val, str):
+                if val.startswith('+'):
+                    return 'color: #ff6b6b; font-weight: 700; font-size: 15px;'
+                elif val.startswith('-'):
+                    return 'color: #4dabf7; font-weight: 700; font-size: 15px;'
+            return 'font-weight: 700; font-size: 15px;'
+
         def style_qty(val):
             return 'font-weight: 700; font-size: 15px;'
 
@@ -424,7 +432,9 @@ def render_tab1():
                 # 계좌별 보유 종목 테이블
                 st.markdown("##### 📦 보유 종목 목록")
                 if summary['holdings']:
-                    st.dataframe(pd.DataFrame(summary['holdings']), use_container_width=True, hide_index=True)
+                    df_holdings = pd.DataFrame(summary['holdings'])
+                    styled_holdings = df_holdings.style.map(style_profit_string, subset=["손익"])
+                    st.dataframe(styled_holdings, use_container_width=True, hide_index=True)
                 else:
                     st.info("이 계좌에 등록된 보유 주식이 없습니다. 아래 [수량/평단가 입력]에서 추가할 수 있습니다.")
                     
