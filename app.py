@@ -169,6 +169,11 @@ st.markdown('<div class="sub-header">계좌별 예수금, 보유 수량/평단�
 # ---------------------------------------------------------
 # 상단 환율 바 & 실시간 새로고침
 # ---------------------------------------------------------
+def on_custom_rate_change():
+    st.session_state.usd_krw = st.session_state.custom_rate_input
+    st.session_state.rate_source = "수동입력"
+    st.session_state.price_data = None  # 환율이 바뀌면 원화 환산 가격을 다시 계산해야 함
+
 col_rate1, col_rate2, col_rate3 = st.columns([2, 2, 1])
 
 with col_rate1:
@@ -178,14 +183,14 @@ with col_rate1:
     )
 
 with col_rate2:
-    custom_rate = st.number_input(
+    st.number_input(
         "환율 수동 수정 (필요시 입력)",
         value=st.session_state.usd_krw,
         step=1.0,
-        format="%.2f"
+        format="%.2f",
+        key="custom_rate_input",
+        on_change=on_custom_rate_change
     )
-    if custom_rate != st.session_state.usd_krw:
-        st.session_state.usd_krw = custom_rate
 
 with col_rate3:
     st.write(" ")
