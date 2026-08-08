@@ -384,6 +384,40 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (new_trade_id, trade_date, str(account_id), str(asset_id), trade_type, quantity, price))
         
+        # 현금 잔고(예수금) 업데이트 로직
+        if trade_type in ('BUY', 'SELL'):
+            # 종목의 시장(market) 확인
+            cursor.execute('SELECT market FROM assets WHERE id = %s', (str(asset_id),))
+            asset_row = cursor.fetchone()
+            if asset_row:
+                is_usd = (asset_row['market'] == 'US')
+                trade_amount = quantity * price
+                
+                # 계좌 잔고 확인
+                cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s', (str(account_id),))
+                acc_row = cursor.fetchone()
+                if acc_row:
+                    dep_krw = float(acc_row['deposit_krw'])
+                    dep_usd = float(acc_row['deposit_usd'])
+                    
+                    if trade_type == 'BUY':
+                        if is_usd:
+                            dep_usd -= trade_amount
+                        else:
+                            dep_krw -= trade_amount
+                    elif trade_type == 'SELL':
+                        if is_usd:
+                            dep_usd += trade_amount
+                        else:
+                            dep_krw += trade_amount
+                            
+                    # 계좌 잔고 업데이트
+                    cursor.execute('''
+                        UPDATE accounts
+                        SET deposit_krw = %s, deposit_usd = %s
+                        WHERE id = %s
+                    ''', (dep_krw, dep_usd, str(account_id)))
+                    
         cursor.execute('''
             SELECT quantity, avg_price FROM holdings 
             WHERE account_id = %s AND asset_id = %s

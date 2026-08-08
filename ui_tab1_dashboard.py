@@ -64,13 +64,13 @@ def render_tab1():
                 
                 holding_details.append({
                     "종목명": h['asset_name'],
-                    "티커": h['ticker'],
-                    "위험구분": "🔴 위험자산" if h['is_risk_asset'] else "🟢 안전자산",
                     "보유수량": f"{qty:,.0f} 주",
+                    "손익": f"{profit_krw:+,.0f} 원 ({profit_pct:+.1f}%)",
+                    "평가금액": f"{eval_val:,.0f} 원",
                     "평단가": f"{avg_p_krw:,.0f} 원",
                     "현재가": f"{curr_p:,.0f} 원",
-                    "평가금액": f"{eval_val:,.0f} 원",
-                    "손익": f"{profit_krw:+,.0f} 원 ({profit_pct:+.1f}%)"
+                    "티커": h['ticker'],
+                    "위험구분": "🔴 위험자산" if h['is_risk_asset'] else "🟢 안전자산"
                 })
                 
             total_acc_val = total_deposit + stock_eval
@@ -153,7 +153,7 @@ def render_tab1():
             qty_disp = f"{int(data['qty']):,}{unit_str}" if float(data['qty']).is_integer() else f"{float(data['qty']):,.2f}{unit_str}"
             
             stock_summary_rows.append({
-                "종목명": f"{data['name']} ({data['ticker']})",
+                "종목명": data['name'],
                 "수량": qty_disp,
                 "평가금액(원)": data['eval_amt_krw'],
                 "손익(원)": profit_krw,
@@ -235,15 +235,15 @@ def render_tab1():
             
             # 표 1: 자산 기본 정보
             st.markdown("**[자산 기본 정보]**")
-            df_stock_info = df_stock[["종목명", "수량", "평가금액(원)", "손익(원)", "수익률(%)", "평단가(원)", "현재가(원)"]]
+            df_stock_info = df_stock[["종목명", "수량", "수익률(%)", "손익(원)", "평가금액(원)", "평단가(원)", "현재가(원)"]]
             
             # 합계 행 추가
             total_row_stock = pd.DataFrame([{
                 "종목명": "총합계",
                 "수량": "-",
-                "평가금액(원)": total_stock_eval,
-                "손익(원)": total_stock_profit,
                 "수익률(%)": total_stock_return,
+                "손익(원)": total_stock_profit,
+                "평가금액(원)": total_stock_eval,
                 "평단가(원)": "-",
                 "현재가(원)": "-"
             }])
