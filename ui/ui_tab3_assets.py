@@ -1,15 +1,15 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from data_manager import (
+from data.data_manager import (
     get_all_assets, get_all_accounts, get_holdings_by_account, get_all_holdings,
     save_account_holdings, add_account, update_account, delete_account,
     add_asset, update_asset, delete_asset, execute_trade, get_trade_history,
     delete_trade, update_account_settings, update_account_priorities, ACCOUNT_TYPES
 )
-from utils import num_to_kr_mixed, format_usd_label
-from enums import Currency, AccountType, TradeType
-from rebalance_calculator import calculate_rebalancing_plan
+from ui.utils import num_to_kr_mixed, format_usd_label
+from data.enums import Currency, AccountType, TradeType
+from logic.rebalance_calculator import calculate_rebalancing_plan
 
 def render_tab3():
     assets = get_all_assets()

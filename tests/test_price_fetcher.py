@@ -1,5 +1,5 @@
 import pytest
-from price_fetcher import get_kr_stock_price, get_us_stock_price, get_krx_gold_price, get_exchange_rate_usd_krw
+from logic.price_fetcher import get_kr_stock_price, get_us_stock_price, get_krx_gold_price, get_exchange_rate_usd_krw
 
 def test_get_us_stock_price(mocker):
     # Mock yfinance Ticker and history
@@ -19,7 +19,7 @@ def test_get_us_stock_price(mocker):
     # Disable fast_info for this test by making it None
     mock_ticker.fast_info = None
 
-    mocker.patch('price_fetcher.yf.Ticker', return_value=mock_ticker)
+    mocker.patch('logic.price_fetcher.yf.Ticker', return_value=mock_ticker)
     
     price, err = get_us_stock_price('AAPL')
     assert price == 150.5
@@ -31,7 +31,7 @@ def test_get_us_stock_price_fastinfo(mocker):
     mock_fast_info.last_price = 151.0
     mock_ticker.fast_info = mock_fast_info
     
-    mocker.patch('price_fetcher.yf.Ticker', return_value=mock_ticker)
+    mocker.patch('logic.price_fetcher.yf.Ticker', return_value=mock_ticker)
     
     price, err = get_us_stock_price('AAPL')
     assert price == 151.0
@@ -39,12 +39,12 @@ def test_get_us_stock_price_fastinfo(mocker):
 
 def test_get_exchange_rate(mocker):
     # Mock yfinance to fail, forcing fallback
-    mocker.patch('price_fetcher.yf.Ticker', side_effect=Exception("API Error"))
+    mocker.patch('logic.price_fetcher.yf.Ticker', side_effect=Exception("API Error"))
     
     # Mock requests.get for Naver fallback
     mock_response = mocker.MagicMock()
     mock_response.text = 'today<span class="blind">1,350.50</span>'
-    mocker.patch('price_fetcher.requests.get', return_value=mock_response)
+    mocker.patch('logic.price_fetcher.requests.get', return_value=mock_response)
     
     rate, source = get_exchange_rate_usd_krw()
     assert rate == 1350.5

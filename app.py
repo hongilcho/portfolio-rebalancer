@@ -4,23 +4,23 @@ import os
 import shutil
 import io
 import zipfile
-from data_manager import (
+from data.data_manager import (
     init_db, get_all_assets, get_all_accounts, add_account, update_account, delete_account,
     add_asset, update_asset, delete_asset, get_holdings_by_account, get_all_holdings, save_account_holdings,
     execute_trade, get_trade_history, delete_trade,
     ACCOUNT_TYPES, update_account_settings, update_account_priorities
 )
 import datetime
-from price_fetcher import get_exchange_rate_usd_krw, fetch_asset_prices
-from rebalance_calculator import calculate_rebalancing_plan
+from logic.price_fetcher import get_exchange_rate_usd_krw, fetch_asset_prices
+from logic.rebalance_calculator import calculate_rebalancing_plan
 
-from ui_tab1_dashboard import render_tab1
-from ui_tab2_rebalance import render_tab2
-from ui_tab3_assets import render_tab3
-from ui_tab4_history import render_tab4
-from ui_tab5_settings import render_tab5
+from ui.ui_tab1_dashboard import render_tab1
+from ui.ui_tab2_rebalance import render_tab2
+from ui.ui_tab3_assets import render_tab3
+from ui.ui_tab4_history import render_tab4
+from ui.ui_tab5_settings import render_tab5
 # Helper function for Korean number formatting
-from utils import num_to_kr_mixed, format_usd_label
+from ui.utils import num_to_kr_mixed, format_usd_label
 # 페이지 기본 설정
 st.set_page_config(
     page_title="자산 배분 포트폴리오 매니저",

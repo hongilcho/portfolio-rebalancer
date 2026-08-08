@@ -1,15 +1,15 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from data_manager import (
+from data.data_manager import (
     get_all_assets, get_all_accounts, get_holdings_by_account, get_all_holdings,
     save_account_holdings, add_account, update_account, delete_account,
     add_asset, update_asset, delete_asset, execute_trade, get_trade_history,
     delete_trade, update_account_settings, update_account_priorities, ACCOUNT_TYPES
 )
-from utils import num_to_kr_mixed, format_usd_label
-from enums import Currency, AccountType, TradeType
-from rebalance_calculator import calculate_rebalancing_plan
+from ui.utils import num_to_kr_mixed, format_usd_label
+from data.enums import Currency, AccountType, TradeType
+from logic.rebalance_calculator import calculate_rebalancing_plan
 
 def render_tab4():
     assets = get_all_assets()
@@ -102,7 +102,7 @@ def render_tab4():
             
             acc_id = c1.selectbox("계좌", options=[a['id'] for a in accounts], format_func=lambda x: next((f"[{a['account_type']}] {a['account_alias']}" for a in accounts if a['id'] == x), ""), key=f"s_acc_{rid}", label_visibility="collapsed")
             
-            from data_manager import get_holdings_by_account
+            from data.data_manager import get_holdings_by_account
             acc_holdings = get_holdings_by_account(acc_id)
             # 필터링: 수량이 0보다 큰 것만 매도 가능
             acc_holdings = [h for h in acc_holdings if h['quantity'] > 0]

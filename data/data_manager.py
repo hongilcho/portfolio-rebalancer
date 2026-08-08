@@ -7,7 +7,7 @@ from datetime import datetime
 import streamlit as st
 
 # 사용자 정의 6가지 표준 계좌 유형
-from enums import AccountType
+from data.enums import AccountType
 
 ACCOUNT_TYPES = {
     AccountType.GENERAL: {"annual_limit": 0, "tax_limit": 0, "max_risk_pct": 100},

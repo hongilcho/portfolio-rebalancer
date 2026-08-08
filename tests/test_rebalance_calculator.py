@@ -1,5 +1,5 @@
 import pytest
-from rebalance_calculator import calculate_rebalancing_plan
+from logic.rebalance_calculator import calculate_rebalancing_plan
 
 def test_calculate_rebalancing_plan_empty():
     plan, transfers, sim_assets, success, msg = calculate_rebalancing_plan(

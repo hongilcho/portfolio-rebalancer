@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from data_manager import execute_trade
+from data.data_manager import execute_trade
 
-@patch('data_manager.get_connection')
+@patch('data.data_manager.get_connection')
 def test_execute_trade_deposit_update(mock_get_connection):
     # Mocking DB connection and cursor
     mock_conn = MagicMock()
