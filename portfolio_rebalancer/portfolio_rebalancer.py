@@ -19,12 +19,13 @@ def layout(page_content: rx.Component) -> rx.Component:
             navbar(),
             rx.container(
                 page_content,
-                padding="4",
-                max_width="1200px"
+                padding="6", # Responsive padding removed due to syntax error
+                max_width="1200px",
+                width="100%",
             ),
             width="100%",
             min_height="100vh",
-            background_color=rx.color("gray", 1)
+            background=rx.color("gray", 2)
         )
     )
 
@@ -43,7 +44,31 @@ def rebalance() -> rx.Component:
 def settings() -> rx.Component:
     return layout(settings_page())
 
-app = rx.App()
+style = {
+    "font_family": "'Pretendard', 'Inter', sans-serif",
+    rx.card: {
+        "box_shadow": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+        "transition": "all 0.2s ease-in-out",
+        "_hover": {
+            "transform": "translateY(-2px)",
+            "box_shadow": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        }
+    }
+}
+
+app = rx.App(
+    theme=rx.theme(
+        appearance="light",
+        has_background=True,
+        radius="large",
+        accent_color="indigo",
+        gray_color="slate",
+    ),
+    style=style,
+    stylesheets=[
+        "https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css",
+    ],
+)
 app.add_page(index, title="포트폴리오 대시보드", on_load=DashboardState.on_load)
 app.add_page(target, route="/target", title="목표 비중 & 계좌 매핑", on_load=TargetState.on_load)
 app.add_page(rebalance, route="/rebalance", title="리밸런싱", on_load=RebalanceState.on_load)

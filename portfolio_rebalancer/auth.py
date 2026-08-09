@@ -15,11 +15,7 @@ def login_screen() -> rx.Component:
                         type="password",
                         value=AppState.password_input,
                         on_change=AppState.set_password_input,
-                        on_key_down=rx.cond(
-                            rx.Var.create("e.key === 'Enter'"),
-                            AppState.check_password,
-                            rx.console_log("key down")
-                        ),
+                        on_key_down=AppState.check_password_on_enter,
                         width="100%"
                     ),
                     rx.button(

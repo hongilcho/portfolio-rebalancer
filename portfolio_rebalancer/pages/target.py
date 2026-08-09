@@ -4,9 +4,27 @@ from portfolio_rebalancer.state import AppState
 from portfolio_rebalancer.components.navbar import navbar
 from data.data_manager import get_all_assets, get_all_accounts, update_asset
 
+from pydantic import BaseModel
+
+class TargetAsset(BaseModel):
+    id: int
+    name: str
+    ticker: str
+    market: str
+    target_weight: float
+    allowed_accounts: List[int]
+    is_risk_asset: bool
+    notes: str
+
+class TargetAccount(BaseModel):
+    id: int
+    account_type: str
+    account_alias: str
+    account_no: str
+
 class TargetState(AppState):
-    assets: List[Dict[str, Any]] = []
-    accounts: List[Dict[str, Any]] = []
+    assets: List[TargetAsset] = []
+    accounts: List[TargetAccount] = []
     
     # Store inputs by asset ID
     weight_inputs: Dict[str, float] = {}
@@ -19,12 +37,13 @@ class TargetState(AppState):
         self.load_data()
         
     def load_data(self):
-        self.assets = get_all_assets()
-        self.accounts = get_all_accounts()
+        assets_raw = get_all_assets()
+        self.assets = [TargetAsset(**a) for a in assets_raw]
+        self.accounts = [TargetAccount(**a) for a in get_all_accounts()]
         
         # Initialize inputs
-        self.weight_inputs = {str(a['id']): float(a['target_weight']) for a in self.assets}
-        self.account_inputs = {str(a['id']): [str(x) for x in a['allowed_accounts']] for a in self.assets}
+        self.weight_inputs = {str(a.id): float(a.target_weight) for a in self.assets}
+        self.account_inputs = {str(a.id): [str(x) for x in a.allowed_accounts] for a in self.assets}
         self.calculate_total()
         
     def calculate_total(self):
@@ -45,25 +64,24 @@ class TargetState(AppState):
             current.remove(acc_id)
         self.account_inputs[aid] = current
         
-    def has_account(self, aid: str, acc_id: str) -> bool:
-        return acc_id in self.account_inputs.get(aid, [])
+        self.account_inputs[aid] = current
 
         
     def save_targets(self):
         for asset in self.assets:
-            aid_str = str(asset['id'])
-            w = self.weight_inputs.get(aid_str, float(asset['target_weight']))
-            accs = self.account_inputs.get(aid_str, asset['allowed_accounts'])
+            aid_str = str(asset.id)
+            w = self.weight_inputs.get(aid_str, float(asset.target_weight))
+            accs = self.account_inputs.get(aid_str, [str(x) for x in asset.allowed_accounts])
             
             update_asset(
-                asset['id'], 
-                asset['name'], 
-                asset['ticker'], 
-                asset['market'], 
+                asset.id, 
+                asset.name, 
+                asset.ticker, 
+                asset.market, 
                 w, 
-                accs, 
-                asset['is_risk_asset'], 
-                asset['notes']
+                [int(x) for x in accs], 
+                asset.is_risk_asset, 
+                asset.notes
             )
         
         # Trigger reload of app state data if needed
@@ -79,13 +97,13 @@ def target_page() -> rx.Component:
             TargetState.assets,
             lambda asset: rx.box(
                 rx.vstack(
-                    rx.heading(f"📌 {asset['name']} ({asset['ticker']} | {asset['market']})", size="5"),
+                    rx.heading("📌 ", asset.name, " (", asset.ticker, " | ", asset.market, ")", size="5"),
                     rx.hstack(
                         rx.box(
                             rx.text("목표 비중 (%)", weight="bold"),
                             rx.input(
-                                value=TargetState.weight_inputs[asset['id'].to_string()].to_string(),
-                                on_change=lambda val: TargetState.set_weight(asset['id'].to_string(), val),
+                                default_value=asset.target_weight.to_string(),
+                                on_change=lambda val: TargetState.set_weight(asset.id.to_string(), val),
                                 type="number",
                                 step="0.1",
                             ),
@@ -97,9 +115,9 @@ def target_page() -> rx.Component:
                                 rx.foreach(
                                     TargetState.accounts,
                                     lambda acc: rx.checkbox(
-                                        f"[{acc['account_type']}] {acc['account_alias']}",
-                                        checked=TargetState.has_account(asset['id'].to_string(), acc['id'].to_string()),
-                                        on_change=lambda c: TargetState.toggle_account(asset['id'].to_string(), acc['id'].to_string(), c)
+                                        rx.text("[", acc.account_type, "] ", acc.account_alias),
+                                        default_checked=asset.allowed_accounts.contains(acc.id),
+                                        on_change=lambda c: TargetState.toggle_account(asset.id.to_string(), acc.id.to_string(), c)
                                     )
                                 ),
                                 align_items="flex-start"
@@ -108,7 +126,7 @@ def target_page() -> rx.Component:
                         ),
                         rx.box(
                             rx.cond(
-                                asset['is_risk_asset'],
+                                asset.is_risk_asset,
                                 rx.text("🔴 위험자산 (IRP 70% 제한)", color="red", weight="bold"),
                                 rx.text("🟢 안전자산", color="green", weight="bold")
                             )

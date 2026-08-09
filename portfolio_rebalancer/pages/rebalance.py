@@ -17,9 +17,24 @@ class RebalanceState(AppState):
     run_message: str = ""
     has_run: bool = False
     
-    trade_plan: List[Dict[str, Any]] = []
+    trade_plan: List[List[Any]] = []
     transfer_plan: List[Dict[str, Any]] = []
     simulated_assets: List[Dict[str, Any]] = []
+    
+    def set_scenario(self, value: str):
+        self.scenario = value
+        
+    def set_new_cash_in(self, value: str):
+        try:
+            self.new_cash_in = float(value)
+        except ValueError:
+            pass
+            
+    def set_drift_threshold(self, value: str):
+        try:
+            self.drift_threshold = float(value)
+        except ValueError:
+            pass
     
     def on_load(self):
         super().on_load()
@@ -42,8 +57,8 @@ class RebalanceState(AppState):
             
         price_map = {}
         if self.price_data:
-            for item in self.price_data:
-                price_map[str(item['id'])] = item['price_krw']
+            for key, item in self.price_data.items():
+                price_map[str(key)] = item['price_krw']
                 
         portfolio_assets = {}
         for h in holdings_raw:
@@ -75,14 +90,15 @@ class RebalanceState(AppState):
         if success:
             self.trade_plan = []
             for t in t_plan:
-                self.trade_plan.append({
-                    "account": t['account_alias'],
-                    "type": "🔴 매도" if t['type'] == 'SELL' else "🔵 매수",
-                    "asset": t['asset_name'],
-                    "qty": t['qty'],
-                    "price": t['price'],
-                    "total": t['total_krw']
-                })
+                t_qty_str = f"{int(t['qty'])}" if t['qty'] == int(t['qty']) else str(t['qty'])
+                self.trade_plan.append([
+                    t['account_alias'],
+                    "🔴 매도" if t['type'] == 'SELL' else "🔵 매수",
+                    t['asset_name'],
+                    t_qty_str,
+                    f"{t['price']:,.0f} 원",
+                    f"{t['total_krw']:,.0f} 원"
+                ])
                 
             self.transfer_plan = []
             for tr in tr_plan:
@@ -96,14 +112,28 @@ class RebalanceState(AppState):
             for s in sim_assets:
                 projected_w = (s['projected_val'] / total_sim * 100) if total_sim > 0 else 0
                 drift = projected_w - s['target_weight']
+                final_q = s['current_qty'] + s['qty_diff']
+                final_q_str = f"{int(final_q)}" if final_q == int(final_q) else f"{final_q}"
+                
+                diff_str = ""
+                if s['qty_diff'] != 0:
+                    diff_val = f"{int(s['qty_diff'])}" if s['qty_diff'] == int(s['qty_diff']) else f"{s['qty_diff']}"
+                    diff_str = f"(+{diff_val})" if s['qty_diff'] > 0 else f"({diff_val})"
+                    
+                drift_str = f"+{drift:.1f}%" if drift > 0 else f"{drift:.1f}%"
+                
                 self.simulated_assets.append({
                     "name": s['asset_name'],
-                    "final_qty": s['current_qty'] + s['qty_diff'],
-                    "qty_diff": s['qty_diff'],
-                    "val": s['projected_val'],
-                    "target_w": s['target_weight'],
-                    "projected_w": projected_w,
-                    "drift": drift
+                    "final_q": final_q_str,
+                    "diff_str": diff_str,
+                    "diff_positive": s['qty_diff'] > 0,
+                    "diff_negative": s['qty_diff'] < 0,
+                    "eval_krw": f"{s['projected_val']:,.0f} 원",
+                    "target_w": f"{s['target_weight']:.1f}%",
+                    "projected_w": f"{projected_w:.1f}%",
+                    "drift_str": drift_str,
+                    "drift_positive": drift > 0,
+                    "drift_negative": drift < 0
                 })
         else:
             self.trade_plan = []
@@ -162,25 +192,89 @@ def rebalance_page() -> rx.Component:
                     RebalanceState.run_success,
                     rx.box(
                         rx.heading("1️⃣ 자금 이체 지시서", size="5"),
-                        rx.foreach(
-                            RebalanceState.transfer_plan,
-                            lambda tp: rx.text(tp["msg"])
+                        rx.box(
+                            rx.foreach(
+                                RebalanceState.transfer_plan,
+                                lambda tp: rx.card(
+                                    rx.hstack(
+                                        rx.text(tp["type"], weight="bold", color="blue"),
+                                        rx.text(tp["msg"], size="3"),
+                                        spacing="4",
+                                        align_items="center"
+                                    ),
+                                    margin_top="2",
+                                    width="100%",
+                                    bg=rx.color("blue", 2)
+                                )
+                            ),
+                            margin_bottom="4"
                         ),
                         
                         rx.heading("2️⃣ 매매 지시서", size="5", margin_top="4"),
                         rx.data_table(
                             data=RebalanceState.trade_plan,
+                            columns=["계좌명", "매매", "자산", "수량", "단가", "총액"],
                             pagination=False,
                             search=False,
                             sort=False
                         ),
                         
                         rx.heading("📊 리밸런싱 후 예상 포트폴리오 비중", size="5", margin_top="4"),
-                        rx.data_table(
-                            data=RebalanceState.simulated_assets,
-                            pagination=False,
-                            search=False,
-                            sort=False
+                        rx.table.root(
+                            rx.table.header(
+                                rx.table.row(
+                                    rx.table.column_header_cell("자산명"),
+                                    rx.table.column_header_cell("최종수량"),
+                                    rx.table.column_header_cell("예상평가액"),
+                                    rx.table.column_header_cell("목표비중"),
+                                    rx.table.column_header_cell("예상비중"),
+                                    rx.table.column_header_cell("괴리율"),
+                                )
+                            ),
+                            rx.table.body(
+                                rx.foreach(
+                                    RebalanceState.simulated_assets,
+                                    lambda s: rx.table.row(
+                                        rx.table.cell(rx.text(s["name"], weight="bold")),
+                                        rx.table.cell(
+                                            rx.hstack(
+                                                rx.text(s["final_q"]),
+                                                rx.cond(
+                                                    s["diff_str"] != "",
+                                                    rx.cond(
+                                                        s["diff_positive"],
+                                                        rx.text(s["diff_str"], color="red", weight="bold"),
+                                                        rx.cond(
+                                                            s["diff_negative"],
+                                                            rx.text(s["diff_str"], color="blue", weight="bold"),
+                                                            rx.text(s["diff_str"])
+                                                        )
+                                                    ),
+                                                    rx.text("")
+                                                ),
+                                                spacing="1"
+                                            )
+                                        ),
+                                        rx.table.cell(s["eval_krw"]),
+                                        rx.table.cell(s["target_w"]),
+                                        rx.table.cell(s["projected_w"]),
+                                        rx.table.cell(
+                                            rx.cond(
+                                                s["drift_positive"],
+                                                rx.text(s["drift_str"], color="red", weight="bold"),
+                                                rx.cond(
+                                                    s["drift_negative"],
+                                                    rx.text(s["drift_str"], color="blue", weight="bold"),
+                                                    rx.text(s["drift_str"])
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            ),
+                            variant="surface",
+                            size="3",
+                            width="100%"
                         ),
                         
                         rx.button("🗑️ 계산 결과 지우기", on_click=RebalanceState.clear_results, width="100%", margin_top="4"),

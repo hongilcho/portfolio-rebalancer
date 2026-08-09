@@ -4,7 +4,6 @@ import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
-import streamlit as st
 
 # 사용자 정의 6가지 표준 계좌 유형
 from data.enums import AccountType
@@ -30,17 +29,11 @@ ACCOUNT_TYPE_ALIASES = {
 
 from psycopg2 import pool
 
-@st.cache_resource
 def get_connection_pool():
-    try:
-        pg_url = st.secrets["SUPABASE_URL"]
-    except Exception:
-        # Fallback if secrets.toml isn't loaded via st.secrets
-        import toml
-        secrets_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
-        with open(secrets_path, "r", encoding="utf-8") as f:
-            secrets = toml.load(f)
-            pg_url = secrets["SUPABASE_URL"]
+    # Environment variable based setup (Reflex auto-loads .env)
+    pg_url = os.environ.get("SUPABASE_URL")
+    if not pg_url:
+        raise ValueError("SUPABASE_URL environment variable is not set. Please add it to the .env file.")
             
     # 최소 1개, 최대 20개의 커넥션을 유지하는 풀 생성
     return psycopg2.pool.ThreadedConnectionPool(1, 20, pg_url)
@@ -157,7 +150,6 @@ def init_db():
 # ---------------------------------------------------------
 # Accounts CRUD
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)
 def get_all_accounts():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -251,7 +243,6 @@ def delete_account(account_id):
 # ---------------------------------------------------------
 # Assets Helpers
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)
 def get_all_assets():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -329,7 +320,6 @@ def delete_asset(asset_id):
 # ---------------------------------------------------------
 # Holdings Helpers
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)
 def get_holdings_by_account(account_id):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -343,7 +333,6 @@ def get_holdings_by_account(account_id):
     conn.close()
     return [dict(r) for r in rows]
 
-@st.cache_data(ttl=2)
 def get_all_holdings():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -470,7 +459,6 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price)
     finally:
         conn.close()
 
-@st.cache_data(ttl=2)
 def get_trade_history():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
