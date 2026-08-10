@@ -455,9 +455,9 @@ def render_tab1():
                 
                 c_dep1, c_dep2 = st.columns(2)
                 with c_dep1:
-                    edit_krw = st.number_input("원화 예수금 (원)", min_value=0.0, value=float(target_acc['deposit_krw']), step=10000.0)
+                    edit_krw = st.number_input("원화 예수금 (원)", value=float(target_acc['deposit_krw']), step=10000.0)
                 with c_dep2:
-                    edit_usd = st.number_input("달러 예수금 ($)", min_value=0.0, value=float(target_acc['deposit_usd']), step=10.0)
+                    edit_usd = st.number_input("달러 예수금 ($)", value=float(target_acc['deposit_usd']), step=10.0)
                     
                 st.markdown("#### 📦 이 계좌에서 운용 가능한 종목 수량 및 평단가")
                 
