@@ -555,6 +555,45 @@ def delete_trade(trade_id):
     finally:
         conn.close()
 
+def apply_transfer_plan(transfer_plan):
+    """
+    이체 지시서(transfer_plan)에 명시된 금액을 각 계좌의 예수금에 즉시 반영합니다.
+    """
+    if not transfer_plan:
+        return True, "반영할 이체 내역이 없습니다."
+        
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        for tr in transfer_plan:
+            acc_id = str(tr['account_id'])
+            amount = float(tr['amount'])
+            
+            # Fetch current deposit
+            cursor.execute("SELECT deposit_krw FROM accounts WHERE id = %s", (acc_id,))
+            row = cursor.fetchone()
+            if not row:
+                continue
+                
+            curr_deposit = float(row[0])
+            if tr['type'] == 'DEPOSIT':
+                new_deposit = curr_deposit + amount
+            elif tr['type'] == 'WITHDRAW':
+                new_deposit = curr_deposit - amount
+            else:
+                continue
+                
+            # Update deposit
+            cursor.execute("UPDATE accounts SET deposit_krw = %s WHERE id = %s", (new_deposit, acc_id))
+            
+        conn.commit()
+        return True, "이체 지시서가 실제 계좌 예수금에 모두 반영되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, f"이체 내역 반영 중 오류가 발생했습니다: {str(e)}"
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     init_db()
     print("PostgreSQL Database sanitized and initialized!")

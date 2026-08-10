@@ -5,7 +5,8 @@ from data.data_manager import (
     get_all_assets, get_all_accounts, get_holdings_by_account, get_all_holdings,
     save_account_holdings, add_account, update_account, delete_account,
     add_asset, update_asset, delete_asset, execute_trade, get_trade_history,
-    delete_trade, update_account_settings, update_account_priorities, ACCOUNT_TYPES
+    delete_trade, update_account_settings, update_account_priorities, ACCOUNT_TYPES,
+    apply_transfer_plan
 )
 from ui.utils import num_to_kr_mixed, format_usd_label
 from data.enums import Currency, AccountType, TradeType
@@ -110,6 +111,14 @@ def render_tab3():
                             st.info(f"📥 {tr['msg']}")
                         else:
                             st.success(f"✔️ {tr['msg']}")
+                            
+                    if st.button("💰 위 이체 지시서를 실제 계좌 예수금에 바로 반영하기", use_container_width=True, type="primary"):
+                        success, apply_msg = apply_transfer_plan(tr_plan)
+                        if success:
+                            get_all_accounts.clear()
+                            st.success(apply_msg)
+                        else:
+                            st.error(apply_msg)
                 else:
                     st.write("필요한 자금 이체가 없습니다.")
                     
