@@ -34,8 +34,20 @@ def get_exchange_rate_usd_krw():
     return 1380.0, "기본값(기본 1380원)"
 
 def get_kr_stock_price(ticker_code):
-    """국내 주식/ETF 실시간 시세 수집 (yfinance -> 네이버 금융 폴백)"""
-    # 1. yfinance 시도
+    """국내 주식/ETF 실시간 시세 수집 (네이버 금융 최우선 -> yfinance 폴백)"""
+    # 1. 네이버 금융 시도 (완벽한 실시간 시세)
+    try:
+        url = f'https://finance.naver.com/item/main.naver?code={ticker_code}'
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url, headers=headers, timeout=5)
+        match = re.search(r'<dd>현재가\s+([0-9,]+)', res.text)
+        if match:
+            price = float(match.group(1).replace(',', ''))
+            return price, None
+    except Exception as e:
+        pass # 네이버 조회 실패 시 yfinance 폴백
+        
+    # 2. yfinance 폴백
     try:
         import yfinance as yf
         # KOSPI 종목 시도 (.KS)
@@ -51,19 +63,7 @@ def get_kr_stock_price(ticker_code):
             return float(hist_kq['Close'].iloc[-1]), None
             
     except Exception as e:
-        pass # yfinance 에러 발생 시 네이버 금융으로 폴백
-        
-    # 2. 네이버 금융 폴백 (웹 스크래핑)
-    try:
-        url = f'https://finance.naver.com/item/main.naver?code={ticker_code}'
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=5)
-        match = re.search(r'<dd>현재가\s+([0-9,]+)', res.text)
-        if match:
-            price = float(match.group(1).replace(',', ''))
-            return price, None
-    except Exception as e:
-        return None, f"네이버 금융 조회 오류: {e}"
+        return None, f"yfinance 폴백 조회 오류: {e}"
         
     return None, "시세를 찾을 수 없습니다."
 
@@ -108,7 +108,7 @@ def get_us_stock_price(ticker_symbol):
         return None, str(e)
     return None, "시세를 찾을 수 없습니다."
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_asset_prices(assets, usd_krw=None):
     """자산 목록 전체의 실시간 시세 및 원화 환산 가격 일괄 수집"""
     if usd_krw is None:

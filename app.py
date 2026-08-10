@@ -201,6 +201,7 @@ with col_rate3:
         st.session_state.usd_krw = rate
         st.session_state.rate_source = source
         st.session_state.price_data = None
+        fetch_asset_prices.clear()
         st.success("환율 및 시세를 재요청합니다!")
         st.rerun()
 
