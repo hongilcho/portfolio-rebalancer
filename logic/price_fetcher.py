@@ -6,10 +6,21 @@ from lxml import html
 import urllib3
 import streamlit as st
 import math
+from data.nh_api import nh_api_client
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_exchange_rate_usd_krw():
-    """USD/KRW 실시간 환율 수집 (yfinance primary, Naver Finance fallback)"""
+    """USD/KRW 실시간 환율 수집 (Namuh API 최우선, yfinance/Naver fallback)"""
+    # 1. Namuh API 시도
+    try:
+        rate = nh_api_client.fetch_exchange_rate("USD")
+        if rate is not None and rate > 0:
+            return round(rate, 2), "Namuh API"
+    except Exception:
+        pass
+
+    # 2. yfinance fallback
     try:
         ticker = yf.Ticker("KRW=X")
         hist = ticker.history(period="1d")
@@ -19,7 +30,7 @@ def get_exchange_rate_usd_krw():
     except Exception:
         pass
     
-    # Naver Finance fallback
+    # 3. Naver Finance fallback
     try:
         url = "https://finance.naver.com/marketindex/exchangeDetail.naver?marketindexCd=FX_USDKRW"
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -34,8 +45,16 @@ def get_exchange_rate_usd_krw():
     return 1380.0, "기본값(기본 1380원)"
 
 def get_kr_stock_price(ticker_code):
-    """국내 주식/ETF 실시간 시세 수집 (네이버 금융 최우선 -> yfinance 폴백)"""
-    # 1. 네이버 금융 시도 (완벽한 실시간 시세)
+    """국내 주식/ETF 실시간 시세 수집 (Namuh API 최우선 -> 네이버 금융 -> yfinance 폴백)"""
+    # 1. Namuh API 시도
+    try:
+        price = nh_api_client.fetch_current_price(ticker_code, market="KR")
+        if price is not None and price > 0:
+            return price, None
+    except Exception:
+        pass
+
+    # 2. 네이버 금융 폴백
     try:
         url = f'https://finance.naver.com/item/main.naver?code={ticker_code}'
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -45,18 +64,16 @@ def get_kr_stock_price(ticker_code):
             price = float(match.group(1).replace(',', ''))
             return price, None
     except Exception as e:
-        pass # 네이버 조회 실패 시 yfinance 폴백
+        pass 
         
-    # 2. yfinance 폴백
+    # 3. yfinance 폴백
     try:
         import yfinance as yf
-        # KOSPI 종목 시도 (.KS)
         ticker_ks = yf.Ticker(f"{ticker_code}.KS")
         hist_ks = ticker_ks.history(period="5d").dropna(subset=['Close'])
         if not hist_ks.empty:
             return float(hist_ks['Close'].iloc[-1]), None
             
-        # KOSDAQ 종목 시도 (.KQ)
         ticker_kq = yf.Ticker(f"{ticker_code}.KQ")
         hist_kq = ticker_kq.history(period="5d").dropna(subset=['Close'])
         if not hist_kq.empty:
@@ -68,7 +85,16 @@ def get_kr_stock_price(ticker_code):
     return None, "시세를 찾을 수 없습니다."
 
 def get_krx_gold_price():
-    """KRX 금현물 실시간 시세 수집 (네이버 금융 모바일 M04020000)"""
+    """KRX 금현물 실시간 시세 수집 (Namuh API 최우선 -> 네이버 금융 폴백)"""
+    # 1. Namuh API 시도
+    try:
+        price = nh_api_client.fetch_gold_price("M04020000")
+        if price is not None and price > 0:
+            return price, None
+    except Exception:
+        pass
+
+    # 2. 네이버 금융 폴백
     try:
         url = 'https://m.stock.naver.com/marketindex/metals/M04020000'
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -77,7 +103,6 @@ def get_krx_gold_price():
         element = tree.xpath('//*[@id="content"]/div[1]/div[2]/div[2]/strong')
         if element:
             price_text = element[0].text_content().strip()
-            # Extract only digits and decimal point
             price_clean = re.sub(r'[^0-9.]', '', price_text)
             if price_clean:
                 return float(price_clean), None
@@ -86,11 +111,19 @@ def get_krx_gold_price():
     return None, "금 시세를 찾을 수 없습니다."
 
 def get_us_stock_price(ticker_symbol):
-    """미국 주식/ETF 실시간 시세 수집 (yfinance)"""
+    """미국 주식/ETF 실시간 시세 수집 (Namuh API 최우선 -> yfinance 폴백)"""
+    # 1. Namuh API 시도
+    try:
+        price = nh_api_client.fetch_current_price(ticker_symbol, market="US")
+        if price is not None and price > 0:
+            return price, None
+    except Exception:
+        pass
+
+    # 2. yfinance 폴백
     try:
         ticker = yf.Ticker(ticker_symbol)
         
-        # 1. 시도: fast_info에서 최신 실시간 가격 가져오기 (NaN 버그 우회 및 가장 최신)
         try:
             last_price = getattr(ticker.fast_info, 'last_price', None)
             if last_price is not None and not math.isnan(last_price):
@@ -98,7 +131,6 @@ def get_us_stock_price(ticker_symbol):
         except Exception:
             pass
             
-        # 2. 폴백: history에서 NaN 제외한 가장 최근 종가 가져오기
         hist = ticker.history(period="5d").dropna(subset=['Close'])
         if not hist.empty:
             price = float(hist['Close'].iloc[-1])
@@ -142,8 +174,9 @@ def fetch_asset_prices(assets, usd_krw=None):
             if raw_price is not None:
                 price_krw = raw_price
                 price_usd = raw_price / usd_krw if usd_krw else 0
-                status = "정상"
+                status = "정상 (NH API)" if err is None else "정상 (Fallback)"
             else:
+                price_krw = 0.0
                 price_krw = 0.0
                 price_usd = 0.0
                 status = f"오류: {err}"
@@ -152,7 +185,7 @@ def fetch_asset_prices(assets, usd_krw=None):
             if raw_price is not None:
                 price_usd = raw_price
                 price_krw = raw_price * usd_krw
-                status = "정상"
+                status = "정상 (NH API)" if err is None else "정상 (Fallback)"
             else:
                 price_usd = 0.0
                 price_krw = 0.0
