@@ -522,16 +522,25 @@ def render_tab1():
 
         # 나무증권 API 계좌 연동 버튼
         st.markdown("<br/>", unsafe_allow_html=True)
-        if st.button("🔄 Namuh 증권 API로 모든 계좌 현황 갱신하기", use_container_width=True, type="primary"):
+        if st.button("🔄 Namuh 증권 API로 일반계좌(ISA/IRP/연금제외) 갱신하기", use_container_width=True, type="primary"):
             with st.spinner("API와 통신 중..."):
                 all_success = True
                 msgs = []
+                # 연동을 시도하지 않을 특수 계좌 타입 목록
+                skip_types = ['ISA', 'IRP', '연금저축계좌']
+                
                 for acc in accounts:
                     acc_no = acc.get('account_no', '').strip()
+                    acc_type = acc.get('account_type', '')
+                    
                     if not acc_no:
                         continue
                         
-                    if acc.get('account_type') == '금현물':
+                    # 특수 계좌는 API 조회에서 제외 (NH투자증권 오픈API 미지원)
+                    if acc_type in skip_types:
+                        continue
+                        
+                    if acc_type == '금현물':
                         api_data, err_msg = nh_api_client.fetch_gold_account_balance(acc_no)
                     else:
                         api_data, err_msg = nh_api_client.fetch_full_account_balance(acc_no)
