@@ -521,7 +521,7 @@ def render_tab1():
                     if not acc_no:
                         continue
                         
-                    api_data = nh_api_client.fetch_account_balance(acc_no)
+                    api_data, err_msg = nh_api_client.fetch_account_balance(acc_no)
                     if api_data:
                         success, msg = sync_account_with_api(acc['id'], api_data)
                         if not success:
@@ -529,7 +529,7 @@ def render_tab1():
                             msgs.append(f"[{acc['account_alias']}] 실패: {msg}")
                     else:
                         # Fallback or silent skip if account not found in API
-                        msgs.append(f"[{acc['account_alias']}] API 응답 없음 (계좌번호 확인 필요)")
+                        msgs.append(f"[{acc['account_alias']}] API 에러: {err_msg}")
                         
                 if all_success and not msgs:
                     st.success("모든 계좌의 잔고 및 보유 종목이 성공적으로 동기화되었습니다!")

@@ -187,13 +187,17 @@ class NamuhAPIClient:
                         "current_price": float(item.get("now_pr", 0))
                     })
                     
+                # return tuple
             return {
                 "deposit_krw": deposit,
                 "holdings": holdings
-            }
+            }, None
             
         except Exception as e:
-            print(f"Namuh API Account Balance Fetch Error for {account_no}: {e}")
-            return None
+            err_msg = str(e)
+            if 'res' in locals() and res.status_code != 200:
+                err_msg = res.text
+            print(f"Namuh API Account Balance Fetch Error for {account_no}: {err_msg}")
+            return None, err_msg
 
 nh_api_client = NamuhAPIClient()
