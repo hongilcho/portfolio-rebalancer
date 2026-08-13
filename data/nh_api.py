@@ -153,7 +153,7 @@ class NamuhAPIClient:
         }
         body = {
             "Input_0": {
-                "act_no": str(account_no),
+                "act_no": str(account_no).replace("-", ""),
                 "bnc_bse_cd": "1", # 1: 체결기준
                 "ltg_aot_dit_cd": "9", # 9: 전체
                 "aet_bse": "2", # 2: 총자산
