@@ -132,6 +132,63 @@ class NamuhAPIClient:
             print(f"Namuh API Gold Price Fetch Error for {ticker}: {e}")
             return None
 
+    def fetch_gold_account_balance(self, account_no: str):
+        """
+        금현물 계좌 잔고 및 예수금 조회
+        """
+        token = self.get_access_token()
+        if not token:
+            return None, "토큰 발급 실패"
+            
+        url = f"{self.base_url}/krgold/inquiry/v1/goldDepositAndBalance"
+        headers = {
+            "content-type": "application/json;charset=utf-8",
+            "Authorization": f"Bearer {token}"
+        }
+        body = {
+            "Input_0": {
+                "act_no": str(account_no).replace("-", "")
+            }
+        }
+        
+        try:
+            res = requests.post(url, headers=headers, json=body, timeout=5, verify=False)
+            if res.status_code != 200:
+                print(f"Namuh API Gold Account Balance Fetch Error for {account_no}: {res.text}")
+            res.raise_for_status()
+            data = res.json()
+            
+            # 예수금 (dca)
+            out_0 = data.get("Output_0", {})
+            deposit = float(out_0.get("dca", 0))
+            
+            # 금 잔고
+            out_1 = data.get("Output_1", [])
+            holdings = []
+            for item in out_1:
+                # 종목명, 종목코드, 수량(itg_bnc_qty), 평단가(phs_pr), 현재가(now_pr)
+                qty = float(item.get("itg_bnc_qty", 0))
+                if qty > 0:
+                    holdings.append({
+                        "ticker": item.get("iem_cd", ""),
+                        "name": item.get("iem_nm", ""),
+                        "quantity": qty,
+                        "avg_price": float(item.get("phs_pr", 0)),
+                        "current_price": float(item.get("now_pr", 0))
+                    })
+                    
+            return {
+                "deposit_krw": deposit,
+                "holdings": holdings
+            }, None
+            
+        except Exception as e:
+            err_msg = str(e)
+            if 'res' in locals() and res.status_code != 200:
+                err_msg = res.text
+            print(f"Namuh API Gold Account Balance Fetch Error for {account_no}: {err_msg}")
+            return None, err_msg
+
     def fetch_exchange_rate(self, currency="USD"):
         """
         실시간 환율 조회 (API 미제공으로 인한 fallback 유도)

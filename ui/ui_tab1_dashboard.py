@@ -527,7 +527,11 @@ def render_tab1():
                     if not acc_no:
                         continue
                         
-                    api_data, err_msg = nh_api_client.fetch_account_balance(acc_no)
+                    if acc.get('account_type') == '금현물':
+                        api_data, err_msg = nh_api_client.fetch_gold_account_balance(acc_no)
+                    else:
+                        api_data, err_msg = nh_api_client.fetch_account_balance(acc_no)
+                        
                     if api_data:
                         success, msg = sync_account_with_api(acc['id'], api_data)
                         if not success:
