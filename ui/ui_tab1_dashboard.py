@@ -1,12 +1,16 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import time
+import datetime
 from data.data_manager import (
     get_all_assets, get_all_accounts, get_holdings_by_account, get_all_holdings,
     save_account_holdings, add_account, update_account, delete_account,
     add_asset, update_asset, delete_asset, execute_trade, get_trade_history,
-    delete_trade, update_account_settings, update_account_priorities, ACCOUNT_TYPES
+    delete_trade, update_account_settings, update_account_priorities, ACCOUNT_TYPES,
+    sync_account_with_api
 )
+from data.nh_api import nh_api_client
 from ui.utils import num_to_kr_mixed, format_usd_label
 from data.enums import Currency, AccountType, TradeType
 from logic.rebalance_calculator import calculate_rebalancing_plan
@@ -505,6 +509,38 @@ def render_tab1():
                     st.session_state.price_data = None
                     st.success("성공적으로 저장되었습니다!")
                     st.rerun()
+
+        # 나무증권 API 계좌 연동 버튼
+        st.markdown("<br/>", unsafe_allow_html=True)
+        if st.button("🔄 Namuh 증권 API로 모든 계좌 현황 갱신하기", use_container_width=True, type="primary"):
+            with st.spinner("API와 통신 중..."):
+                all_success = True
+                msgs = []
+                for acc in accounts:
+                    acc_no = acc.get('account_no', '').strip()
+                    if not acc_no:
+                        continue
+                        
+                    api_data = nh_api_client.fetch_account_balance(acc_no)
+                    if api_data:
+                        success, msg = sync_account_with_api(acc['id'], api_data)
+                        if not success:
+                            all_success = False
+                            msgs.append(f"[{acc['account_alias']}] 실패: {msg}")
+                    else:
+                        # Fallback or silent skip if account not found in API
+                        msgs.append(f"[{acc['account_alias']}] API 응답 없음 (계좌번호 확인 필요)")
+                        
+                if all_success and not msgs:
+                    st.success("모든 계좌의 잔고 및 보유 종목이 성공적으로 동기화되었습니다!")
+                    st.session_state.price_data = None
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    if msgs:
+                        for m in msgs:
+                            st.warning(m)
+                    st.info("동기화가 일부 완료되었습니다. 위 메시지를 확인해주세요.")
 
     # =========================================================
     # TAB 5: 기초 환경 세팅 (시세 모니터링)

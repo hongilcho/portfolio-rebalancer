@@ -368,6 +368,67 @@ def save_account_holdings(account_id, holdings_data):
     except Exception as e:
         return False, str(e)
 
+def sync_account_with_api(account_id, api_data):
+    if not api_data:
+        return False, "API 데이터가 없습니다."
+        
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # 1. Update deposit
+        deposit_krw = api_data.get('deposit_krw', 0.0)
+        cursor.execute("UPDATE accounts SET deposit_krw = %s WHERE id = %s", (deposit_krw, str(account_id)))
+        
+        # 2. Get asset mapping
+        cursor.execute("SELECT id, ticker FROM assets")
+        asset_map = {row[1]: row[0] for row in cursor.fetchall()}
+        
+        # 3. Get existing holdings to zero out removed assets
+        cursor.execute("SELECT asset_id FROM holdings WHERE account_id = %s", (str(account_id),))
+        existing_asset_ids = {row[0] for row in cursor.fetchall()}
+        
+        holdings = api_data.get('holdings', [])
+        incoming_asset_ids = set()
+        
+        # 4. Insert or update incoming holdings
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        for h in holdings:
+            ticker = h['ticker']
+            if ticker in asset_map:
+                aid = asset_map[ticker]
+                incoming_asset_ids.add(aid)
+                qty = float(h['quantity'])
+                avg_p = float(h['avg_price'])
+                
+                # Check if exists
+                cursor.execute("SELECT id FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
+                row = cursor.fetchone()
+                if row:
+                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s WHERE id = %s", (qty, avg_p, row[0]))
+                else:
+                    new_h_id = generate_id()
+                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price) VALUES (%s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p))
+                    
+                # Also log an INIT trade to trade_history to reflect the manual sync
+                new_t_id = generate_id()
+                cursor.execute('''
+                    INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ''', (new_t_id, today_str, str(account_id), aid, 'INIT', qty, avg_p))
+                
+        # 5. Delete holdings that are no longer in the account
+        to_delete_ids = existing_asset_ids - incoming_asset_ids
+        for z_id in to_delete_ids:
+            cursor.execute("DELETE FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), z_id))
+            
+        conn.commit()
+        return True, "API를 통한 잔고 및 예수금 동기화가 완료되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, f"동기화 중 오류 발생: {str(e)}"
+    finally:
+        conn.close()
+
 # ---------------------------------------------------------
 # Trade History & Execution
 # ---------------------------------------------------------

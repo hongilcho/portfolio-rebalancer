@@ -138,4 +138,62 @@ class NamuhAPIClient:
         """
         return None
 
+    def fetch_account_balance(self, account_no: str):
+        """
+        국내주식 잔고 및 예수금 조회
+        """
+        token = self.get_access_token()
+        if not token:
+            return None
+            
+        url = f"{self.base_url}/krstock/inquiry/v1/balance"
+        headers = {
+            "content-type": "application/json;charset=utf-8",
+            "Authorization": f"Bearer {token}"
+        }
+        body = {
+            "Input_0": {
+                "act_no": str(account_no),
+                "bnc_bse_cd": "1", # 1: 체결기준
+                "ltg_aot_dit_cd": "9", # 9: 전체
+                "aet_bse": "2", # 2: 총자산
+                "qut_dit_cd": "UNT" # 통합시세
+            }
+        }
+        
+        try:
+            res = requests.post(url, headers=headers, json=body, timeout=5, verify=False)
+            if res.status_code != 200:
+                print(f"Namuh API Account Balance Fetch Error for {account_no}: {res.text}")
+            res.raise_for_status()
+            data = res.json()
+            
+            # 예수금 (dca)
+            out_0 = data.get("Output_0", {})
+            deposit = float(out_0.get("dca", 0))
+            
+            # 주식 잔고
+            out_1 = data.get("Output_1", [])
+            holdings = []
+            for item in out_1:
+                # 종목명, 종목코드, 수량(itg_bnc_qty), 평단가(phs_pr), 현재가(now_pr)
+                qty = float(item.get("itg_bnc_qty", 0))
+                if qty > 0:
+                    holdings.append({
+                        "ticker": item.get("iem_cd", ""),
+                        "name": item.get("iem_nm", ""),
+                        "quantity": qty,
+                        "avg_price": float(item.get("phs_pr", 0)),
+                        "current_price": float(item.get("now_pr", 0))
+                    })
+                    
+            return {
+                "deposit_krw": deposit,
+                "holdings": holdings
+            }
+            
+        except Exception as e:
+            print(f"Namuh API Account Balance Fetch Error for {account_no}: {e}")
+            return None
+
 nh_api_client = NamuhAPIClient()
