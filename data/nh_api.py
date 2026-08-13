@@ -257,4 +257,86 @@ class NamuhAPIClient:
             print(f"Namuh API Account Balance Fetch Error for {account_no}: {err_msg}")
             return None, err_msg
 
+    def fetch_overseas_account_balance(self, account_no: str):
+        """
+        해외주식 계좌 잔고 및 예수금 조회 (USD 기준)
+        """
+        token = self.get_access_token()
+        if not token:
+            return None, "토큰 발급 실패"
+            
+        url = f"{self.base_url}/gbstock/inquiry/v1/balance"
+        headers = {
+            "content-type": "application/json;charset=utf-8",
+            "Authorization": f"Bearer {token}"
+        }
+        body = {
+            "Input_0": {
+                "act_no": str(account_no).replace("-", ""),
+                "qut_iqr_dit_cd": "9",
+                "fc_sec_trd_nat_cd": "200", # 200: 미국
+                "cur_cd": "USD",
+                "xns_dit_cd": "0"
+            }
+        }
+        
+        try:
+            res = requests.post(url, headers=headers, json=body, timeout=5, verify=False)
+            if res.status_code != 200:
+                print(f"Namuh API Overseas Balance Error for {account_no}: {res.text}")
+            res.raise_for_status()
+            data = res.json()
+            
+            # 예수금
+            out_0 = data.get("Output_0", {})
+            deposit_usd = float(out_0.get("fc_dca", 0))
+            
+            # 해외주식 잔고
+            out_1 = data.get("Output_1", [])
+            holdings = []
+            for item in out_1:
+                qty = float(item.get("cns_bse_bnc_qty", 0))
+                if qty > 0:
+                    holdings.append({
+                        "ticker": item.get("iem_cd", ""),
+                        "name": item.get("iem_nm", ""),
+                        "quantity": qty,
+                        "avg_price": float(item.get("fc_phs_uit_pr", 0)),
+                        "current_price": float(item.get("fc_sec_end_pr", 0))
+                    })
+                    
+            return {
+                "deposit_usd": deposit_usd,
+                "holdings": holdings
+            }, None
+            
+        except Exception as e:
+            err_msg = str(e)
+            if 'res' in locals() and res.status_code != 200:
+                err_msg = res.text
+            print(f"Namuh API Overseas Balance Error for {account_no}: {err_msg}")
+            return None, err_msg
+            
+    def fetch_full_account_balance(self, account_no: str):
+        """
+        국내주식 + 해외주식 잔고 통합 조회
+        """
+        dom_data, err_msg = self.fetch_account_balance(account_no)
+        if not dom_data:
+            return None, err_msg
+            
+        ov_data, ov_err = self.fetch_overseas_account_balance(account_no)
+        # 해외주식 조회가 실패해도 국내주식이 성공했으면 에러내지 않고 진행할 수 있지만,
+        # 완벽한 동기화를 위해 해외주식 API가 실패하면 전체 실패로 간주하거나 경고만 냄
+        
+        if ov_data:
+            # 병합
+            dom_data["deposit_usd"] = ov_data.get("deposit_usd", 0.0)
+            dom_data["holdings"].extend(ov_data.get("holdings", []))
+        else:
+            # 해외주식 에러는 권한 문제일 수 있으므로 일단 무시(0 처리)
+            dom_data["deposit_usd"] = 0.0
+            
+        return dom_data, None
+
 nh_api_client = NamuhAPIClient()

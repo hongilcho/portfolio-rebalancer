@@ -375,9 +375,18 @@ def sync_account_with_api(account_id, api_data):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # 0. Migration: Fix gold ticker if it was set to '없음'
+        cursor.execute("UPDATE assets SET ticker = 'M04020000' WHERE name LIKE '%금%' AND ticker = '없음'")
+        
         # 1. Update deposit
         deposit_krw = api_data.get('deposit_krw', 0.0)
-        cursor.execute("UPDATE accounts SET deposit_krw = %s WHERE id = %s", (deposit_krw, str(account_id)))
+        deposit_usd = api_data.get('deposit_usd', 0.0)
+        
+        # We need to update deposit_usd if it exists in api_data. Since it might not exist for gold account, we only update it if present.
+        if 'deposit_usd' in api_data:
+            cursor.execute("UPDATE accounts SET deposit_krw = %s, deposit_usd = %s WHERE id = %s", (deposit_krw, deposit_usd, str(account_id)))
+        else:
+            cursor.execute("UPDATE accounts SET deposit_krw = %s WHERE id = %s", (deposit_krw, str(account_id)))
         
         # 2. Get asset mapping
         cursor.execute("SELECT id, ticker FROM assets")
