@@ -72,9 +72,12 @@ def render_tab1():
                 profit_krw = eval_val - (qty * avg_p_krw)
                 profit_pct = (profit_krw / (qty * avg_p_krw) * 100) if (qty * avg_p_krw) > 0 else 0.0
                 
+                unit_str = "g" if "금" in h['asset_name'] or h.get('ticker') == 'M04020000' else "주"
+                qty_fmt = f"{qty:,.0f}" if float(qty).is_integer() else f"{qty:,.2f}"
+                
                 holding_details.append({
                     "종목명": h['asset_name'],
-                    "보유수량": f"{qty:,.0f} 주",
+                    "보유수량": f"{qty_fmt} {unit_str}",
                     "손익": f"{profit_krw:+,.0f} 원 ({profit_pct:+.1f}%)",
                     "평가금액": f"{eval_val:,.0f} 원",
                     "평단가": f"{avg_p_krw:,.0f} 원",
@@ -159,8 +162,9 @@ def render_tab1():
             target_w = target_weight_map.get(aid, 0.0)
             diff_w = weight_pct - target_w
             
-            unit_str = "g" if "KRX 금" in data['name'] or "금현물" in data['name'] else "주"
-            qty_disp = f"{int(data['qty']):,}{unit_str}" if float(data['qty']).is_integer() else f"{float(data['qty']):,.2f}{unit_str}"
+            unit_str = "g" if "금" in data['name'] or data.get('ticker') == 'M04020000' else "주"
+            qty_fmt = f"{data['qty']:,.0f}" if float(data['qty']).is_integer() else f"{data['qty']:,.2f}"
+            qty_disp = f"{qty_fmt}{unit_str}"
             
             stock_summary_rows.append({
                 "종목명": data['name'],
@@ -491,7 +495,7 @@ def render_tab1():
                     col_h1, col_h2 = st.columns(2)
                     with col_h1:
                         current_qty = st.session_state.get(f"qty_{target_acc['id']}_{aid}", float(existing['quantity']))
-                        unit_str = "g" if "금현물" in asset['name'] else "주"
+                        unit_str = "g" if "금" in asset['name'] or asset['ticker'] == 'M04020000' else "주"
                         if float(current_qty).is_integer():
                             qty_disp = f"{int(current_qty):,}{unit_str}"
                         else:

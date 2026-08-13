@@ -301,8 +301,8 @@ class NamuhAPIClient:
                         "ticker": item.get("iem_cd", ""),
                         "name": item.get("iem_nm", ""),
                         "quantity": qty,
-                        "avg_price": float(item.get("fc_phs_uit_pr", 0)),
-                        "current_price": float(item.get("fc_sec_end_pr", 0))
+                        "avg_price": float(item.get("phs_uit_pr", 0)),
+                        "current_price": float(item.get("end_pr", 0))
                     })
                     
             return {

@@ -170,13 +170,16 @@ def fetch_asset_prices(assets, usd_krw=None):
                 price_usd = 0.0
                 status = "수동 입력 필요 (Ticker 없음)"
         elif market == 'KR':
-            raw_price, err = get_kr_stock_price(ticker)
+            if ticker == 'M04020000':
+                raw_price = nh_api_client.fetch_gold_price(ticker)
+                err = None if raw_price else "API 에러"
+            else:
+                raw_price, err = get_kr_stock_price(ticker)
             if raw_price is not None:
                 price_krw = raw_price
                 price_usd = raw_price / usd_krw if usd_krw else 0
                 status = "정상 (NH API)" if err is None else "정상 (Fallback)"
             else:
-                price_krw = 0.0
                 price_krw = 0.0
                 price_usd = 0.0
                 status = f"오류: {err}"
