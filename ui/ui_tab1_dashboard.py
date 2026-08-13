@@ -16,6 +16,12 @@ from data.enums import Currency, AccountType, TradeType
 from logic.rebalance_calculator import calculate_rebalancing_plan
 
 def render_tab1():
+    if "sync_msgs" in st.session_state:
+        st.info("🔄 동기화 완료 결과 (일부 계좌 에러 발생)")
+        for m in st.session_state.sync_msgs:
+            st.warning(m)
+        del st.session_state.sync_msgs
+        
     assets = get_all_assets()
     accounts = get_all_accounts()
     account_options_by_id = {str(a['id']): f"[{a['account_type']}] {a['account_alias']}" for a in accounts}
@@ -537,10 +543,9 @@ def render_tab1():
                     time.sleep(1)
                     st.rerun()
                 else:
-                    if msgs:
-                        for m in msgs:
-                            st.warning(m)
-                    st.info("동기화가 일부 완료되었습니다. 위 메시지를 확인해주세요.")
+                    st.session_state.sync_msgs = msgs
+                    st.session_state.price_data = None
+                    st.rerun()
 
     # =========================================================
     # TAB 5: 기초 환경 세팅 (시세 모니터링)
