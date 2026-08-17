@@ -1,6 +1,19 @@
-streamlit
-pandas
+# Core Backend & FastAPI
+fastapi
+uvicorn
+pydantic
+python-multipart
+toml
+
+# Database & Data Processing
 psycopg2-binary
+pandas
+
+# Finance & Scraping
 requests
 yfinance
 lxml
+urllib3
+
+# Streamlit (Compatibility)
+streamlit
