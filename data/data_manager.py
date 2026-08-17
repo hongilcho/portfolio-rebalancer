@@ -32,16 +32,34 @@ from psycopg2 import pool
 
 @st.cache_resource
 def get_connection_pool():
-    try:
-        pg_url = st.secrets["SUPABASE_URL"]
-    except Exception:
-        # Fallback if secrets.toml isn't loaded via st.secrets
-        import toml
-        secrets_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
-        with open(secrets_path, "r", encoding="utf-8") as f:
-            secrets = toml.load(f)
-            pg_url = secrets["SUPABASE_URL"]
+    pg_url = os.getenv("SUPABASE_URL")
+    if not pg_url:
+        try:
+            pg_url = st.secrets.get("SUPABASE_URL")
+        except Exception:
+            pass
             
+    if not pg_url:
+        import toml
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), "..", ".streamlit", "secrets.toml"),
+            os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml"),
+            os.path.join(os.getcwd(), ".streamlit", "secrets.toml")
+        ]
+        for p in possible_paths:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        sec = toml.load(f)
+                        pg_url = sec.get("SUPABASE_URL")
+                        if pg_url:
+                            break
+                except Exception:
+                    pass
+
+    if not pg_url:
+        raise ValueError("SUPABASE_URL 환경 변수가 설정되지 않았습니다.")
+        
     # 최소 1개, 최대 20개의 커넥션을 유지하는 풀 생성
     return psycopg2.pool.ThreadedConnectionPool(1, 20, pg_url)
 
