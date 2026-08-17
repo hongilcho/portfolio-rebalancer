@@ -36,7 +36,7 @@ export default function DashboardTab({
   const toggleAccordion = (accId) => {
     setExpandedAccs((prev) => ({
       ...prev,
-      [accId]: prev[accId] === undefined ? false : !prev[accId]
+      [accId]: prev[accId] === false ? true : false
     }));
   };
 
@@ -298,12 +298,16 @@ export default function DashboardTab({
         </div>
 
         {accSummaries?.map((acc) => {
-          const isExpanded = expandedAccs[acc.id] !== false; // default expanded
+          const isExpanded = expandedAccs[acc.id] !== false; // default true
           const isIrp = acc.account_type === 'IRP';
           const isIrpOverRisk = isIrp && acc.risk_pct > 70.0;
-          const accStockProfit = (acc.stock_eval || 0) - (acc.stock_buy_total || 0);
-          const accStockReturn = (acc.stock_buy_total > 0) ? (accStockProfit / acc.stock_buy_total * 100) : 0;
+          const accStockProfit = acc.profit_krw || ((acc.stock_eval || 0) - (acc.stock_buy_total || 0));
+          const accStockReturn = acc.profit_pct || (acc.stock_buy_total > 0 ? (accStockProfit / acc.stock_buy_total * 100) : 0);
           const isAccProfit = accStockProfit >= 0;
+          const totalVal = acc.total_val || (acc.stock_eval + acc.deposit_krw + (acc.deposit_usd * usd_krw));
+
+          const annualPct = (acc.annual_limit_pct || 0) * 100;
+          const taxPct = (acc.tax_limit_pct || 0) * 100;
 
           return (
             <div key={acc.id} className="account-accordion">
@@ -324,7 +328,7 @@ export default function DashboardTab({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block' }}>계좌 총 자산</span>
-                    <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{formatKRW(acc.total_eval)}</span>
+                    <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{formatKRW(totalVal)}</span>
                   </div>
                   {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                 </div>
@@ -368,15 +372,15 @@ export default function DashboardTab({
                   {acc.annual_limit > 0 && (
                     <div className="progress-bar-container">
                       <div className="progress-bar-label">
-                        <span>연간 납입한도 소진율 ({formatKRW(acc.total_eval)} / {formatKRW(acc.annual_limit)})</span>
-                        <strong>{acc.annual_limit_pct.toFixed(1)}%</strong>
+                        <span>연간 납입한도 ({formatKRW(acc.annual_limit)} 중 약 {annualPct.toFixed(1)}% 소진)</span>
+                        <strong>{annualPct.toFixed(1)}%</strong>
                       </div>
                       <div className="progress-track">
                         <div 
                           className="progress-fill" 
                           style={{ 
-                            width: `${Math.min(100, acc.annual_limit_pct)}%`,
-                            background: acc.annual_limit_pct > 100 ? 'var(--color-risk)' : 'var(--accent-primary)'
+                            width: `${Math.min(100, annualPct)}%`,
+                            background: annualPct > 100 ? 'var(--color-risk)' : 'var(--accent-primary)'
                           }} 
                         />
                       </div>
@@ -386,15 +390,15 @@ export default function DashboardTab({
                   {acc.tax_limit > 0 && (
                     <div className="progress-bar-container">
                       <div className="progress-bar-label">
-                        <span>세액공제 한도 소진율 ({formatKRW(acc.total_eval)} / {formatKRW(acc.tax_limit)})</span>
-                        <strong>{acc.tax_limit_pct.toFixed(1)}%</strong>
+                        <span>세액공제 한도 ({formatKRW(acc.tax_limit)} 중 약 {taxPct.toFixed(1)}% 소진)</span>
+                        <strong>{taxPct.toFixed(1)}%</strong>
                       </div>
                       <div className="progress-track">
                         <div 
                           className="progress-fill" 
                           style={{ 
-                            width: `${Math.min(100, acc.tax_limit_pct)}%`,
-                            background: acc.tax_limit_pct > 100 ? 'var(--color-risk)' : '#10B981'
+                            width: `${Math.min(100, taxPct)}%`,
+                            background: taxPct > 100 ? 'var(--color-risk)' : '#10B981'
                           }} 
                         />
                       </div>
@@ -425,12 +429,7 @@ export default function DashboardTab({
                           </thead>
                           <tbody>
                             {acc.holdings?.map((h) => {
-                              const curP = h.current_price_krw || h.price || 0;
-                              const evalAmt = h.quantity * curP;
-                              const costAmt = h.quantity * (h.avg_price || 0);
-                              const pAmt = evalAmt - costAmt;
-                              const pPct = costAmt > 0 ? (pAmt / costAmt) * 100 : 0;
-                              const isHProfit = pAmt >= 0;
+                              const isHProfit = h.profit_krw >= 0;
 
                               return (
                                 <tr key={h.asset_id}>
@@ -441,12 +440,12 @@ export default function DashboardTab({
                                       {h.is_risk_asset ? '🔴 위험자산' : '🟢 안전자산'}
                                     </span>
                                   </td>
-                                  <td>{formatQuantity(h.quantity)}</td>
+                                  <td>{formatQuantity(h.quantity, h.unit)}</td>
                                   <td>{formatKRW(h.avg_price)}</td>
-                                  <td>{formatKRW(curP)}</td>
-                                  <td style={{ fontWeight: 700 }}>{formatKRW(evalAmt)}</td>
+                                  <td>{formatKRW(h.current_price)}</td>
+                                  <td style={{ fontWeight: 700 }}>{formatKRW(h.eval_amount)}</td>
                                   <td style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                                    {isHProfit ? '+' : ''}{formatKRW(pAmt)} ({formatPercent(pPct)})
+                                    {isHProfit ? '+' : ''}{formatKRW(h.profit_krw)} ({formatPercent(h.profit_pct)})
                                   </td>
                                 </tr>
                               );
@@ -464,12 +463,7 @@ export default function DashboardTab({
                     {/* Mobile Holdings Cards */}
                     <div className="mobile-view">
                       {acc.holdings?.map((h) => {
-                        const curP = h.current_price_krw || h.price || 0;
-                        const evalAmt = h.quantity * curP;
-                        const costAmt = h.quantity * (h.avg_price || 0);
-                        const pAmt = evalAmt - costAmt;
-                        const pPct = costAmt > 0 ? (pAmt / costAmt) * 100 : 0;
-                        const isHProfit = pAmt >= 0;
+                        const isHProfit = h.profit_krw >= 0;
 
                         return (
                           <div key={h.asset_id} className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>
@@ -480,12 +474,12 @@ export default function DashboardTab({
                                   {h.is_risk_asset ? '🔴 위험' : '🟢 안전'}
                                 </span>
                               </div>
-                              <span style={{ fontWeight: 800 }}>{formatKRW(evalAmt)}</span>
+                              <span style={{ fontWeight: 800 }}>{formatKRW(h.eval_amount)}</span>
                             </div>
                             <div className="mobile-card-row" style={{ fontSize: '0.82rem' }}>
-                              <span style={{ color: 'var(--text-secondary)' }}>{formatQuantity(h.quantity)} · 평단 {formatKRW(h.avg_price)}</span>
-                              <span style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                                {isHProfit ? '+' : ''}{formatKRW(pAmt)} ({formatPercent(pPct)})
+                              <span style={{ color: 'var(--text-secondary)' }}>{formatQuantity(h.quantity, h.unit)} · 평단 {formatKRW(h.avg_price)}</span>
+                              <span style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 600 }}>
+                                {isHProfit ? '+' : ''}{formatKRW(h.profit_krw)} ({formatPercent(h.profit_pct)})
                               </span>
                             </div>
                           </div>
