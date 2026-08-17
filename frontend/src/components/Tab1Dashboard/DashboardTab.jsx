@@ -423,7 +423,6 @@ export default function DashboardTab({
                             <tr>
                               <th>종목명</th>
                               <th>티커</th>
-                              <th>위험구분</th>
                               <th>보유수량</th>
                               <th>평단가</th>
                               <th>현재가</th>
@@ -439,11 +438,6 @@ export default function DashboardTab({
                                 <tr key={h.asset_id}>
                                   <td style={{ fontWeight: 700 }}>{h.asset_name}</td>
                                   <td>{h.ticker}</td>
-                                  <td>
-                                    <span className={`badge ${h.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
-                                      {h.is_risk_asset ? '🔴 위험자산' : '🟢 안전자산'}
-                                    </span>
-                                  </td>
                                   <td>{formatQuantity(h.quantity, h.unit)}</td>
                                   <td>{formatKRW(h.avg_price)}</td>
                                   <td>{formatKRW(h.current_price)}</td>
@@ -455,7 +449,7 @@ export default function DashboardTab({
                               );
                             })}
                             <tr>
-                              <td style={{ fontWeight: 700 }} colSpan={6}>💵 원화 예수금</td>
+                              <td style={{ fontWeight: 700 }} colSpan={5}>💵 원화 예수금</td>
                               <td style={{ fontWeight: 800 }}>{formatKRW(acc.deposit_krw)}</td>
                               <td>-</td>
                             </tr>
@@ -472,12 +466,7 @@ export default function DashboardTab({
                         return (
                           <div key={h.asset_id} className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>
                             <div className="mobile-card-row">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontWeight: 700 }}>{h.asset_name}</span>
-                                <span className={`badge ${h.is_risk_asset ? 'badge-risk' : 'badge-safe'}`} style={{ fontSize: '0.7rem' }}>
-                                  {h.is_risk_asset ? '🔴 위험' : '🟢 안전'}
-                                </span>
-                              </div>
+                              <span style={{ fontWeight: 700 }}>{h.asset_name}</span>
                               <span style={{ fontWeight: 800 }}>{formatKRW(h.eval_amount)}</span>
                             </div>
                             <div className="mobile-card-row" style={{ fontSize: '0.82rem' }}>
