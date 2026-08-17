@@ -27,9 +27,10 @@ export default function DashboardTab({
     stock_assets,
     cash_assets,
     drift_scale_max,
-    account_summaries: accSummaries,
     usd_krw
   } = dashboardData;
+
+  const accSummaries = dashboardData.account_summaries || dashboardData.accounts || [];
 
   const isProfit = (kpi?.total_stock_profit || 0) >= 0;
 
@@ -297,88 +298,91 @@ export default function DashboardTab({
           </button>
         </div>
 
-        {accSummaries?.map((acc) => {
-          const isExpanded = expandedAccs[acc.id] !== false; // default true
-          const isIrp = acc.account_type === 'IRP';
-          const isIrpOverRisk = isIrp && acc.risk_pct > 70.0;
-          const accStockProfit = acc.profit_krw || ((acc.stock_eval || 0) - (acc.stock_buy_total || 0));
-          const accStockReturn = acc.profit_pct || (acc.stock_buy_total > 0 ? (accStockProfit / acc.stock_buy_total * 100) : 0);
-          const isAccProfit = accStockProfit >= 0;
-          const totalVal = acc.total_val || (acc.stock_eval + acc.deposit_krw + (acc.deposit_usd * usd_krw));
+        {accSummaries.length === 0 ? (
+          <p style={{ color: 'var(--text-secondary)', padding: '12px 0' }}>등록된 계좌가 없습니다.</p>
+        ) : (
+          accSummaries.map((acc) => {
+            const isExpanded = expandedAccs[acc.id] !== false; // default true
+            const isIrp = acc.account_type === 'IRP';
+            const isIrpOverRisk = isIrp && acc.risk_pct > 70.0;
+            const accStockProfit = acc.profit_krw || ((acc.stock_eval || 0) - (acc.stock_buy_total || 0));
+            const accStockReturn = acc.profit_pct || (acc.stock_buy_total > 0 ? (accStockProfit / acc.stock_buy_total * 100) : 0);
+            const isAccProfit = accStockProfit >= 0;
+            const totalVal = acc.total_val || (acc.stock_eval + acc.deposit_krw + (acc.deposit_usd * (usd_krw || 1380)));
 
-          const annualPct = (acc.annual_limit_pct || 0) * 100;
-          const taxPct = (acc.tax_limit_pct || 0) * 100;
+            const annualPct = (acc.annual_limit_pct || 0) * 100;
+            const taxPct = (acc.tax_limit_pct || 0) * 100;
 
-          return (
-            <div key={acc.id} className="account-accordion">
-              {/* Accordion Header */}
-              <div className="accordion-header" onClick={() => toggleAccordion(acc.id)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>
-                    📌 [{acc.account_type}] {acc.account_alias}
-                  </span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    ({acc.account_no})
-                  </span>
-                  <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)' }}>
-                    우선순위: {acc.priority || 99}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block' }}>계좌 총 자산</span>
-                    <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{formatKRW(totalVal)}</span>
-                  </div>
-                  {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                </div>
-              </div>
-
-              {/* Accordion Body */}
-              {isExpanded && (
-                <div className="accordion-body">
-                  {/* Account Stat Highlight Row */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'var(--bg-surface)', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '16px', border: '1px solid var(--border-color)' }}>
-                    <div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>📈 주식 평가금액</div>
-                      <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatKRW(acc.stock_eval)}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>손익 (수익률)</div>
-                      <div style={{ fontSize: '1.15rem', fontWeight: 700, color: isAccProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
-                        {isAccProfit ? '+' : ''}{formatKRW(accStockProfit)} ({formatPercent(accStockReturn)})
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>💵 보유 예수금</div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
-                        원화 {formatKRW(acc.deposit_krw)} {acc.deposit_usd > 0 && `| 달러 ${formatUSD(acc.deposit_usd)}`}
-                      </div>
-                    </div>
+            return (
+              <div key={acc.id} className="account-accordion">
+                {/* Accordion Header */}
+                <div className="accordion-header" onClick={() => toggleAccordion(acc.id)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>
+                      📌 [{acc.account_type}] {acc.account_alias}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      ({acc.account_no})
+                    </span>
+                    <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)' }}>
+                      우선순위: {acc.priority || 99}
+                    </span>
                   </div>
 
-                  {/* IRP Risk Banner */}
-                  {isIrp && (
-                    <div className={`alert-banner ${isIrpOverRisk ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '16px' }}>
-                      <ShieldAlert size={18} />
-                      <span>
-                        <strong>IRP 위험자산 비중: {acc.risk_pct.toFixed(1)}%</strong> / 70.0% 제한 —{' '}
-                        {isIrpOverRisk ? '⚠️ 70% 초과! 안전자산 비중을 늘려주세요.' : '✅ 규정 준수 중'}
-                      </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block' }}>계좌 총 자산</span>
+                      <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{formatKRW(totalVal)}</span>
                     </div>
-                  )}
+                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
+                </div>
 
-                  {/* Limits Progress Bars */}
-                  {acc.annual_limit > 0 && (
-                    <div className="progress-bar-container">
-                      <div className="progress-bar-label">
-                        <span>연간 납입한도 ({formatKRW(acc.annual_limit)} 중 약 {annualPct.toFixed(1)}% 소진)</span>
-                        <strong>{annualPct.toFixed(1)}%</strong>
+                {/* Accordion Body */}
+                {isExpanded && (
+                  <div className="accordion-body">
+                    {/* Account Stat Highlight Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'var(--bg-surface)', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '16px', border: '1px solid var(--border-color)' }}>
+                      <div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>📈 주식 평가금액</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatKRW(acc.stock_eval)}</div>
                       </div>
-                      <div className="progress-track">
-                        <div 
-                          className="progress-fill" 
-                          style={{ 
+                      <div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>손익 (수익률)</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700, color: isAccProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                          {isAccProfit ? '+' : ''}{formatKRW(accStockProfit)} ({formatPercent(accStockReturn)})
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>💵 보유 예수금</div>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                          원화 {formatKRW(acc.deposit_krw)} {acc.deposit_usd > 0 && `| 달러 ${formatUSD(acc.deposit_usd)}`}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* IRP Risk Banner */}
+                    {isIrp && (
+                      <div className={`alert-banner ${isIrpOverRisk ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '16px' }}>
+                        <ShieldAlert size={18} />
+                        <span>
+                          <strong>IRP 위험자산 비중: {acc.risk_pct?.toFixed(1) || 0}%</strong> / 70.0% 제한 —{' '}
+                          {isIrpOverRisk ? '⚠️ 70% 초과! 안전자산 비중을 늘려주세요.' : '✅ 규정 준수 중'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Limits Progress Bars */}
+                    {acc.annual_limit > 0 && (
+                      <div className="progress-bar-container">
+                        <div className="progress-bar-label">
+                          <span>연간 납입한도 ({formatKRW(acc.annual_limit)} 중 약 {annualPct.toFixed(1)}% 소진)</span>
+                          <strong>{annualPct.toFixed(1)}%</strong>
+                        </div>
+                        <div className="progress-track">
+                          <div 
+                            className="progress-fill" 
+                            style={{ 
                             width: `${Math.min(100, annualPct)}%`,
                             background: annualPct > 100 ? 'var(--color-risk)' : 'var(--accent-primary)'
                           }} 
@@ -429,7 +433,7 @@ export default function DashboardTab({
                           </thead>
                           <tbody>
                             {acc.holdings?.map((h) => {
-                              const isHProfit = h.profit_krw >= 0;
+                              const isHProfit = (h.profit_krw || 0) >= 0;
 
                               return (
                                 <tr key={h.asset_id}>
@@ -463,7 +467,7 @@ export default function DashboardTab({
                     {/* Mobile Holdings Cards */}
                     <div className="mobile-view">
                       {acc.holdings?.map((h) => {
-                        const isHProfit = h.profit_krw >= 0;
+                        const isHProfit = (h.profit_krw || 0) >= 0;
 
                         return (
                           <div key={h.asset_id} className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>
@@ -497,7 +501,8 @@ export default function DashboardTab({
               )}
             </div>
           );
-        })}
+        })
+      )}
       </div>
 
       {/* Edit Holdings Modal */}

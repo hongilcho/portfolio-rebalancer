@@ -1,41 +1,53 @@
-from fastapi import APIRouter
-from backend.services import market_service
-from data.data_manager import get_all_accounts, get_all_assets, get_holdings_by_account, ACCOUNT_TYPES
+import os
+import math
+from fastapi import APIRouter, HTTPException, Depends
+from typing import Dict, Any, List
 
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+from data.data_manager import get_accounts, get_assets, get_holdings_by_account
+from backend.services import market_service
+
+router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 @router.get("/summary")
 def get_dashboard_summary():
-    assets = get_all_assets()
-    accounts = get_all_accounts()
-    prices, price_map = market_service.get_prices()
-    usd_krw = market_service.usd_krw
+    """
+    포트폴리오 대시보드 종합 데이터 집계 API
+    """
+    accounts = get_accounts()
+    assets = get_assets()
     
+    usd_krw = market_service.get_usd_krw_rate()
+    price_map = market_service.get_prices_map(assets)
+    
+    # 1. Account-level calculations
     account_summaries = []
     total_portfolio_eval = 0.0
     
-    # 1. Process Accounts
     for acc in accounts:
-        acc_id = acc['id']
+        acc_id = str(acc['id'])
         acc_no = acc['account_no']
         acc_alias = acc['account_alias']
         acc_type = acc['account_type']
-        dep_krw = float(acc['deposit_krw'])
-        dep_usd = float(acc['deposit_usd'])
+        
+        dep_krw = float(acc.get('deposit_krw', 0.0))
+        dep_usd = float(acc.get('deposit_usd', 0.0))
         dep_usd_krw = dep_usd * usd_krw
         total_deposit = dep_krw + dep_usd_krw
         
-        holdings = get_holdings_by_account(acc_id)
+        acc_holdings = get_holdings_by_account(acc['id'])
+        
         stock_eval = 0.0
+        stock_buy_total = 0.0
         risk_stock_eval = 0.0
         safe_stock_eval = 0.0
-        stock_buy_total = 0.0
         
         holding_details = []
-        for h in holdings:
+        for h in acc_holdings:
+            aid = str(h['asset_id'])
             qty = float(h['quantity'])
             avg_p_krw = float(h['avg_price'])
-            curr_p = float(price_map.get(str(h['asset_id']), avg_p_krw if avg_p_krw > 0 else 0))
+            curr_p = float(price_map.get(aid, avg_p_krw if avg_p_krw > 0 else 0))
+            
             eval_val = qty * curr_p
             buy_amt = qty * avg_p_krw
             
@@ -162,9 +174,11 @@ def get_dashboard_summary():
         
         profit_krw = data['eval_amt_krw'] - data['buy_amt_krw']
         profit_pct = (profit_krw / data['buy_amt_krw'] * 100) if data['buy_amt_krw'] > 0 else 0.0
+        
         weight_pct = (data['eval_amt_krw'] / total_stock_eval * 100) if total_stock_eval > 0 else 0.0
         target_w = target_weight_map.get(aid, 0.0)
         drift_pct = weight_pct - target_w
+        
         if abs(drift_pct) > max_drift_abs:
             max_drift_abs = abs(drift_pct)
             
@@ -212,6 +226,7 @@ def get_dashboard_summary():
         "stock_assets": stock_summary_rows,
         "cash_assets": cash_summary,
         "accounts": account_summaries,
+        "account_summaries": account_summaries,
         "drift_scale_max": scale_max,
         "usd_krw": usd_krw,
         "rate_source": market_service.rate_source
