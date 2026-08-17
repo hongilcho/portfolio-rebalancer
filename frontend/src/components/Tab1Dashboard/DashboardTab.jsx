@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   TrendingUp, TrendingDown, DollarSign, Wallet, ShieldAlert, 
-  ChevronDown, ChevronUp, Edit2, RefreshCw 
+  ChevronDown, ChevronUp, Edit2, RefreshCw, AlertCircle, CheckCircle2 
 } from 'lucide-react';
 import { formatKRW, formatUSD, formatQuantity, formatPercent } from '../../utils/formatters';
 import DriftBar from '../common/DriftBar';
@@ -36,7 +36,7 @@ export default function DashboardTab({
   const toggleAccordion = (accId) => {
     setExpandedAccs((prev) => ({
       ...prev,
-      [accId]: !prev[accId]
+      [accId]: prev[accId] === undefined ? false : !prev[accId]
     }));
   };
 
@@ -282,7 +282,7 @@ export default function DashboardTab({
         </div>
       </div>
 
-      {/* 4. Accounts Cards Section */}
+      {/* 4. Accounts Breakdown Section */}
       <div className="section-card">
         <div className="section-title">
           <span>💳 계좌별 자산 현황 & 한도 모니터링</span>
@@ -301,36 +301,61 @@ export default function DashboardTab({
           const isExpanded = expandedAccs[acc.id] !== false; // default expanded
           const isIrp = acc.account_type === 'IRP';
           const isIrpOverRisk = isIrp && acc.risk_pct > 70.0;
+          const accStockProfit = (acc.stock_eval || 0) - (acc.stock_buy_total || 0);
+          const accStockReturn = (acc.stock_buy_total > 0) ? (accStockProfit / acc.stock_buy_total * 100) : 0;
+          const isAccProfit = accStockProfit >= 0;
 
           return (
             <div key={acc.id} className="account-accordion">
+              {/* Accordion Header */}
               <div className="accordion-header" onClick={() => toggleAccordion(acc.id)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>
-                    [{acc.account_type}] {acc.account_alias}
+                    📌 [{acc.account_type}] {acc.account_alias}
                   </span>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    {acc.account_no}
+                    ({acc.account_no})
                   </span>
-                  <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#818CF8' }}>
+                  <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)' }}>
                     우선순위: {acc.priority || 99}
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>총 평가금액</div>
-                    <div style={{ fontWeight: 700, fontSize: '1rem' }}>{formatKRW(acc.total_eval)}</div>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block' }}>계좌 총 자산</span>
+                    <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{formatKRW(acc.total_eval)}</span>
                   </div>
-                  {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                 </div>
               </div>
 
+              {/* Accordion Body */}
               {isExpanded && (
                 <div className="accordion-body">
+                  {/* Account Stat Highlight Row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'var(--bg-surface)', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '16px', border: '1px solid var(--border-color)' }}>
+                    <div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>📈 주식 평가금액</div>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatKRW(acc.stock_eval)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>손익 (수익률)</div>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 700, color: isAccProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                        {isAccProfit ? '+' : ''}{formatKRW(accStockProfit)} ({formatPercent(accStockReturn)})
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>💵 보유 예수금</div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                        원화 {formatKRW(acc.deposit_krw)} {acc.deposit_usd > 0 && `| 달러 ${formatUSD(acc.deposit_usd)}`}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* IRP Risk Banner */}
                   {isIrp && (
-                    <div className={`alert-banner ${isIrpOverRisk ? 'alert-danger' : 'alert-success'}`}>
+                    <div className={`alert-banner ${isIrpOverRisk ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '16px' }}>
                       <ShieldAlert size={18} />
                       <span>
                         <strong>IRP 위험자산 비중: {acc.risk_pct.toFixed(1)}%</strong> / 70.0% 제한 —{' '}
@@ -376,19 +401,21 @@ export default function DashboardTab({
                     </div>
                   )}
 
-                  {/* Holdings Summary */}
+                  {/* Account Holdings List */}
                   <div style={{ marginTop: '16px' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                      계좌 내 보유 종목 ({acc.holdings?.length || 0}개) & 예수금
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                      📦 계좌별 보유 종목 ({acc.holdings?.length || 0}개)
                     </div>
 
                     {/* Desktop Holdings Table */}
                     <div className="desktop-view">
                       <div className="table-container">
-                        <table className="custom-table" style={{ fontSize: '0.85rem' }}>
+                        <table className="custom-table" style={{ fontSize: '0.86rem' }}>
                           <thead>
                             <tr>
                               <th>종목명</th>
+                              <th>티커</th>
+                              <th>위험구분</th>
                               <th>보유수량</th>
                               <th>평단가</th>
                               <th>현재가</th>
@@ -407,21 +434,26 @@ export default function DashboardTab({
 
                               return (
                                 <tr key={h.asset_id}>
-                                  <td style={{ fontWeight: 600 }}>{h.asset_name}</td>
+                                  <td style={{ fontWeight: 700 }}>{h.asset_name}</td>
+                                  <td>{h.ticker}</td>
+                                  <td>
+                                    <span className={`badge ${h.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
+                                      {h.is_risk_asset ? '🔴 위험자산' : '🟢 안전자산'}
+                                    </span>
+                                  </td>
                                   <td>{formatQuantity(h.quantity)}</td>
                                   <td>{formatKRW(h.avg_price)}</td>
                                   <td>{formatKRW(curP)}</td>
-                                  <td style={{ fontWeight: 600 }}>{formatKRW(evalAmt)}</td>
-                                  <td style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 600 }}>
+                                  <td style={{ fontWeight: 700 }}>{formatKRW(evalAmt)}</td>
+                                  <td style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
                                     {isHProfit ? '+' : ''}{formatKRW(pAmt)} ({formatPercent(pPct)})
                                   </td>
                                 </tr>
                               );
                             })}
                             <tr>
-                              <td style={{ fontWeight: 600 }}>💵 원화 예수금</td>
-                              <td colSpan={3}>-</td>
-                              <td style={{ fontWeight: 700 }}>{formatKRW(acc.deposit_krw)}</td>
+                              <td style={{ fontWeight: 700 }} colSpan={6}>💵 원화 예수금</td>
+                              <td style={{ fontWeight: 800 }}>{formatKRW(acc.deposit_krw)}</td>
                               <td>-</td>
                             </tr>
                           </tbody>
@@ -442,12 +474,17 @@ export default function DashboardTab({
                         return (
                           <div key={h.asset_id} className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>
                             <div className="mobile-card-row">
-                              <span style={{ fontWeight: 700 }}>{h.asset_name}</span>
-                              <span style={{ fontWeight: 700 }}>{formatKRW(evalAmt)}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontWeight: 700 }}>{h.asset_name}</span>
+                                <span className={`badge ${h.is_risk_asset ? 'badge-risk' : 'badge-safe'}`} style={{ fontSize: '0.7rem' }}>
+                                  {h.is_risk_asset ? '🔴 위험' : '🟢 안전'}
+                                </span>
+                              </div>
+                              <span style={{ fontWeight: 800 }}>{formatKRW(evalAmt)}</span>
                             </div>
                             <div className="mobile-card-row" style={{ fontSize: '0.82rem' }}>
                               <span style={{ color: 'var(--text-secondary)' }}>{formatQuantity(h.quantity)} · 평단 {formatKRW(h.avg_price)}</span>
-                              <span style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 600 }}>
+                              <span style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
                                 {isHProfit ? '+' : ''}{formatKRW(pAmt)} ({formatPercent(pPct)})
                               </span>
                             </div>
@@ -456,8 +493,8 @@ export default function DashboardTab({
                       })}
                       <div className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>
                         <div className="mobile-card-row">
-                          <span style={{ fontWeight: 600 }}>💵 원화 예수금</span>
-                          <span style={{ fontWeight: 700 }}>{formatKRW(acc.deposit_krw)}</span>
+                          <span style={{ fontWeight: 700 }}>💵 원화 예수금</span>
+                          <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{formatKRW(acc.deposit_krw)}</span>
                         </div>
                       </div>
                     </div>
