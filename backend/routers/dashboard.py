@@ -3,7 +3,7 @@ import math
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any, List
 
-from data.data_manager import get_accounts, get_assets, get_holdings_by_account
+from data.data_manager import get_all_accounts, get_all_assets, get_holdings_by_account
 from backend.services import market_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -13,11 +13,11 @@ def get_dashboard_summary():
     """
     포트폴리오 대시보드 종합 데이터 집계 API
     """
-    accounts = get_accounts()
-    assets = get_assets()
+    accounts = get_all_accounts()
+    assets = get_all_assets()
     
-    usd_krw = market_service.get_usd_krw_rate()
-    price_map = market_service.get_prices_map(assets)
+    _, price_map = market_service.get_prices()
+    usd_krw = market_service.usd_krw
     
     # 1. Account-level calculations
     account_summaries = []
