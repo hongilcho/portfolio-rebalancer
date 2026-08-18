@@ -64,6 +64,11 @@ export default function DashboardTab({
         </div>
 
         <div className="kpi-card">
+          <div className="kpi-title">🛒 총 주식/자산 매입금액 (현금 제외)</div>
+          <div className="kpi-value">{formatKRW(kpi?.total_stock_buy)}</div>
+        </div>
+
+        <div className="kpi-card">
           <div className="kpi-title">📈 총 주식/자산 평가금액 (현금 제외)</div>
           <div className="kpi-value">{formatKRW(kpi?.total_stock_eval)}</div>
         </div>
