@@ -442,9 +442,12 @@ body {
   font-size: 0.84rem;
   color: var(--text-secondary);
   word-break: keep-all;
-  white-space: nowrap;
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
 }
 
 .mobile-card-stat {

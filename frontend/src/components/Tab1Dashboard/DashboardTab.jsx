@@ -204,7 +204,11 @@ export default function DashboardTab({
                 {/* Row 2: Quantity & Prices + Profit/Loss */}
                 <div className="mobile-card-row">
                   <span className="mobile-card-subtext">
-                    {formatQuantity(item.quantity, item.unit)} · 평단 {formatKRW(item.avg_price)}
+                    <span>{formatQuantity(item.quantity, item.unit)}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>·</span>
+                    <span>평단 {formatKRW(item.avg_price)}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>·</span>
+                    <span>현재 {formatKRW(item.current_price)}</span>
                   </span>
                   <span className="mobile-card-stat" style={{ color: isItemProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
                     {isItemProfit ? '+' : ''}{formatKRW(item.profit_krw)} ({formatPercent(item.profit_pct)})
@@ -479,7 +483,11 @@ export default function DashboardTab({
                             </div>
                             <div className="mobile-card-row">
                               <span className="mobile-card-subtext">
-                                {formatQuantity(h.quantity, h.unit)} · 평단 {formatKRW(h.avg_price)}
+                                <span>{formatQuantity(h.quantity, h.unit)}</span>
+                                <span style={{ color: 'var(--text-muted)' }}>·</span>
+                                <span>평단 {formatKRW(h.avg_price)}</span>
+                                <span style={{ color: 'var(--text-muted)' }}>·</span>
+                                <span>현재 {formatKRW(h.current_price)}</span>
                               </span>
                               <span className="mobile-card-stat" style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
                                 {isHProfit ? '+' : ''}{formatKRW(h.profit_krw)} ({formatPercent(h.profit_pct)})
