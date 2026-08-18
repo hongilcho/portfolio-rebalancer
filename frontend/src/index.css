@@ -409,12 +409,50 @@ body {
 .mobile-card-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
+  gap: 12px;
   margin-bottom: 8px;
+  word-break: keep-all;
 }
 
 .mobile-card-row:last-child {
   margin-bottom: 0;
+}
+
+.mobile-card-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+  line-height: 1.35;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-card-value {
+  font-weight: 800;
+  font-size: 1.05rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-align: right;
+  letter-spacing: -0.01em;
+}
+
+.mobile-card-subtext {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  word-break: keep-all;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-card-stat {
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-align: right;
 }
 
 /* Bidirectional Drift Bar */

@@ -194,19 +194,19 @@ export default function DashboardTab({
               <div key={item.asset_id} className="mobile-card-item">
                 {/* Row 1: Name + Eval Amount */}
                 <div className="mobile-card-row">
-                  <div>
-                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>{item.name}</span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: '6px' }}>({item.ticker})</span>
+                  <div className="mobile-card-title">
+                    <span>{item.name}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: '6px', whiteSpace: 'nowrap' }}>({item.ticker})</span>
                   </div>
-                  <span style={{ fontWeight: 800, fontSize: '1.05rem' }}>{formatKRW(item.eval_amount)}</span>
+                  <span className="mobile-card-value">{formatKRW(item.eval_amount)}</span>
                 </div>
 
                 {/* Row 2: Quantity & Prices + Profit/Loss */}
-                <div className="mobile-card-row" style={{ fontSize: '0.86rem' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>
+                <div className="mobile-card-row">
+                  <span className="mobile-card-subtext">
                     {formatQuantity(item.quantity, item.unit)} · 평단 {formatKRW(item.avg_price)}
                   </span>
-                  <span style={{ color: isItemProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
+                  <span className="mobile-card-stat" style={{ color: isItemProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
                     {isItemProfit ? '+' : ''}{formatKRW(item.profit_krw)} ({formatPercent(item.profit_pct)})
                   </span>
                 </div>
@@ -214,10 +214,10 @@ export default function DashboardTab({
                 {/* Row 3: Weight info & Drift */}
                 <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
                   <div className="mobile-card-row" style={{ fontSize: '0.82rem', marginBottom: '6px' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>
-                      현재 비중 <strong>{item.weight_pct.toFixed(1)}%</strong> / 목표 <strong>{item.target_weight_pct.toFixed(1)}%</strong>
+                    <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                      현재 <strong>{item.weight_pct.toFixed(1)}%</strong> / 목표 <strong>{item.target_weight_pct.toFixed(1)}%</strong>
                     </span>
-                    <span style={{ fontWeight: 700, color: item.drift_pct > 0 ? 'var(--color-profit)' : item.drift_pct < 0 ? 'var(--color-loss)' : 'var(--text-muted)' }}>
+                    <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: item.drift_pct > 0 ? 'var(--color-profit)' : item.drift_pct < 0 ? 'var(--color-loss)' : 'var(--text-muted)' }}>
                       괴리율: {item.drift_pct > 0 ? '+' : ''}{item.drift_pct.toFixed(1)}%
                     </span>
                   </div>
@@ -471,12 +471,17 @@ export default function DashboardTab({
                         return (
                           <div key={h.asset_id} className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>
                             <div className="mobile-card-row">
-                              <span style={{ fontWeight: 700 }}>{h.asset_name}</span>
-                              <span style={{ fontWeight: 800 }}>{formatKRW(h.eval_amount)}</span>
+                              <div className="mobile-card-title">
+                                <span>{h.asset_name}</span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginLeft: '6px', whiteSpace: 'nowrap' }}>({h.ticker})</span>
+                              </div>
+                              <span className="mobile-card-value">{formatKRW(h.eval_amount)}</span>
                             </div>
-                            <div className="mobile-card-row" style={{ fontSize: '0.82rem' }}>
-                              <span style={{ color: 'var(--text-secondary)' }}>{formatQuantity(h.quantity, h.unit)} · 평단 {formatKRW(h.avg_price)}</span>
-                              <span style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 600 }}>
+                            <div className="mobile-card-row">
+                              <span className="mobile-card-subtext">
+                                {formatQuantity(h.quantity, h.unit)} · 평단 {formatKRW(h.avg_price)}
+                              </span>
+                              <span className="mobile-card-stat" style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
                                 {isHProfit ? '+' : ''}{formatKRW(h.profit_krw)} ({formatPercent(h.profit_pct)})
                               </span>
                             </div>
@@ -486,7 +491,7 @@ export default function DashboardTab({
                       <div className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>
                         <div className="mobile-card-row">
                           <span style={{ fontWeight: 700 }}>💵 원화 예수금</span>
-                          <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{formatKRW(acc.deposit_krw)}</span>
+                          <span className="mobile-card-value" style={{ color: 'var(--text-primary)' }}>{formatKRW(acc.deposit_krw)}</span>
                         </div>
                       </div>
                     </div>
