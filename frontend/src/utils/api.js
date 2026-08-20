@@ -78,7 +78,7 @@ export const api = {
     body: JSON.stringify(data),
   }),
   toggleAssetActive: (id, is_active) => request(`/api/assets/${id}/active`, {
-    method: 'PATCH',
+    method: 'POST',
     body: JSON.stringify({ is_active }),
   }),
   deleteAsset: (id) => request(`/api/assets/${id}`, {

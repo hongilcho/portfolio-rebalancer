@@ -83,7 +83,9 @@ def edit_asset(asset_id: str, req: UpdateAssetRequest):
     market_service.invalidate_price_cache()
     return {"success": True, "message": msg}
 
+@router.post("/{asset_id}/active")
 @router.patch("/{asset_id}/active")
+@router.put("/{asset_id}/active")
 def toggle_active(asset_id: str, req: ToggleActiveRequest):
     success, msg = toggle_asset_active(asset_id, req.is_active)
     if not success:
