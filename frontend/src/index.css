@@ -766,6 +766,65 @@ body {
   border: 1px solid rgba(52, 211, 153, 0.4);
 }
 
+/* History Tab Trade Forms Responsive */
+.trade-forms-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.trade-row-card {
+  margin-bottom: 10px;
+}
+
+.trade-row-desktop {
+  display: grid;
+  grid-template-columns: 1.2fr 1.5fr 1fr 1.2fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.trade-row-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .trade-forms-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .trade-row-desktop {
+    display: none;
+  }
+
+  .trade-row-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+  }
+
+  .trade-row-mobile-line1 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .trade-row-mobile-line2 {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr auto;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+  }
+}
+
 .alert-info {
   background: rgba(99, 102, 241, 0.1);
   color: var(--accent-primary);

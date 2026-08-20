@@ -245,11 +245,12 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved }) {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+        <div className="trade-forms-grid">
           {/* 🔴 BUY Column */}
           <div style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.2)' }}>
-            <h4 style={{ color: 'var(--color-profit)', fontWeight: 700, marginBottom: '14px' }}>
-              🔴 매수 (Buy) 입력
+            <h4 style={{ color: 'var(--color-profit)', fontWeight: 700, marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>🔴 매수 (Buy) 입력</span>
+              <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>{buyRows.length}건</span>
             </h4>
 
             {buyRows.map((row, idx) => {
@@ -258,65 +259,120 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved }) {
               );
 
               return (
-                <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1fr 1.2fr auto', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
-                  {/* Account */}
-                  <select
-                    className="input-select"
-                    style={{ fontSize: '0.82rem', padding: '6px' }}
-                    value={row.accountId}
-                    onChange={(e) => updateBuyRow(row.id, 'accountId', e.target.value)}
-                  >
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
-                    ))}
-                  </select>
+                <div key={row.id} className="trade-row-card">
+                  {/* Desktop Layout */}
+                  <div className="trade-row-desktop">
+                    <select
+                      className="input-select"
+                      style={{ fontSize: '0.82rem', padding: '6px' }}
+                      value={row.accountId}
+                      onChange={(e) => updateBuyRow(row.id, 'accountId', e.target.value)}
+                    >
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
+                      ))}
+                    </select>
 
-                  {/* Asset */}
-                  <select
-                    className="input-select"
-                    style={{ fontSize: '0.82rem', padding: '6px' }}
-                    value={row.assetId}
-                    onChange={(e) => updateBuyRow(row.id, 'assetId', e.target.value)}
-                  >
-                    <option value="">종목 선택</option>
-                    {allowedForAcc.map((ast) => (
-                      <option key={ast.id} value={ast.id}>{ast.name}</option>
-                    ))}
-                  </select>
+                    <select
+                      className="input-select"
+                      style={{ fontSize: '0.82rem', padding: '6px' }}
+                      value={row.assetId}
+                      onChange={(e) => updateBuyRow(row.id, 'assetId', e.target.value)}
+                    >
+                      <option value="">종목 선택</option>
+                      {allowedForAcc.map((ast) => (
+                        <option key={ast.id} value={ast.id}>{ast.name}</option>
+                      ))}
+                    </select>
 
-                  {/* Qty */}
-                  <input
-                    type="number"
-                    placeholder="수량"
-                    className="input-number"
-                    style={{ fontSize: '0.82rem', padding: '6px' }}
-                    value={row.quantity || ''}
-                    onChange={(e) => updateBuyRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
-                    min={0}
-                    step={1}
-                  />
+                    <input
+                      type="number"
+                      placeholder="수량"
+                      className="input-number"
+                      style={{ fontSize: '0.82rem', padding: '6px' }}
+                      value={row.quantity || ''}
+                      onChange={(e) => updateBuyRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
+                      min={0}
+                      step={1}
+                    />
 
-                  {/* Price */}
-                  <input
-                    type="number"
-                    placeholder="단가(원)"
-                    className="input-number"
-                    style={{ fontSize: '0.82rem', padding: '6px' }}
-                    value={row.price || ''}
-                    onChange={(e) => updateBuyRow(row.id, 'price', parseFloat(e.target.value) || 0)}
-                    min={0}
-                    step={100}
-                  />
+                    <input
+                      type="number"
+                      placeholder="단가(원)"
+                      className="input-number"
+                      style={{ fontSize: '0.82rem', padding: '6px' }}
+                      value={row.price || ''}
+                      onChange={(e) => updateBuyRow(row.id, 'price', parseFloat(e.target.value) || 0)}
+                      min={0}
+                      step={100}
+                    />
 
-                  {/* Delete Row Button */}
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '6px 8px' }}
-                    onClick={() => removeBuyRow(row.id)}
-                    title="행 삭제"
-                  >
-                    ✕
-                  </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '6px 8px' }}
+                      onClick={() => removeBuyRow(row.id)}
+                      title="행 삭제"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Mobile Layout */}
+                  <div className="trade-row-mobile">
+                    <div className="trade-row-mobile-line1">
+                      <select
+                        className="input-select"
+                        value={row.accountId}
+                        onChange={(e) => updateBuyRow(row.id, 'accountId', e.target.value)}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        className="input-select"
+                        value={row.assetId}
+                        onChange={(e) => updateBuyRow(row.id, 'assetId', e.target.value)}
+                      >
+                        <option value="">종목 선택</option>
+                        {allowedForAcc.map((ast) => (
+                          <option key={ast.id} value={ast.id}>{ast.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="trade-row-mobile-line2">
+                      <input
+                        type="number"
+                        placeholder="수량 (주)"
+                        className="input-number"
+                        value={row.quantity || ''}
+                        onChange={(e) => updateBuyRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
+                        min={0}
+                        step={1}
+                      />
+
+                      <input
+                        type="number"
+                        placeholder="체결단가 (원)"
+                        className="input-number"
+                        value={row.price || ''}
+                        onChange={(e) => updateBuyRow(row.id, 'price', parseFloat(e.target.value) || 0)}
+                        min={0}
+                        step={100}
+                      />
+
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '8px 12px' }}
+                        onClick={() => removeBuyRow(row.id)}
+                        title="행 삭제"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -328,75 +384,133 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved }) {
 
           {/* 🔵 SELL Column */}
           <div style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(96, 165, 250, 0.2)' }}>
-            <h4 style={{ color: 'var(--color-loss)', fontWeight: 700, marginBottom: '14px' }}>
-              🔵 매도 (Sell) 입력
+            <h4 style={{ color: 'var(--color-loss)', fontWeight: 700, marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>🔵 매도 (Sell) 입력</span>
+              <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>{sellRows.length}건</span>
             </h4>
 
             {sellRows.map((row, idx) => {
               const accHoldings = (accountHoldingsMap[String(row.accountId)] || []).filter((h) => h.quantity > 0);
 
               return (
-                <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1fr 1.2fr auto', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
-                  {/* Account */}
-                  <select
-                    className="input-select"
-                    style={{ fontSize: '0.82rem', padding: '6px' }}
-                    value={row.accountId}
-                    onChange={(e) => updateSellRow(row.id, 'accountId', e.target.value)}
-                  >
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
-                    ))}
-                  </select>
+                <div key={row.id} className="trade-row-card">
+                  {/* Desktop Layout */}
+                  <div className="trade-row-desktop">
+                    <select
+                      className="input-select"
+                      style={{ fontSize: '0.82rem', padding: '6px' }}
+                      value={row.accountId}
+                      onChange={(e) => updateSellRow(row.id, 'accountId', e.target.value)}
+                    >
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
+                      ))}
+                    </select>
 
-                  {/* Asset */}
-                  <select
-                    className="input-select"
-                    style={{ fontSize: '0.82rem', padding: '6px' }}
-                    value={row.assetId}
-                    onChange={(e) => updateSellRow(row.id, 'assetId', e.target.value)}
-                  >
-                    <option value="">보유 종목 선택</option>
-                    {accHoldings.map((h) => (
-                      <option key={h.asset_id} value={h.asset_id}>
-                        {h.asset_name} (잔고: {h.quantity})
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      className="input-select"
+                      style={{ fontSize: '0.82rem', padding: '6px' }}
+                      value={row.assetId}
+                      onChange={(e) => updateSellRow(row.id, 'assetId', e.target.value)}
+                    >
+                      <option value="">보유 종목 선택</option>
+                      {accHoldings.map((h) => (
+                        <option key={h.asset_id} value={h.asset_id}>
+                          {h.asset_name} (잔고: {h.quantity})
+                        </option>
+                      ))}
+                    </select>
 
-                  {/* Qty */}
-                  <input
-                    type="number"
-                    placeholder="수량"
-                    className="input-number"
-                    style={{ fontSize: '0.82rem', padding: '6px' }}
-                    value={row.quantity || ''}
-                    onChange={(e) => updateSellRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
-                    min={0}
-                    step={1}
-                  />
+                    <input
+                      type="number"
+                      placeholder="수량"
+                      className="input-number"
+                      style={{ fontSize: '0.82rem', padding: '6px' }}
+                      value={row.quantity || ''}
+                      onChange={(e) => updateSellRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
+                      min={0}
+                      step={1}
+                    />
 
-                  {/* Price */}
-                  <input
-                    type="number"
-                    placeholder="단가(원)"
-                    className="input-number"
-                    style={{ fontSize: '0.82rem', padding: '6px' }}
-                    value={row.price || ''}
-                    onChange={(e) => updateSellRow(row.id, 'price', parseFloat(e.target.value) || 0)}
-                    min={0}
-                    step={100}
-                  />
+                    <input
+                      type="number"
+                      placeholder="단가(원)"
+                      className="input-number"
+                      style={{ fontSize: '0.82rem', padding: '6px' }}
+                      value={row.price || ''}
+                      onChange={(e) => updateSellRow(row.id, 'price', parseFloat(e.target.value) || 0)}
+                      min={0}
+                      step={100}
+                    />
 
-                  {/* Delete Row Button */}
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '6px 8px' }}
-                    onClick={() => removeSellRow(row.id)}
-                    title="행 삭제"
-                  >
-                    ✕
-                  </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '6px 8px' }}
+                      onClick={() => removeSellRow(row.id)}
+                      title="행 삭제"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Mobile Layout */}
+                  <div className="trade-row-mobile">
+                    <div className="trade-row-mobile-line1">
+                      <select
+                        className="input-select"
+                        value={row.accountId}
+                        onChange={(e) => updateSellRow(row.id, 'accountId', e.target.value)}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        className="input-select"
+                        value={row.assetId}
+                        onChange={(e) => updateSellRow(row.id, 'assetId', e.target.value)}
+                      >
+                        <option value="">보유 종목 선택</option>
+                        {accHoldings.map((h) => (
+                          <option key={h.asset_id} value={h.asset_id}>
+                            {h.asset_name} (잔고: {h.quantity})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="trade-row-mobile-line2">
+                      <input
+                        type="number"
+                        placeholder="수량 (주)"
+                        className="input-number"
+                        value={row.quantity || ''}
+                        onChange={(e) => updateSellRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
+                        min={0}
+                        step={1}
+                      />
+
+                      <input
+                        type="number"
+                        placeholder="체결단가 (원)"
+                        className="input-number"
+                        value={row.price || ''}
+                        onChange={(e) => updateSellRow(row.id, 'price', parseFloat(e.target.value) || 0)}
+                        min={0}
+                        step={100}
+                      />
+
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '8px 12px' }}
+                        onClick={() => removeSellRow(row.id)}
+                        title="행 삭제"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
                 </div>
               );
             })}

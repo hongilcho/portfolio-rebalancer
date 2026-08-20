@@ -335,9 +335,10 @@ def delete_asset(asset_id):
     cursor = conn.cursor()
     try:
         cursor.execute("DELETE FROM holdings WHERE asset_id = %s", (str(asset_id),))
+        cursor.execute("DELETE FROM trade_history WHERE asset_id = %s", (str(asset_id),))
         cursor.execute("DELETE FROM assets WHERE id = %s", (str(asset_id),))
         conn.commit()
-        return True, "성공적으로 삭제되었습니다."
+        return True, "종목이 성공적으로 삭제되었습니다."
     except Exception as e:
         conn.rollback()
         return False, str(e)
@@ -376,15 +377,45 @@ def get_all_holdings():
     return [dict(r) for r in rows]
 
 def save_account_holdings(account_id, holdings_data):
+    conn = get_connection()
+    cursor = conn.cursor()
     try:
         today_str = datetime.now().strftime('%Y-%m-%d')
         for item in holdings_data:
-            success, msg = execute_trade(today_str, account_id, item['asset_id'], 'INIT', item['quantity'], item['avg_price'])
-            if not success:
-                return False, f"보정 실패: {msg}"
-        return True, "보유 내역이 성공적으로 장부에 보정 기록되었습니다."
+            aid = str(item['asset_id'])
+            qty = float(item.get('quantity', 0.0))
+            avg_p = float(item.get('avg_price', 0.0))
+            
+            if qty < 0 or avg_p < 0:
+                conn.rollback()
+                return False, "수량과 평단가는 0 이상이어야 합니다."
+                
+            cursor.execute("SELECT id FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
+            row = cursor.fetchone()
+            
+            if qty <= 0:
+                if row:
+                    cursor.execute("DELETE FROM holdings WHERE id = %s", (row[0],))
+            else:
+                if row:
+                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s WHERE id = %s", (qty, avg_p, row[0]))
+                else:
+                    new_h_id = generate_id()
+                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price) VALUES (%s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p))
+                    
+                new_trade_id = generate_id()
+                cursor.execute('''
+                    INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ''', (new_trade_id, today_str, str(account_id), aid, 'INIT', qty, avg_p))
+                
+        conn.commit()
+        return True, "보유 내역이 성공적으로 저장되었습니다."
     except Exception as e:
+        conn.rollback()
         return False, str(e)
+    finally:
+        conn.close()
 
 def sync_account_with_api(account_id, api_data):
     if not api_data:

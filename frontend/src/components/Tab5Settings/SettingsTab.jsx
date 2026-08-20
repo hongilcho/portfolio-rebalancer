@@ -420,8 +420,9 @@ export default function SettingsTab({
                       <button
                         className="btn btn-danger btn-sm"
                         onClick={() => handleDeleteAsset(ast.id, ast.name)}
+                        title="종목 삭제"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={13} /> 삭제
                       </button>
                     </div>
                   </td>
