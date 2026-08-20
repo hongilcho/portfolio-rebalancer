@@ -54,11 +54,18 @@ def get_kr_stock_price(ticker_code):
     except Exception:
         pass
 
-    # 2. 네이버 금융 폴백
+    # 2. 네이버 금융 폴백 (XPath & Regex)
     try:
         url = f'https://finance.naver.com/item/main.naver?code={ticker_code}'
         headers = {'User-Agent': 'Mozilla/5.0'}
         res = requests.get(url, headers=headers, timeout=5)
+        tree = html.fromstring(res.content)
+        blind_elem = tree.xpath('//p[contains(@class, "no_today")]//span[@class="blind"]')
+        if blind_elem:
+            val_str = blind_elem[0].text_content().replace(',', '').strip()
+            if val_str.isdigit():
+                return float(val_str), None
+        
         match = re.search(r'<dd>현재가\s+([0-9,]+)', res.text)
         if match:
             price = float(match.group(1).replace(',', ''))
@@ -107,7 +114,20 @@ def get_krx_gold_price():
             if price_clean:
                 return float(price_clean), None
     except Exception as e:
+        pass
+
+    # 3. 네이버 증권 PC 웹 폴백
+    try:
+        url_pc = 'https://finance.naver.com/marketindex/goldDetail.naver'
+        res_pc = requests.get(url_pc, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+        tree_pc = html.fromstring(res_pc.content)
+        elem_pc = tree_pc.xpath('//p[contains(@class, "no_today")]//span[@class="blind"]')
+        if elem_pc:
+            clean_val = elem_pc[0].text_content().replace(',', '').strip()
+            return float(clean_val), None
+    except Exception as e:
         return None, f"금 시세 크롤링 오류: {e}"
+        
     return None, "금 시세를 찾을 수 없습니다."
 
 def get_us_stock_price(ticker_symbol):
@@ -170,11 +190,11 @@ def fetch_asset_prices(assets, usd_krw=None):
                 price_usd = 0.0
                 status = "수동 입력 필요 (Ticker 없음)"
         elif market == 'KR':
-            if ticker == 'M04020000':
-                raw_price = nh_api_client.fetch_gold_price(ticker)
-                err = None if raw_price else "API 에러"
+            if ticker == 'M04020000' or '금' in asset['name']:
+                raw_price, err = get_krx_gold_price()
             else:
                 raw_price, err = get_kr_stock_price(ticker)
+                
             if raw_price is not None:
                 price_krw = raw_price
                 price_usd = raw_price / usd_krw if usd_krw else 0

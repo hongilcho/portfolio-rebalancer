@@ -143,7 +143,9 @@ def get_dashboard_summary():
                 }
             qty = float(h['quantity'])
             avg_p_krw = float(h['avg_price'])
-            curr_p = float(price_map.get(aid, avg_p_krw if avg_p_krw > 0 else 0))
+            curr_p = float(price_map.get(aid, 0.0))
+            if curr_p <= 0:
+                curr_p = avg_p_krw if avg_p_krw > 0 else 0.0
             
             portfolio_assets[aid]['quantity'] += qty
             portfolio_assets[aid]['buy_amt_krw'] += qty * avg_p_krw
@@ -190,6 +192,11 @@ def get_dashboard_summary():
         is_gold = "금" in data['name'] or data.get('ticker') == 'M04020000'
         unit_str = "g" if is_gold else "주"
         
+        calc_avg_price = (data['buy_amt_krw'] / data['quantity']) if data['quantity'] > 0 else 0.0
+        curr_price_val = float(price_map.get(aid, 0.0))
+        if curr_price_val <= 0:
+            curr_price_val = calc_avg_price
+            
         stock_summary_rows.append({
             "asset_id": aid,
             "name": data['name'],
@@ -198,8 +205,8 @@ def get_dashboard_summary():
             "is_risk_asset": data['is_risk_asset'],
             "quantity": data['quantity'],
             "unit": unit_str,
-            "avg_price": (data['buy_amt_krw'] / data['quantity']) if data['quantity'] > 0 else 0.0,
-            "current_price": float(price_map.get(aid, 0.0)),
+            "avg_price": calc_avg_price,
+            "current_price": curr_price_val,
             "eval_amount": data['eval_amt_krw'],
             "buy_amount": data['buy_amt_krw'],
             "profit_krw": profit_krw,
