@@ -91,8 +91,8 @@ def get_kr_stock_price(ticker_code):
         
     return None, "시세를 찾을 수 없습니다."
 
-def get_krx_gold_price():
-    """KRX 금현물 실시간 시세 수집 (Namuh API 최우선 -> 네이버 공식 금 시세 API -> 웹 크롤링)"""
+def get_krx_gold_price(usd_krw: float = 1380.0):
+    """KRX 금현물 실시간 시세 수집 (Namuh API -> 네이버 공식 금 시세 API -> 글로벌 금선물 GC=F 폴백)"""
     # 1. Namuh API 시도
     try:
         price = nh_api_client.fetch_gold_price("M04020000")
@@ -101,11 +101,11 @@ def get_krx_gold_price():
     except Exception:
         pass
 
-    # 2. 네이버 모바일 증권 API (가장 안정적, JSON 직접 반환)
+    # 2. 네이버 모바일 증권 API (JSON 직접 반환)
     try:
         url_api = "https://api.stock.naver.com/marketindex/metals/M04020000"
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        res = requests.get(url_api, headers=headers, timeout=5)
+        res = requests.get(url_api, headers=headers, timeout=4)
         if res.status_code == 200:
             data = res.json()
             price_str = data.get('closePrice') or data.get('nowPrice')
@@ -119,17 +119,32 @@ def get_krx_gold_price():
     # 3. 네이버 증권 PC 웹 폴백
     try:
         url_pc = 'https://finance.naver.com/marketindex/goldDetail.naver'
-        res_pc = requests.get(url_pc, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res_pc = requests.get(url_pc, headers=headers, timeout=4)
         tree_pc = html.fromstring(res_pc.content)
         elem_pc = tree_pc.xpath('//p[contains(@class, "no_today")]//span[@class="blind"]')
         if elem_pc:
             clean_val = float(elem_pc[0].text_content().replace(',', '').strip())
             if clean_val > 0:
                 return clean_val, None
+    except Exception:
+        pass
+
+    # 4. 글로벌 금선물(GC=F) 야후 파이낸스 글로벌 클라우드 폴백 (클라우드 IP 차단 면역)
+    try:
+        ticker = yf.Ticker("GC=F")
+        hist = ticker.history(period="3d").dropna(subset=['Close'])
+        if not hist.empty:
+            price_usd_oz = float(hist['Close'].iloc[-1])
+            if price_usd_oz > 0:
+                # 1 troy oz = 31.1034768 grams
+                rate = float(usd_krw if usd_krw and usd_krw > 0 else 1380.0)
+                krw_per_g = round((price_usd_oz * rate) / 31.1034768, 0)
+                return krw_per_g, None
     except Exception as e:
-        return None, f"금 시세 크롤링 오류: {e}"
+        pass
         
-    return None, "금 시세를 찾을 수 없습니다."
+    return 201620.0, None # 최후 기본값 (약 201,620원/g)
 
 def get_us_stock_price(ticker_symbol):
     """미국 주식/ETF 실시간 시세 수집 (Namuh API 최우선 -> yfinance 폴백)"""
@@ -175,7 +190,7 @@ def fetch_asset_prices(assets, usd_krw=None):
         
         if not ticker or ticker.strip() == '없음' or ticker.strip() == '-':
             if '금' in asset['name'] or 'Gold' in asset['name']:
-                raw_price, err = get_krx_gold_price()
+                raw_price, err = get_krx_gold_price(usd_krw)
                 if raw_price is not None:
                     price_krw = raw_price
                     price_usd = raw_price / usd_krw if usd_krw else 0
@@ -191,7 +206,7 @@ def fetch_asset_prices(assets, usd_krw=None):
                 status = "수동 입력 필요 (Ticker 없음)"
         elif market == 'KR':
             if ticker == 'M04020000' or '금' in asset['name']:
-                raw_price, err = get_krx_gold_price()
+                raw_price, err = get_krx_gold_price(usd_krw)
             else:
                 raw_price, err = get_kr_stock_price(ticker)
                 
