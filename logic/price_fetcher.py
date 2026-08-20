@@ -92,7 +92,7 @@ def get_kr_stock_price(ticker_code):
     return None, "시세를 찾을 수 없습니다."
 
 def get_krx_gold_price():
-    """KRX 금현물 실시간 시세 수집 (Namuh API 최우선 -> 네이버 금융 폴백)"""
+    """KRX 금현물 실시간 시세 수집 (Namuh API 최우선 -> 네이버 공식 금 시세 API -> 웹 크롤링)"""
     # 1. Namuh API 시도
     try:
         price = nh_api_client.fetch_gold_price("M04020000")
@@ -101,19 +101,19 @@ def get_krx_gold_price():
     except Exception:
         pass
 
-    # 2. 네이버 금융 폴백
+    # 2. 네이버 모바일 증권 API (가장 안정적, JSON 직접 반환)
     try:
-        url = 'https://m.stock.naver.com/marketindex/metals/M04020000'
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=5, verify=False)
-        tree = html.fromstring(res.content)
-        element = tree.xpath('//*[@id="content"]/div[1]/div[2]/div[2]/strong')
-        if element:
-            price_text = element[0].text_content().strip()
-            price_clean = re.sub(r'[^0-9.]', '', price_text)
-            if price_clean:
-                return float(price_clean), None
-    except Exception as e:
+        url_api = "https://api.stock.naver.com/marketindex/metals/M04020000"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        res = requests.get(url_api, headers=headers, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            price_str = data.get('closePrice') or data.get('nowPrice')
+            if price_str:
+                clean_num = float(str(price_str).replace(',', '').strip())
+                if clean_num > 0:
+                    return clean_num, None
+    except Exception:
         pass
 
     # 3. 네이버 증권 PC 웹 폴백
@@ -123,8 +123,9 @@ def get_krx_gold_price():
         tree_pc = html.fromstring(res_pc.content)
         elem_pc = tree_pc.xpath('//p[contains(@class, "no_today")]//span[@class="blind"]')
         if elem_pc:
-            clean_val = elem_pc[0].text_content().replace(',', '').strip()
-            return float(clean_val), None
+            clean_val = float(elem_pc[0].text_content().replace(',', '').strip())
+            if clean_val > 0:
+                return clean_val, None
     except Exception as e:
         return None, f"금 시세 크롤링 오류: {e}"
         
