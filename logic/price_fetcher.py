@@ -50,7 +50,7 @@ def get_kr_stock_price(ticker_code):
     try:
         price = nh_api_client.fetch_current_price(ticker_code, market="KR")
         if price is not None and price > 0:
-            return price, None
+            return price, "NH API"
     except Exception:
         pass
 
@@ -64,13 +64,13 @@ def get_kr_stock_price(ticker_code):
         if blind_elem:
             val_str = blind_elem[0].text_content().replace(',', '').strip()
             if val_str.isdigit():
-                return float(val_str), None
+                return float(val_str), "네이버 금융"
         
         match = re.search(r'<dd>현재가\s+([0-9,]+)', res.text)
         if match:
             price = float(match.group(1).replace(',', ''))
-            return price, None
-    except Exception as e:
+            return price, "네이버 금융"
+    except Exception:
         pass 
         
     # 3. yfinance 폴백
@@ -79,17 +79,17 @@ def get_kr_stock_price(ticker_code):
         ticker_ks = yf.Ticker(f"{ticker_code}.KS")
         hist_ks = ticker_ks.history(period="5d").dropna(subset=['Close'])
         if not hist_ks.empty:
-            return float(hist_ks['Close'].iloc[-1]), None
+            return float(hist_ks['Close'].iloc[-1]), "yfinance"
             
         ticker_kq = yf.Ticker(f"{ticker_code}.KQ")
         hist_kq = ticker_kq.history(period="5d").dropna(subset=['Close'])
         if not hist_kq.empty:
-            return float(hist_kq['Close'].iloc[-1]), None
+            return float(hist_kq['Close'].iloc[-1]), "yfinance"
             
     except Exception as e:
-        return None, f"yfinance 폴백 조회 오류: {e}"
+        return None, f"yfinance 오류: {e}"
         
-    return None, "시세를 찾을 수 없습니다."
+    return None, "시세를 찾을 수 없음"
 
 def get_krx_gold_price(usd_krw: float = 1380.0):
     """KRX 금현물 실시간 시세 수집 (Namuh API -> 네이버 공식 금 시세 API -> 글로벌 금선물 GC=F 폴백)"""
@@ -97,7 +97,7 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
     try:
         price = nh_api_client.fetch_gold_price("M04020000")
         if price is not None and price > 0:
-            return price, None
+            return price, "NH API"
     except Exception:
         pass
 
@@ -112,7 +112,7 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
             if price_str:
                 clean_num = float(str(price_str).replace(',', '').strip())
                 if clean_num > 0:
-                    return clean_num, None
+                    return clean_num, "네이버 금융"
     except Exception:
         pass
 
@@ -126,7 +126,7 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
         if elem_pc:
             clean_val = float(elem_pc[0].text_content().replace(',', '').strip())
             if clean_val > 0:
-                return clean_val, None
+                return clean_val, "네이버 금융"
     except Exception:
         pass
 
@@ -140,11 +140,11 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
                 # 1 troy oz = 31.1034768 grams
                 rate = float(usd_krw if usd_krw and usd_krw > 0 else 1380.0)
                 krw_per_g = round((price_usd_oz * rate) / 31.1034768, 0)
-                return krw_per_g, None
-    except Exception as e:
+                return krw_per_g, "COMEX 금선물"
+    except Exception:
         pass
         
-    return 201620.0, None # 최후 기본값 (약 201,620원/g)
+    return 201620.0, "기본값"
 
 def get_us_stock_price(ticker_symbol):
     """미국 주식/ETF 실시간 시세 수집 (Namuh API 최우선 -> yfinance 폴백)"""
@@ -152,7 +152,7 @@ def get_us_stock_price(ticker_symbol):
     try:
         price = nh_api_client.fetch_current_price(ticker_symbol, market="US")
         if price is not None and price > 0:
-            return price, None
+            return price, "NH API"
     except Exception:
         pass
 
@@ -163,18 +163,18 @@ def get_us_stock_price(ticker_symbol):
         try:
             last_price = getattr(ticker.fast_info, 'last_price', None)
             if last_price is not None and not math.isnan(last_price):
-                return float(last_price), None
+                return float(last_price), "yfinance"
         except Exception:
             pass
             
         hist = ticker.history(period="5d").dropna(subset=['Close'])
         if not hist.empty:
             price = float(hist['Close'].iloc[-1])
-            return price, None
+            return price, "yfinance"
             
     except Exception as e:
-        return None, str(e)
-    return None, "시세를 찾을 수 없습니다."
+        return None, f"yfinance 오류: {e}"
+    return None, "시세를 찾을 수 없음"
 
 def fetch_asset_prices(assets, usd_krw=None):
     """자산 목록 전체의 실시간 시세 및 원화 환산 가격 일괄 수집"""
@@ -190,15 +190,15 @@ def fetch_asset_prices(assets, usd_krw=None):
         
         if not ticker or ticker.strip() == '없음' or ticker.strip() == '-':
             if '금' in asset['name'] or 'Gold' in asset['name']:
-                raw_price, err = get_krx_gold_price(usd_krw)
+                raw_price, source = get_krx_gold_price(usd_krw)
                 if raw_price is not None:
                     price_krw = raw_price
                     price_usd = raw_price / usd_krw if usd_krw else 0
-                    status = "정상 (크롤링)"
+                    status = f"정상 ({source})"
                 else:
                     price_krw = 0.0
                     price_usd = 0.0
-                    status = f"오류: {err}"
+                    status = f"오류: {source}"
             else:
                 raw_price = 0.0
                 price_krw = 0.0
@@ -206,28 +206,28 @@ def fetch_asset_prices(assets, usd_krw=None):
                 status = "수동 입력 필요 (Ticker 없음)"
         elif market == 'KR':
             if ticker == 'M04020000' or '금' in asset['name']:
-                raw_price, err = get_krx_gold_price(usd_krw)
+                raw_price, source = get_krx_gold_price(usd_krw)
             else:
-                raw_price, err = get_kr_stock_price(ticker)
+                raw_price, source = get_kr_stock_price(ticker)
                 
             if raw_price is not None:
                 price_krw = raw_price
                 price_usd = raw_price / usd_krw if usd_krw else 0
-                status = "정상 (NH API)" if err is None else "정상 (Fallback)"
+                status = f"정상 ({source})"
             else:
                 price_krw = 0.0
                 price_usd = 0.0
-                status = f"오류: {err}"
+                status = f"오류: {source}"
         else: # US
-            raw_price, err = get_us_stock_price(ticker)
+            raw_price, source = get_us_stock_price(ticker)
             if raw_price is not None:
                 price_usd = raw_price
                 price_krw = raw_price * usd_krw
-                status = "정상 (NH API)" if err is None else "정상 (Fallback)"
+                status = f"정상 ({source})"
             else:
                 price_usd = 0.0
                 price_krw = 0.0
-                status = f"오류: {err}"
+                status = f"오류: {source}"
                 
         results.append({
             "id": asset['id'],
