@@ -161,7 +161,6 @@ def get_us_stock_price(ticker_symbol):
         return None, str(e)
     return None, "시세를 찾을 수 없습니다."
 
-@st.cache_data(ttl=60, show_spinner=False)
 def fetch_asset_prices(assets, usd_krw=None):
     """자산 목록 전체의 실시간 시세 및 원화 환산 가격 일괄 수집"""
     if usd_krw is None:
