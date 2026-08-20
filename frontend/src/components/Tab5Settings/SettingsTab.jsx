@@ -173,6 +173,9 @@ export default function SettingsTab({
   };
 
   const handleToggleAssetActive = async (id, name, currentIsActive) => {
+    const target = assets.find((a) => String(a.id) === String(id));
+    if (!target) return;
+
     const actionText = currentIsActive ? '비활성화(보관)' : '활성화';
     const confirmMsg = currentIsActive
       ? `'${name}' 종목을 비활성화(보관)하시겠습니까?\n\n- 과거 매매 기록은 영구 보존됩니다.\n- 1번(대시보드), 2번(목표비중), 3번(리밸런싱) 화면에서 자동으로 숨겨집니다.`
@@ -180,7 +183,16 @@ export default function SettingsTab({
     if (!window.confirm(confirmMsg)) return;
 
     try {
-      await api.toggleAssetActive(id, !currentIsActive);
+      await api.updateAsset(id, {
+        name: target.name,
+        ticker: target.ticker,
+        market: target.market,
+        target_weight: Number(target.target_weight),
+        allowed_accounts: target.allowed_accounts || [],
+        is_risk_asset: Boolean(target.is_risk_asset),
+        is_active: !currentIsActive,
+        notes: target.notes || ''
+      });
       alert(`종목이 성공적으로 ${actionText}되었습니다.`);
       onSaved();
     } catch (err) {
