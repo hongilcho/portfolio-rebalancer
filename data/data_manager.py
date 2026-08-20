@@ -128,9 +128,11 @@ def init_db():
             target_weight REAL DEFAULT 0.0,
             allowed_accounts TEXT DEFAULT '[]',
             is_risk_asset INTEGER DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE,
             notes TEXT
         )
     ''')
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS holdings (
@@ -283,11 +285,12 @@ def get_all_assets():
             raw_accs = []
         r['allowed_accounts'] = sanitize_account_names(raw_accs)
         r['is_risk_asset'] = bool(r.get('is_risk_asset', 1))
+        r['is_active'] = bool(r.get('is_active', True) if r.get('is_active') is not None else True)
         rows.append(r)
     conn.close()
     return rows
 
-def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, notes=""):
+def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes=""):
     if allowed_accounts is None:
         allowed_accounts = []
     clean_accs = sanitize_account_names(allowed_accounts)
@@ -297,9 +300,9 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
     try:
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
-            INSERT INTO assets (id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, notes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (new_id, name, ticker.strip().upper(), market, target_weight, allowed_json, 1 if is_risk_asset else 0, notes))
+            INSERT INTO assets (id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, is_active, notes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (new_id, name, ticker.strip().upper(), market, target_weight, allowed_json, 1 if is_risk_asset else 0, is_active, notes))
         conn.commit()
         return True, "성공적으로 추가되었습니다."
     except psycopg2.IntegrityError:
@@ -311,7 +314,7 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
     finally:
         conn.close()
 
-def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset=True, notes=""):
+def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset=True, is_active=True, notes=""):
     clean_accs = sanitize_account_names(allowed_accounts)
     conn = get_connection()
     cursor = conn.cursor()
@@ -319,11 +322,25 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
             UPDATE assets
-            SET name = %s, ticker = %s, market = %s, target_weight = %s, allowed_accounts = %s, is_risk_asset = %s, notes = %s
+            SET name = %s, ticker = %s, market = %s, target_weight = %s, allowed_accounts = %s, is_risk_asset = %s, is_active = %s, notes = %s
             WHERE id = %s
-        ''', (name, ticker.strip().upper(), market, target_weight, allowed_json, 1 if is_risk_asset else 0, notes, str(asset_id)))
+        ''', (name, ticker.strip().upper(), market, target_weight, allowed_json, 1 if is_risk_asset else 0, is_active, notes, str(asset_id)))
         conn.commit()
         return True, "성공적으로 수정되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+def toggle_asset_active(asset_id, is_active: bool):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE assets SET is_active = %s WHERE id = %s", (is_active, str(asset_id)))
+        conn.commit()
+        status_str = "활성화" if is_active else "비활성화(보관)"
+        return True, f"종목이 성공적으로 {status_str}되었습니다."
     except Exception as e:
         conn.rollback()
         return False, str(e)

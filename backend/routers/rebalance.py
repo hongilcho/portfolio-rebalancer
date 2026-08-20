@@ -45,8 +45,14 @@ def calculate_plan(req: CalculateRebalanceRequest):
         portfolio_assets[aid]['eval_amt_krw'] += qty * price
         portfolio_assets[aid]['buy_amt_krw'] += qty * float(h['avg_price'])
         
+    # Filter out inactive assets that have 0 holdings
+    active_assets = [
+        a for a in assets 
+        if a.get('is_active', True) or portfolio_assets.get(str(a['id']), {}).get('qty', 0) > 0
+    ]
+    
     t_plan, tr_plan, sim_assets, success, msg = calculate_rebalancing_plan(
-        assets=assets,
+        assets=active_assets,
         portfolio_assets=portfolio_assets,
         accounts=accounts,
         holdings=holdings_raw,

@@ -41,23 +41,28 @@ export default function WeightsTab({ assets, accounts, onSaved }) {
     });
   };
 
-  const totalWeight = Object.values(weightInputs).reduce((sum, w) => sum + (Number(w) || 0), 0);
+  const activeAssets = assets.filter((ast) => ast.is_active !== false);
+  const totalWeight = activeAssets.reduce((sum, ast) => sum + (Number(weightInputs[String(ast.id)]) || 0), 0);
   const is100 = Math.abs(totalWeight - 100.0) < 0.05;
 
   const handleSave = async () => {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      const payload = assets.map((ast) => ({
-        id: String(ast.id),
-        name: ast.name,
-        ticker: ast.ticker,
-        market: ast.market,
-        target_weight: Number(weightInputs[String(ast.id)] || 0),
-        allowed_accounts: accountInputs[String(ast.id)] || [],
-        is_risk_asset: Boolean(ast.is_risk_asset),
-        notes: ast.notes || ''
-      }));
+      const payload = assets.map((ast) => {
+        const isActive = ast.is_active !== false;
+        return {
+          id: String(ast.id),
+          name: ast.name,
+          ticker: ast.ticker,
+          market: ast.market,
+          target_weight: isActive ? Number(weightInputs[String(ast.id)] || 0) : 0,
+          allowed_accounts: accountInputs[String(ast.id)] || [],
+          is_risk_asset: Boolean(ast.is_risk_asset),
+          is_active: isActive,
+          notes: ast.notes || ''
+        };
+      });
 
       await api.batchUpdateWeights(payload);
       setSaveSuccess(true);
@@ -79,10 +84,10 @@ export default function WeightsTab({ assets, accounts, onSaved }) {
         </span>
       </div>
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '24px' }}>
-        각 자산의 목표 비중을 슬라이더 또는 숫자로 설정하고, 이 자산을 매수할 수 있는 계좌를 선택해 주세요.
+        현재 활성화된 자산들의 목표 비중을 슬라이더 또는 숫자로 설정하고, 각 자산을 매수할 수 있는 계좌를 선택해 주세요.
       </p>
 
-      {assets.map((asset) => {
+      {activeAssets.map((asset) => {
         const aid = String(asset.id);
         const wVal = weightInputs[aid] !== undefined ? weightInputs[aid] : asset.target_weight;
         const currentAccs = accountInputs[aid] || [];

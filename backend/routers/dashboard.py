@@ -161,6 +161,7 @@ def get_dashboard_summary():
     
     for a in assets:
         aid = str(a['id'])
+        is_active = a.get('is_active', True)
         data = portfolio_assets.get(aid, {
             "asset_id": aid,
             "name": a['name'],
@@ -171,6 +172,10 @@ def get_dashboard_summary():
             "buy_amt_krw": 0.0,
             "eval_amt_krw": 0.0
         })
+        
+        # If asset is inactive and has no holdings, do not display in Dashboard Tab 1
+        if not is_active and data['quantity'] <= 0:
+            continue
         
         profit_krw = data['eval_amt_krw'] - data['buy_amt_krw']
         profit_pct = (profit_krw / data['buy_amt_krw'] * 100) if data['buy_amt_krw'] > 0 else 0.0

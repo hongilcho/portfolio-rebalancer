@@ -132,6 +132,7 @@ export default function SettingsTab({
         target_weight: Number(assetForm.target_weight),
         allowed_accounts: assetForm.allowed_accounts,
         is_risk_asset: Boolean(assetForm.is_risk_asset),
+        is_active: Boolean(assetForm.is_active !== false),
         notes: assetForm.notes || ''
       });
       alert('자산이 성공적으로 등록되었습니다.');
@@ -158,6 +159,7 @@ export default function SettingsTab({
         target_weight: Number(assetForm.target_weight),
         allowed_accounts: assetForm.allowed_accounts,
         is_risk_asset: Boolean(assetForm.is_risk_asset),
+        is_active: Boolean(assetForm.is_active !== false),
         notes: assetForm.notes || ''
       });
       alert('자산이 성공적으로 수정되었습니다.');
@@ -170,11 +172,27 @@ export default function SettingsTab({
     }
   };
 
+  const handleToggleAssetActive = async (id, name, currentIsActive) => {
+    const actionText = currentIsActive ? '비활성화(보관)' : '활성화';
+    const confirmMsg = currentIsActive
+      ? `'${name}' 종목을 비활성화(보관)하시겠습니까?\n\n- 과거 매매 기록은 영구 보존됩니다.\n- 1번(대시보드), 2번(목표비중), 3번(리밸런싱) 화면에서 자동으로 숨겨집니다.`
+      : `'${name}' 종목을 다시 활성화하시겠습니까?\n\n- 1~3번 탭(대시보드, 목표비중, 리밸런싱)에 다시 정상 표시됩니다.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await api.toggleAssetActive(id, !currentIsActive);
+      alert(`종목이 성공적으로 ${actionText}되었습니다.`);
+      onSaved();
+    } catch (err) {
+      alert(`${actionText} 실패: ${err.message}`);
+    }
+  };
+
   const handleDeleteAsset = async (id, name) => {
-    if (!window.confirm(`정말 자산 '${name}' 및 관련 잔고를 삭제하시겠습니까?`)) return;
+    if (!window.confirm(`⚠️ 주의: 자산 '${name}' 및 과거 모든 매매 기록이 DB에서 완전히 삭제됩니다!\n\n단순히 1~3번 탭에서 숨기려면 [📦 보관] 기능을 이용하세요.\n\n정말 영구 삭제하시겠습니까?`)) return;
     try {
       await api.deleteAsset(id);
-      alert('자산이 삭제되었습니다.');
+      alert('자산 및 관련 데이터가 삭제되었습니다.');
       onSaved();
     } catch (err) {
       alert(`삭제 실패: ${err.message}`);
@@ -379,6 +397,7 @@ export default function SettingsTab({
               <tr>
                 <th>자산명</th>
                 <th>티커/종목코드</th>
+                <th>상태</th>
                 <th>시장</th>
                 <th>목표비중(%)</th>
                 <th>위험자산여부</th>
@@ -386,48 +405,65 @@ export default function SettingsTab({
               </tr>
             </thead>
             <tbody>
-              {assets.map((ast) => (
-                <tr key={ast.id}>
-                  <td style={{ fontWeight: 700 }}>{ast.name}</td>
-                  <td>{ast.ticker}</td>
-                  <td>{ast.market === 'KR' ? '🇰🇷 국내' : '🇺🇸 미국'}</td>
-                  <td>{ast.target_weight.toFixed(1)}%</td>
-                  <td>
-                    <span className={`badge ${ast.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
-                      {ast.is_risk_asset ? '🔴 위험' : '🟢 안전'}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => {
-                          setEditAssetTarget(ast);
-                          setAssetForm({
-                            name: ast.name,
-                            ticker: ast.ticker,
-                            market: ast.market,
-                            target_weight: ast.target_weight,
-                            allowed_accounts: ast.allowed_accounts || [],
-                            is_risk_asset: ast.is_risk_asset,
-                            is_gold: ast.ticker === 'M04020000' || ast.name.includes('금'),
-                            notes: ast.notes || ''
-                          });
-                        }}
-                      >
-                        <Edit3 size={13} /> 수정
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDeleteAsset(ast.id, ast.name)}
-                        title="종목 삭제"
-                      >
-                        <Trash2 size={13} /> 삭제
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {assets.map((ast) => {
+                const isActive = ast.is_active !== false;
+
+                return (
+                  <tr key={ast.id} style={{ opacity: isActive ? 1 : 0.65 }}>
+                    <td style={{ fontWeight: 700 }}>{ast.name}</td>
+                    <td>{ast.ticker}</td>
+                    <td>
+                      <span className={`badge ${isActive ? 'badge-safe' : ''}`} style={!isActive ? { background: 'rgba(128,128,128,0.2)', color: 'var(--text-muted)' } : {}}>
+                        {isActive ? '🟢 활성' : '⚪ 보관(비활성)'}
+                      </span>
+                    </td>
+                    <td>{ast.market === 'KR' ? '🇰🇷 국내' : '🇺🇸 미국'}</td>
+                    <td>{isActive ? `${ast.target_weight.toFixed(1)}%` : '-'}</td>
+                    <td>
+                      <span className={`badge ${ast.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
+                        {ast.is_risk_asset ? '🔴 위험' : '🟢 안전'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setEditAssetTarget(ast);
+                            setAssetForm({
+                              name: ast.name,
+                              ticker: ast.ticker,
+                              market: ast.market,
+                              target_weight: ast.target_weight,
+                              allowed_accounts: ast.allowed_accounts || [],
+                              is_risk_asset: ast.is_risk_asset,
+                              is_gold: ast.ticker === 'M04020000' || ast.name.includes('금'),
+                              is_active: isActive,
+                              notes: ast.notes || ''
+                            });
+                          }}
+                        >
+                          <Edit3 size={13} /> 수정
+                        </button>
+                        <button
+                          className={`btn btn-sm ${isActive ? 'btn-secondary' : 'btn-primary'}`}
+                          onClick={() => handleToggleAssetActive(ast.id, ast.name, isActive)}
+                          title={isActive ? "1~3번 탭에서 숨기기 (과거 매매기록은 보존)" : "1~3번 탭에 다시 표시"}
+                        >
+                          {isActive ? '📦 보관' : '♻️ 활성화'}
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDeleteAsset(ast.id, ast.name)}
+                          title="종목 및 과거 모든 매매기록 영구 삭제"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -644,14 +680,23 @@ export default function SettingsTab({
                 </div>
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>
                   <input
                     type="checkbox"
                     checked={assetForm.is_risk_asset}
                     onChange={(e) => setAssetForm({ ...assetForm, is_risk_asset: e.target.checked })}
                   />
-                  위험자산으로 분류 (IRP 70% 제약 대상)
+                  위험자산으로 분류 (IRP 70%)
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={assetForm.is_active !== false}
+                    onChange={(e) => setAssetForm({ ...assetForm, is_active: e.target.checked })}
+                  />
+                  활성 종목 (1~3번 탭 표시)
                 </label>
               </div>
 
