@@ -30,6 +30,14 @@ export default function DashboardTab({
     usd_krw
   } = dashboardData;
 
+  const activeAssetIds = new Set(
+    (assets || []).filter((a) => a.is_active !== false).map((a) => String(a.id))
+  );
+  const visibleStockAssets = (stock_assets || []).filter((item) => {
+    if (activeAssetIds.has(String(item.asset_id))) return true;
+    return (item.quantity || 0) > 0;
+  });
+
   const accSummaries = dashboardData.account_summaries || dashboardData.accounts || [];
 
   const isProfit = (kpi?.total_stock_profit || 0) >= 0;
@@ -120,7 +128,7 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody>
-                {stock_assets?.map((item) => {
+                {visibleStockAssets?.map((item) => {
                   const isItemProfit = item.profit_krw >= 0;
                   return (
                     <tr key={item.asset_id}>
@@ -171,7 +179,7 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody>
-                {stock_assets?.map((item) => (
+                {visibleStockAssets?.map((item) => (
                   <tr key={item.asset_id}>
                     <td style={{ fontWeight: 600 }}>{item.name}</td>
                     <td style={{ textAlign: 'center', fontWeight: 600 }}>{item.weight_pct.toFixed(1)}%</td>
@@ -188,7 +196,7 @@ export default function DashboardTab({
 
         {/* 📱 MOBILE RESPONSIVE CARDS (Screen <= 768px) */}
         <div className="mobile-view">
-          {stock_assets?.map((item) => {
+          {visibleStockAssets?.map((item) => {
             const isItemProfit = item.profit_krw >= 0;
             return (
               <div key={item.asset_id} className="mobile-card-item">
