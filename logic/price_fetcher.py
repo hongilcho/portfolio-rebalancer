@@ -147,12 +147,14 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
     return 201620.0, "기본값"
 
 def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
-    """미국 주식/ETF 실시간 시세 수집 (Namuh API 원화 시세 최우선 -> yfinance 폴백 후 원화 환산)"""
-    # 1. Namuh API 시도 (원화 시세 cov_pric 직접 수신)
+    """미국 주식/ETF 실시간 시세 수집 (Namuh API 달러 현재가 수취 -> 실시간 환율 usd_krw 곱하여 원화 환산)"""
+    rate = float(usd_krw if usd_krw and usd_krw > 0 else 1380.0)
+    
+    # 1. Namuh API 시도 (달러 시세 수취 후 실시간 환율 곱하여 원화 환산)
     try:
-        price = nh_api_client.fetch_current_price(ticker_symbol, market="US")
-        if price is not None and price > 0:
-            return price, "NH API"
+        usd_price = nh_api_client.fetch_current_price(ticker_symbol, market="US")
+        if usd_price is not None and usd_price > 0:
+            return round(usd_price * rate, 2), "NH API"
     except Exception:
         pass
 

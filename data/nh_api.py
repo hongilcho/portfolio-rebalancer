@@ -94,13 +94,8 @@ class NamuhAPIClient:
                 res.raise_for_status()
                 data = res.json()
                 out_0 = data.get("Output_0", {})
-                cov_pric = float(out_0.get("cov_pric", 0))
-                if cov_pric > 0:
-                    return cov_pric
-                # cov_pric이 없을 경우 trdprc * currency_prc로 계산
                 trdprc = float(out_0.get("trdprc", 0))
-                currency_prc = float(out_0.get("currency_prc", 1380))
-                return (trdprc * currency_prc) if trdprc > 0 else 0.0
+                return trdprc if trdprc > 0 else None
                 
         except Exception as e:
             print(f"Namuh API Price Fetch Error for {ticker}: {e}")
