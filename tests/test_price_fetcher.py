@@ -2,30 +2,27 @@ import pytest
 from logic.price_fetcher import get_kr_stock_price, get_us_stock_price, get_krx_gold_price, get_exchange_rate_usd_krw
 
 def test_get_us_stock_price(mocker):
+    # Mock nh_api_client to fail, testing yfinance fallback
+    mocker.patch('logic.price_fetcher.nh_api_client.fetch_current_price', return_value=None)
+    
     # Mock yfinance Ticker and history
     mock_ticker = mocker.MagicMock()
-    mock_hist = mocker.MagicMock()
     
     # Setup mock data for history
     import pandas as pd
-    mock_hist.empty = False
-    mock_hist.dropna.return_value = mock_hist
-    mock_hist['Close'].iloc = [-1, 150.5] # Simple list mock won't work well for pandas iloc, better to mock the entire return
-    
-    # A safer way to mock the exact pandas behavior:
     df = pd.DataFrame({'Close': [150.0, 150.5]})
     mock_ticker.history.return_value = df
-    
-    # Disable fast_info for this test by making it None
     mock_ticker.fast_info = None
 
     mocker.patch('logic.price_fetcher.yf.Ticker', return_value=mock_ticker)
     
-    price, err = get_us_stock_price('AAPL')
-    assert price == 150.5
-    assert err is None
+    price, source = get_us_stock_price('AAPL', usd_krw=1380.0)
+    assert price == 150.5 * 1380.0
+    assert source == "yfinance"
 
 def test_get_us_stock_price_fastinfo(mocker):
+    mocker.patch('logic.price_fetcher.nh_api_client.fetch_current_price', return_value=None)
+    
     mock_ticker = mocker.MagicMock()
     mock_fast_info = mocker.MagicMock()
     mock_fast_info.last_price = 151.0
@@ -33,9 +30,9 @@ def test_get_us_stock_price_fastinfo(mocker):
     
     mocker.patch('logic.price_fetcher.yf.Ticker', return_value=mock_ticker)
     
-    price, err = get_us_stock_price('AAPL')
-    assert price == 151.0
-    assert err is None
+    price, source = get_us_stock_price('AAPL', usd_krw=1380.0)
+    assert price == 151.0 * 1380.0
+    assert source == "yfinance"
 
 def test_get_exchange_rate(mocker):
     # Mock yfinance to fail, forcing fallback

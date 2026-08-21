@@ -93,8 +93,14 @@ class NamuhAPIClient:
                     print(f"Namuh API US Price Fetch Error for {ticker}: {res.text}")
                 res.raise_for_status()
                 data = res.json()
-                price_str = data.get("Output_0", {}).get("trdprc", 0)
-                return float(price_str)
+                out_0 = data.get("Output_0", {})
+                cov_pric = float(out_0.get("cov_pric", 0))
+                if cov_pric > 0:
+                    return cov_pric
+                # cov_pric이 없을 경우 trdprc * currency_prc로 계산
+                trdprc = float(out_0.get("trdprc", 0))
+                currency_prc = float(out_0.get("currency_prc", 1380))
+                return (trdprc * currency_prc) if trdprc > 0 else 0.0
                 
         except Exception as e:
             print(f"Namuh API Price Fetch Error for {ticker}: {e}")
@@ -287,11 +293,12 @@ class NamuhAPIClient:
             res.raise_for_status()
             data = res.json()
             
-            # 예수금
+            # 예수금 (원화 예수금 krw_dca, 외화 예수금 fc_dca)
             out_0 = data.get("Output_0", {})
+            deposit_krw = float(out_0.get("krw_dca", 0))
             deposit_usd = float(out_0.get("fc_dca", 0))
             
-            # 해외주식 잔고
+            # 해외주식 잔고 (원화 평단가 phs_uit_pr, 원화 현재가 end_pr)
             out_1 = data.get("Output_1", [])
             holdings = []
             for item in out_1:
@@ -306,6 +313,7 @@ class NamuhAPIClient:
                     })
                     
             return {
+                "deposit_krw": deposit_krw,
                 "deposit_usd": deposit_usd,
                 "holdings": holdings
             }, None
@@ -326,15 +334,12 @@ class NamuhAPIClient:
             return None, err_msg
             
         ov_data, ov_err = self.fetch_overseas_account_balance(account_no)
-        # 해외주식 조회가 실패해도 국내주식이 성공했으면 에러내지 않고 진행할 수 있지만,
-        # 완벽한 동기화를 위해 해외주식 API가 실패하면 전체 실패로 간주하거나 경고만 냄
-        
         if ov_data:
             # 병합
+            dom_data["deposit_krw"] = dom_data.get("deposit_krw", 0.0) + ov_data.get("deposit_krw", 0.0)
             dom_data["deposit_usd"] = ov_data.get("deposit_usd", 0.0)
             dom_data["holdings"].extend(ov_data.get("holdings", []))
         else:
-            # 해외주식 에러는 권한 문제일 수 있으므로 일단 무시(0 처리)
             dom_data["deposit_usd"] = 0.0
             
         return dom_data, None

@@ -146,9 +146,9 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
         
     return 201620.0, "기본값"
 
-def get_us_stock_price(ticker_symbol):
-    """미국 주식/ETF 실시간 시세 수집 (Namuh API 최우선 -> yfinance 폴백)"""
-    # 1. Namuh API 시도
+def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
+    """미국 주식/ETF 실시간 시세 수집 (Namuh API 원화 시세 최우선 -> yfinance 폴백 후 원화 환산)"""
+    # 1. Namuh API 시도 (원화 시세 cov_pric 직접 수신)
     try:
         price = nh_api_client.fetch_current_price(ticker_symbol, market="US")
         if price is not None and price > 0:
@@ -156,21 +156,22 @@ def get_us_stock_price(ticker_symbol):
     except Exception:
         pass
 
-    # 2. yfinance 폴백
+    # 2. yfinance 폴백 (달러 시세 수취 후 환율 적용하여 원화 환산)
     try:
         ticker = yf.Ticker(ticker_symbol)
+        rate = float(usd_krw if usd_krw and usd_krw > 0 else 1380.0)
         
         try:
             last_price = getattr(ticker.fast_info, 'last_price', None)
             if last_price is not None and not math.isnan(last_price):
-                return float(last_price), "yfinance"
+                return float(last_price) * rate, "yfinance"
         except Exception:
             pass
             
         hist = ticker.history(period="5d").dropna(subset=['Close'])
         if not hist.empty:
             price = float(hist['Close'].iloc[-1])
-            return price, "yfinance"
+            return price * rate, "yfinance"
             
     except Exception as e:
         return None, f"yfinance 오류: {e}"
@@ -219,10 +220,10 @@ def fetch_asset_prices(assets, usd_krw=None):
                 price_usd = 0.0
                 status = f"오류: {source}"
         else: # US
-            raw_price, source = get_us_stock_price(ticker)
+            raw_price, source = get_us_stock_price(ticker, usd_krw)
             if raw_price is not None:
-                price_usd = raw_price
-                price_krw = raw_price * usd_krw
+                price_krw = raw_price
+                price_usd = raw_price / usd_krw if usd_krw else 0
                 status = f"정상 ({source})"
             else:
                 price_usd = 0.0
