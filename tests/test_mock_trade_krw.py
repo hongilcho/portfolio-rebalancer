@@ -167,5 +167,44 @@ def test_mock_trade_us_stock_in_krw():
     conn.close()
     print("Mock DB Test Passed 100% Successfully!")
 
+def test_rebalance_limit_exhausted():
+    """한도 소진 완료(is_limit_exhausted=True)인 계좌에는 신규 입금 매수가 0건 배정되는지 검증"""
+    from logic.rebalance_calculator import calculate_rebalancing_plan
+    
+    assets = [
+        {"id": "1", "name": "ACE 미국30년국채", "ticker": "453850", "market": "KR", "target_weight": 50.0, "allowed_accounts": ["irp_1"], "is_risk_asset": 0},
+        {"id": "2", "name": "KODEX 나스닥100", "ticker": "379800", "market": "KR", "target_weight": 50.0, "allowed_accounts": ["gen_1"], "is_risk_asset": 1}
+    ]
+    accounts = [
+        {"id": "irp_1", "account_alias": "IRP", "account_type": "IRP", "deposit_krw": 85.0, "deposit_usd": 0.0, "tax_limit": 3000000.0, "annual_limit": 18000000.0, "priority": 1, "is_limit_exhausted": True},
+        {"id": "gen_1", "account_alias": "일반계좌", "account_type": "일반", "deposit_krw": 0.0, "deposit_usd": 0.0, "tax_limit": 0.0, "annual_limit": 0.0, "priority": 2, "is_limit_exhausted": False}
+    ]
+    portfolio_assets = {
+        "1": {"qty": 142, "eval_amt_krw": 1292200.0},
+        "2": {"qty": 29, "eval_amt_krw": 817075.0}
+    }
+    holdings = [
+        {"account_id": "irp_1", "asset_id": "1", "quantity": 142, "avg_price": 9100.0}
+    ]
+    price_map = {"1": 9100.0, "2": 28175.0}
+    
+    # 500,000원 신규 현금 투입 시나리오
+    trade_plan, transfer_plan, simulated, success, msg = calculate_rebalancing_plan(
+        assets=assets,
+        portfolio_assets=portfolio_assets,
+        accounts=accounts,
+        holdings=holdings,
+        price_map=price_map,
+        total_krw_cash=85.0,
+        usd_krw_rate=1380.0,
+        scenario="NEW_CASH",
+        new_cash_krw=500000.0
+    )
+    
+    # IRP 계좌에는 신규 외부 입금을 필요로 하는 매수 주문이 전혀 들어가지 않아야 함!
+    irp_buys = [t for t in trade_plan if t["account_id"] == "irp_1" and t["type"] == "BUY"]
+    assert len(irp_buys) == 0
+
 if __name__ == '__main__':
     test_mock_trade_us_stock_in_krw()
+    test_rebalance_limit_exhausted()

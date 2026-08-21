@@ -66,6 +66,10 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify({ priority_map }),
   }),
+  toggleLimitExhausted: (id, is_exhausted) => request(`/api/accounts/${id}/toggle-exhaust`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_exhausted }),
+  }),
 
   // Assets
   getAssets: () => request('/api/assets/'),

@@ -338,8 +338,22 @@ export default function SettingsTab({
                   </td>
                   <td>{formatKRW(a.deposit_krw)}</td>
                   <td>{formatUSD(a.deposit_usd)}</td>
-                  <td>{a.annual_limit > 0 ? formatKRW(a.annual_limit) : '무제한'}</td>
-                  <td>{a.tax_limit > 0 ? formatKRW(a.tax_limit) : '-'}</td>
+                  <td>
+                    {a.annual_limit > 0 ? formatKRW(a.annual_limit) : '무제한'}
+                    {a.is_limit_exhausted && (
+                      <span className="badge" style={{ background: '#10B981', color: '#fff', marginLeft: '6px', fontSize: '0.7rem' }}>
+                        소진완료
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {a.tax_limit > 0 ? formatKRW(a.tax_limit) : '-'}
+                    {a.is_limit_exhausted && a.tax_limit > 0 && (
+                      <span className="badge" style={{ background: '#10B981', color: '#fff', marginLeft: '6px', fontSize: '0.7rem' }}>
+                        소진완료
+                      </span>
+                    )}
+                  </td>
                   <td style={{ fontWeight: 700 }}>{a.priority}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '6px' }}>

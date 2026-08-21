@@ -88,9 +88,14 @@ def get_dashboard_summary():
         annual_limit = float(acc.get("annual_limit", 0.0))
         tax_limit = float(acc.get("tax_limit", 0.0))
         principal_val = stock_buy_total + dep_krw + dep_usd_krw
+        is_limit_exhausted = bool(acc.get("is_limit_exhausted", False))
         
-        annual_limit_pct = min(1.0, principal_val / annual_limit) if annual_limit > 0 else 0.0
-        tax_limit_pct = min(1.0, principal_val / tax_limit) if tax_limit > 0 else 0.0
+        raw_annual_pct = min(1.0, principal_val / annual_limit) if annual_limit > 0 else 0.0
+        raw_tax_pct = min(1.0, principal_val / tax_limit) if tax_limit > 0 else 0.0
+        
+        annual_limit_pct = 1.0 if is_limit_exhausted else raw_annual_pct
+        tax_limit_pct = 1.0 if is_limit_exhausted else raw_tax_pct
+        can_exhaust_limit = bool((annual_limit > 0 and raw_annual_pct >= 0.96) or (tax_limit > 0 and raw_tax_pct >= 0.96) or is_limit_exhausted)
         
         acc_profit_krw = stock_eval - stock_buy_total
         acc_profit_pct = (acc_profit_krw / stock_buy_total * 100) if stock_buy_total > 0 else 0.0
@@ -116,6 +121,8 @@ def get_dashboard_summary():
             "principal_val": principal_val,
             "annual_limit_pct": annual_limit_pct,
             "tax_limit_pct": tax_limit_pct,
+            "is_limit_exhausted": is_limit_exhausted,
+            "can_exhaust_limit": can_exhaust_limit,
             "priority": int(acc.get('priority', 99)),
             "limit_preference": acc.get('limit_preference', 'ANNUAL'),
             "holdings": holding_details

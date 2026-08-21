@@ -148,10 +148,13 @@ def calculate_rebalancing_plan(
         acc_local_usd = float(acc.get('deposit_usd', 0.0))
         principal_val = acc_stock_buy_total + acc_local_krw + (acc_local_usd * usd_krw_rate)
         
-        limit_pref = acc.get('limit_preference', 'ANNUAL')
-        limit_val = float(acc.get('annual_limit', 0)) if limit_pref == 'ANNUAL' else float(acc.get('tax_limit', 0))
-        
-        remaining_limits[acc_id] = float('inf') if limit_val <= 0 else max(0.0, limit_val - principal_val)
+        is_exhausted = bool(acc.get('is_limit_exhausted', False))
+        if is_exhausted:
+            remaining_limits[acc_id] = 0.0
+        else:
+            limit_pref = acc.get('limit_preference', 'ANNUAL')
+            limit_val = float(acc.get('annual_limit', 0)) if limit_pref == 'ANNUAL' else float(acc.get('tax_limit', 0))
+            remaining_limits[acc_id] = float('inf') if limit_val <= 0 else max(0.0, limit_val - principal_val)
         
     # Planned holdings for IRP risk check
     planned_holdings = {acc['id']: {} for acc in sorted_accounts if acc['account_type'] != 'CMA'}

@@ -3,10 +3,13 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 from data.data_manager import (
     get_all_accounts, add_account, update_account, delete_account,
-    update_account_settings, update_account_priorities, ACCOUNT_TYPES
+    update_account_settings, update_account_priorities, update_account_limit_exhausted, ACCOUNT_TYPES
 )
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
+
+class ToggleLimitExhaustedRequest(BaseModel):
+    is_exhausted: bool
 
 class CreateAccountRequest(BaseModel):
     account_no: str
@@ -80,6 +83,13 @@ def edit_account(account_id: str, req: UpdateAccountRequest):
         limit_preference=req.limit_preference,
         current_year_deposit=req.current_year_deposit
     )
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"success": True, "message": msg}
+
+@router.put("/{account_id}/toggle-exhaust")
+def toggle_account_limit_exhausted(account_id: str, req: ToggleLimitExhaustedRequest):
+    success, msg = update_account_limit_exhausted(account_id, req.is_exhausted)
     if not success:
         raise HTTPException(status_code=400, detail=msg)
     return {"success": True, "message": msg}

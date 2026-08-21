@@ -115,9 +115,11 @@ def init_db():
             limit_preference TEXT DEFAULT 'ANNUAL',
             current_year_deposit REAL DEFAULT 0.0,
             last_updated_year INTEGER DEFAULT 2026,
+            is_limit_exhausted BOOLEAN DEFAULT FALSE,
             notes TEXT
         )
     ''')
+    cursor.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_limit_exhausted BOOLEAN DEFAULT FALSE")
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS assets (
@@ -234,6 +236,19 @@ def update_account_settings(account_id, priority, limit_preference, current_year
         ''', (priority, limit_preference, current_year_deposit, str(account_id)))
         conn.commit()
         return True, "계좌 상세 설정이 업데이트되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+def update_account_limit_exhausted(account_id, is_exhausted: bool):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE accounts SET is_limit_exhausted = %s WHERE id = %s", (is_exhausted, str(account_id)))
+        conn.commit()
+        return True, "한도 소진 상태가 성공적으로 변경되었습니다."
     except Exception as e:
         conn.rollback()
         return False, str(e)

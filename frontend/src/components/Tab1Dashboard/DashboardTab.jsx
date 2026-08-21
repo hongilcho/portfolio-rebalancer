@@ -62,6 +62,15 @@ export default function DashboardTab({
     }
   };
 
+  const handleToggleExhaust = async (accId, isExhausted) => {
+    try {
+      await api.toggleLimitExhausted(accId, isExhausted);
+      onRefresh();
+    } catch (err) {
+      alert(`한도 소진 상태 변경 실패: ${err.message}`);
+    }
+  };
+
   return (
     <div>
       {/* 1. Top KPI Summary Cards */}
@@ -423,6 +432,42 @@ export default function DashboardTab({
                           }} 
                         />
                       </div>
+                    </div>
+                  )}
+
+                  {/* Limit Exhaustion Toggle (96% 이상 또는 소진 완료 시) */}
+                  {acc.can_exhaust_limit && (
+                    <div style={{
+                      marginTop: '12px',
+                      marginBottom: '4px',
+                      padding: '10px 14px',
+                      background: acc.is_limit_exhausted ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                      border: `1px solid ${acc.is_limit_exhausted ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 600, color: acc.is_limit_exhausted ? '#10B981' : 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!acc.is_limit_exhausted}
+                          onChange={(e) => handleToggleExhaust(acc.id, e.target.checked)}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                        />
+                        <span>
+                          {acc.is_limit_exhausted 
+                            ? '🔒 연간 납입한도 소진 완료 (리밸런싱 추가 입금 차단 중)' 
+                            : '💡 한도 96% 이상 도달: [한도 소진 완료]로 처리하시겠습니까?'}
+                        </span>
+                      </label>
+                      {acc.is_limit_exhausted && (
+                        <span className="badge" style={{ background: '#10B981', color: '#fff', fontSize: '0.75rem', padding: '2px 8px' }}>
+                          100% 소진 완료
+                        </span>
+                      )}
                     </div>
                   )}
 
