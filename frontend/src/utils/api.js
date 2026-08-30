@@ -128,4 +128,11 @@ export const api = {
   syncNamuh: () => request('/api/sync/namuh', {
     method: 'POST',
   }),
+
+  // Crypto (Bitcoin & Ethereum)
+  getCryptoSummary: () => request('/api/crypto/summary'),
+  updateCryptoHoldings: (holdings) => request('/api/crypto/holdings', {
+    method: 'PUT',
+    body: JSON.stringify({ holdings }),
+  }),
 };

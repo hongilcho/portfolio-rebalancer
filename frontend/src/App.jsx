@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, Target, Scale, History, Settings, ShieldCheck, 
-  RefreshCw 
+  RefreshCw, Coins 
 } from 'lucide-react';
 import { api } from './utils/api';
 import Header from './components/Header';
@@ -10,6 +10,7 @@ import DashboardTab from './components/Tab1Dashboard/DashboardTab';
 import WeightsTab from './components/Tab2Weights/WeightsTab';
 import RebalanceTab from './components/Tab3Rebalance/RebalanceTab';
 import HistoryTab from './components/Tab4History/HistoryTab';
+import CryptoTab from './components/Tab5Crypto/CryptoTab';
 import SettingsTab from './components/Tab5Settings/SettingsTab';
 
 const TABS = [
@@ -17,7 +18,8 @@ const TABS = [
   { id: 'tab2', label: '🎯 2. 목표 비중 설정', icon: Target },
   { id: 'tab3', label: '⚖️ 3. 리밸런싱 전략', icon: Scale },
   { id: 'tab4', label: '📝 4. 매매 기록', icon: History },
-  { id: 'tab5', label: '⚙️ 5. 기초 환경 세팅', icon: Settings },
+  { id: 'tab5', label: '🪙 5. 가상화폐 자산', icon: Coins },
+  { id: 'tab6', label: '⚙️ 6. 기초 환경 세팅', icon: Settings },
 ];
 
 export default function App() {
@@ -166,6 +168,10 @@ export default function App() {
           )}
 
           {activeTab === 'tab5' && (
+            <CryptoTab />
+          )}
+
+          {activeTab === 'tab6' && (
             <SettingsTab
               pricesData={pricesData}
               accounts={accounts}

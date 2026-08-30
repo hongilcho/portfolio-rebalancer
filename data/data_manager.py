@@ -166,6 +166,26 @@ def init_db():
         )
     ''')
     
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS crypto_holdings (
+            id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            quantity REAL DEFAULT 0.0,
+            avg_price REAL DEFAULT 0.0,
+            notes TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    cursor.execute('''
+        INSERT INTO crypto_holdings (id, symbol, name, quantity, avg_price)
+        VALUES 
+            ('crypto_btc', 'BTC', '비트코인', 0.0, 0.0),
+            ('crypto_eth', 'ETH', '이더리움', 0.0, 0.0)
+        ON CONFLICT (symbol) DO NOTHING
+    ''')
+    
     # 누적 납입금액 초기화
     current_year = datetime.now().year
     cursor.execute("SELECT id, last_updated_year FROM accounts")
@@ -730,6 +750,49 @@ def apply_transfer_plan(transfer_plan):
     except Exception as e:
         conn.rollback()
         return False, f"이체 내역 반영 중 오류가 발생했습니다: {str(e)}"
+# ---------------------------------------------------------
+# Crypto Holdings (Bitcoin & Ethereum)
+# ---------------------------------------------------------
+@st.cache_data(ttl=2)
+def get_crypto_holdings():
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cursor.execute("SELECT * FROM crypto_holdings ORDER BY symbol ASC")
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"Error fetching crypto holdings: {e}")
+        return []
+    finally:
+        conn.close()
+
+def save_crypto_holding(symbol: str, quantity: float, avg_price: float, notes: str = ""):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            INSERT INTO crypto_holdings (id, symbol, name, quantity, avg_price, notes, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (symbol) DO UPDATE SET
+                quantity = EXCLUDED.quantity,
+                avg_price = EXCLUDED.avg_price,
+                notes = EXCLUDED.notes,
+                updated_at = EXCLUDED.updated_at
+        ''', (
+            f"crypto_{symbol.lower()}",
+            symbol.upper(),
+            '비트코인' if symbol.upper() == 'BTC' else ('이더리움' if symbol.upper() == 'ETH' else symbol.upper()),
+            max(0.0, float(quantity)),
+            max(0.0, float(avg_price)),
+            notes or "",
+            datetime.now()
+        ))
+        conn.commit()
+        return True, f"{symbol} 보유 정보가 성공적으로 저장되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
     finally:
         conn.close()
 
