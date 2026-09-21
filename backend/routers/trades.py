@@ -25,9 +25,10 @@ def list_trades(
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     account_id: Optional[str] = Query(None),
-    asset_id: Optional[str] = Query(None)
+    asset_id: Optional[str] = Query(None),
+    portfolio_id: Optional[str] = Query(None)
 ):
-    trades = get_trade_history()
+    trades = get_trade_history(portfolio_id=portfolio_id)
     
     # Filter in memory
     filtered = trades

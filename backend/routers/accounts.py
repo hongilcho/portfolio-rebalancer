@@ -23,6 +23,7 @@ class CreateAccountRequest(BaseModel):
     priority: int = 99
     limit_preference: str = "ANNUAL"
     current_year_deposit: float = 0.0
+    portfolio_id: Optional[str] = "default"
 
 class UpdateAccountRequest(BaseModel):
     account_no: str
@@ -41,8 +42,8 @@ class UpdatePrioritiesRequest(BaseModel):
     priority_map: Dict[str, int]
 
 @router.get("/")
-def list_accounts():
-    accounts = get_all_accounts()
+def list_accounts(portfolio_id: Optional[str] = None):
+    accounts = get_all_accounts(portfolio_id=portfolio_id)
     return {
         "accounts": accounts,
         "account_types": list(ACCOUNT_TYPES.keys())
@@ -61,7 +62,8 @@ def create_account(req: CreateAccountRequest):
         notes=req.notes or "",
         priority=req.priority,
         limit_preference=req.limit_preference,
-        current_year_deposit=req.current_year_deposit
+        current_year_deposit=req.current_year_deposit,
+        portfolio_id=req.portfolio_id or "default"
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)

@@ -9,12 +9,12 @@ from backend.services import market_service
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 @router.get("/summary")
-def get_dashboard_summary():
+def get_dashboard_summary(portfolio_id: str = "default"):
     """
-    포트폴리오 대시보드 종합 데이터 집계 API
+    포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
     """
-    accounts = get_all_accounts()
-    assets = get_all_assets()
+    accounts = get_all_accounts(portfolio_id=portfolio_id)
+    assets = get_all_assets(portfolio_id=portfolio_id)
     
     _, price_map = market_service.get_prices()
     usd_krw = market_service.usd_krw

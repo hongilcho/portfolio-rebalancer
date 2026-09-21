@@ -8,7 +8,8 @@ export default function SettingsTab({
   pricesData, 
   accounts, 
   assets, 
-  onSaved 
+  onSaved,
+  currentPortfolioId = 'default'
 }) {
   // Account Form State
   const [isAddAccOpen, setIsAddAccOpen] = useState(false);
@@ -63,7 +64,8 @@ export default function SettingsTab({
         tax_limit: accForm.is_unlimited ? 0 : Number(accForm.tax_limit),
         priority: Number(accForm.priority),
         limit_preference: accForm.limit_preference,
-        notes: accForm.notes || ''
+        notes: accForm.notes || '',
+        portfolio_id: currentPortfolioId || 'default'
       });
       alert('계좌가 성공적으로 추가되었습니다.');
       setIsAddAccOpen(false);
@@ -133,7 +135,8 @@ export default function SettingsTab({
         allowed_accounts: assetForm.allowed_accounts,
         is_risk_asset: Boolean(assetForm.is_risk_asset),
         is_active: Boolean(assetForm.is_active !== false),
-        notes: assetForm.notes || ''
+        notes: assetForm.notes || '',
+        portfolio_id: currentPortfolioId || 'default'
       });
       alert('자산이 성공적으로 등록되었습니다.');
       setIsAddAssetOpen(false);
@@ -212,7 +215,7 @@ export default function SettingsTab({
   };
 
   const accountMapById = {};
-  accounts.forEach((a) => {
+  (accounts || []).forEach((a) => {
     accountMapById[String(a.id)] = `[${a.account_type}] ${a.account_alias}`;
   });
 
@@ -240,45 +243,60 @@ export default function SettingsTab({
               </tr>
             </thead>
             <tbody>
-              {pricesData?.prices?.map((item) => {
-                const isUs = item.market === 'US';
-                const nativePriceStr = isUs ? formatUSD(item.price_native) : formatKRW(item.price_native);
-                const mappedAccs = (item.allowed_accounts || []).map((id) => accountMapById[String(id)] || id);
+              {assets && assets.length > 0 ? (
+                assets.map((item) => {
+                  const isUs = item.market === 'US';
+                  const pInfo = (pricesData?.prices || []).find((p) => String(p.id) === String(item.id) || (item.ticker && p.ticker === item.ticker)) || {};
+                  const priceNative = pInfo.price_native || 0;
+                  const priceKrw = pricesData?.price_map?.[String(item.id)] ?? pInfo.price_krw ?? 0;
+                  const status = pInfo.status || '대기중';
+                  const nativePriceStr = isUs ? formatUSD(priceNative) : formatKRW(priceNative);
+                  
+                  const mappedAccs = (item.allowed_accounts || [])
+                    .map((id) => accountMapById[String(id)])
+                    .filter(Boolean);
 
-                return (
-                  <tr key={item.id}>
-                    <td style={{ fontWeight: 700 }}>{item.name}</td>
-                    <td>{item.ticker}</td>
-                    <td>
-                      <span className={`badge ${item.is_risk_asset !== false ? 'badge-risk' : 'badge-safe'}`}>
-                        {item.is_risk_asset !== false ? '🔴 위험' : '🟢 안전'}
-                      </span>
-                    </td>
-                    <td>{isUs ? '🇺🇸 미국' : '🇰🇷 국내'}</td>
-                    <td style={{ fontWeight: 600 }}>{item.target_weight.toFixed(1)}%</td>
-                    <td>{nativePriceStr}</td>
-                    <td style={{ fontWeight: 700 }}>{formatKRW(item.price_krw)}</td>
-                    <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '280px' }}>
-                        {mappedAccs.length > 0 ? (
-                          mappedAccs.map((accName, i) => (
-                            <span key={i} className="badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
-                              {accName}
-                            </span>
-                          ))
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>없음</span>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#A5B4FC' }}>
-                        {item.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr key={item.id}>
+                      <td style={{ fontWeight: 700 }}>{item.name}</td>
+                      <td>{item.ticker}</td>
+                      <td>
+                        <span className={`badge ${item.is_risk_asset !== false ? 'badge-risk' : 'badge-safe'}`}>
+                          {item.is_risk_asset !== false ? '🔴 위험' : '🟢 안전'}
+                        </span>
+                      </td>
+                      <td>{isUs ? '🇺🇸 미국' : '🇰🇷 국내'}</td>
+                      <td style={{ fontWeight: 600 }}>{(item.target_weight || 0).toFixed(1)}%</td>
+                      <td>{nativePriceStr}</td>
+                      <td style={{ fontWeight: 700 }}>{formatKRW(priceKrw)}</td>
+                      <td>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '280px' }}>
+                          {mappedAccs.length > 0 ? (
+                            mappedAccs.map((accName, i) => (
+                              <span key={i} className="badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
+                                {accName}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>지정 계좌 없음</span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#A5B4FC' }}>
+                          {status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-secondary)' }}>
+                    현재 포트폴리오에 등록된 자산(종목)이 없습니다. 아래 &apos;자산(종목) 마스터 관리&apos;에서 종목을 추가해 주세요.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -327,67 +345,75 @@ export default function SettingsTab({
               </tr>
             </thead>
             <tbody>
-              {accounts.map((a) => (
-                <tr key={a.id}>
-                  <td style={{ fontWeight: 600 }}>{a.account_no}</td>
-                  <td>{a.account_alias}</td>
-                  <td>
-                    <span className="badge" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      {a.account_type}
-                    </span>
-                  </td>
-                  <td>{formatKRW(a.deposit_krw)}</td>
-                  <td>{formatUSD(a.deposit_usd)}</td>
-                  <td>
-                    {a.annual_limit > 0 ? formatKRW(a.annual_limit) : '무제한'}
-                    {a.is_limit_exhausted && (
-                      <span className="badge" style={{ background: '#10B981', color: '#fff', marginLeft: '6px', fontSize: '0.7rem' }}>
-                        소진완료
+              {accounts && accounts.length > 0 ? (
+                accounts.map((a) => (
+                  <tr key={a.id}>
+                    <td style={{ fontWeight: 600 }}>{a.account_no}</td>
+                    <td>{a.account_alias}</td>
+                    <td>
+                      <span className="badge" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                        {a.account_type}
                       </span>
-                    )}
-                  </td>
-                  <td>
-                    {a.tax_limit > 0 ? formatKRW(a.tax_limit) : '-'}
-                    {a.is_limit_exhausted && a.tax_limit > 0 && (
-                      <span className="badge" style={{ background: '#10B981', color: '#fff', marginLeft: '6px', fontSize: '0.7rem' }}>
-                        소진완료
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ fontWeight: 700 }}>{a.priority}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => {
-                          setEditAccTarget(a);
-                          setAccForm({
-                            account_no: a.account_no,
-                            account_alias: a.account_alias,
-                            account_type: a.account_type,
-                            deposit_krw: a.deposit_krw,
-                            deposit_usd: a.deposit_usd,
-                            annual_limit: a.annual_limit,
-                            tax_limit: a.tax_limit,
-                            is_unlimited: a.annual_limit === 0 && a.tax_limit === 0,
-                            priority: a.priority || 99,
-                            limit_preference: a.limit_preference || 'ANNUAL',
-                            notes: a.notes || ''
-                          });
-                        }}
-                      >
-                        <Edit3 size={13} /> 수정
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDeleteAccount(a.id, a.account_alias)}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+                    </td>
+                    <td>{formatKRW(a.deposit_krw)}</td>
+                    <td>{formatUSD(a.deposit_usd)}</td>
+                    <td>
+                      {a.annual_limit > 0 ? formatKRW(a.annual_limit) : '무제한'}
+                      {a.is_limit_exhausted && (
+                        <span className="badge" style={{ background: '#10B981', color: '#fff', marginLeft: '6px', fontSize: '0.7rem' }}>
+                          소진완료
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {a.tax_limit > 0 ? formatKRW(a.tax_limit) : '-'}
+                      {a.is_limit_exhausted && a.tax_limit > 0 && (
+                        <span className="badge" style={{ background: '#10B981', color: '#fff', marginLeft: '6px', fontSize: '0.7rem' }}>
+                          소진완료
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ fontWeight: 700 }}>{a.priority}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setEditAccTarget(a);
+                            setAccForm({
+                              account_no: a.account_no,
+                              account_alias: a.account_alias,
+                              account_type: a.account_type,
+                              deposit_krw: a.deposit_krw,
+                              deposit_usd: a.deposit_usd,
+                              annual_limit: a.annual_limit,
+                              tax_limit: a.tax_limit,
+                              is_unlimited: a.annual_limit === 0 && a.tax_limit === 0,
+                              priority: a.priority,
+                              limit_preference: a.limit_preference || 'ANNUAL',
+                              notes: a.notes || ''
+                            });
+                          }}
+                        >
+                          <Edit3 size={13} /> 수정
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDeleteAccount(a.id, a.account_alias)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
+                    등록된 계좌가 없습니다. 상단의 &apos;+ 계좌 추가&apos; 버튼을 눌러 새 계좌를 등록해 주세요.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -431,65 +457,73 @@ export default function SettingsTab({
               </tr>
             </thead>
             <tbody>
-              {assets.map((ast) => {
-                const isActive = ast.is_active !== false;
+              {assets && assets.length > 0 ? (
+                assets.map((ast) => {
+                  const isActive = ast.is_active !== false;
 
-                return (
-                  <tr key={ast.id} style={{ opacity: isActive ? 1 : 0.65 }}>
-                    <td style={{ fontWeight: 700 }}>{ast.name}</td>
-                    <td>{ast.ticker}</td>
-                    <td>
-                      <span className={`badge ${isActive ? 'badge-safe' : ''}`} style={!isActive ? { background: 'rgba(128,128,128,0.2)', color: 'var(--text-muted)' } : {}}>
-                        {isActive ? '🟢 활성' : '⚪ 보관(비활성)'}
-                      </span>
-                    </td>
-                    <td>{ast.market === 'KR' ? '🇰🇷 국내' : '🇺🇸 미국'}</td>
-                    <td>{isActive ? `${ast.target_weight.toFixed(1)}%` : '-'}</td>
-                    <td>
-                      <span className={`badge ${ast.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
-                        {ast.is_risk_asset ? '🔴 위험' : '🟢 안전'}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            setEditAssetTarget(ast);
-                            setAssetForm({
-                              name: ast.name,
-                              ticker: ast.ticker,
-                              market: ast.market,
-                              target_weight: ast.target_weight,
-                              allowed_accounts: ast.allowed_accounts || [],
-                              is_risk_asset: ast.is_risk_asset,
-                              is_gold: ast.ticker === 'M04020000' || ast.name.includes('금'),
-                              is_active: isActive,
-                              notes: ast.notes || ''
-                            });
-                          }}
-                        >
-                          <Edit3 size={13} /> 수정
-                        </button>
-                        <button
-                          className={`btn btn-sm ${isActive ? 'btn-secondary' : 'btn-primary'}`}
-                          onClick={() => handleToggleAssetActive(ast.id, ast.name, isActive)}
-                          title={isActive ? "1~3번 탭에서 숨기기 (과거 매매기록은 보존)" : "1~3번 탭에 다시 표시"}
-                        >
-                          {isActive ? '📦 보관' : '♻️ 활성화'}
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleDeleteAsset(ast.id, ast.name)}
-                          title="종목 및 과거 모든 매매기록 영구 삭제"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr key={ast.id} style={{ opacity: isActive ? 1 : 0.65 }}>
+                      <td style={{ fontWeight: 700 }}>{ast.name}</td>
+                      <td>{ast.ticker}</td>
+                      <td>
+                        <span className={`badge ${isActive ? 'badge-safe' : ''}`} style={!isActive ? { background: 'rgba(128,128,128,0.2)', color: 'var(--text-muted)' } : {}}>
+                          {isActive ? '🟢 활성' : '⚪ 보관(비활성)'}
+                        </span>
+                      </td>
+                      <td>{ast.market === 'KR' ? '🇰🇷 국내' : '🇺🇸 미국'}</td>
+                      <td>{isActive ? `${ast.target_weight.toFixed(1)}%` : '-'}</td>
+                      <td>
+                        <span className={`badge ${ast.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
+                          {ast.is_risk_asset ? '🔴 위험' : '🟢 안전'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              setEditAssetTarget(ast);
+                              setAssetForm({
+                                name: ast.name,
+                                ticker: ast.ticker,
+                                market: ast.market,
+                                target_weight: ast.target_weight,
+                                allowed_accounts: ast.allowed_accounts || [],
+                                is_risk_asset: ast.is_risk_asset,
+                                is_gold: ast.ticker === 'M04020000' || ast.name.includes('금'),
+                                is_active: isActive,
+                                notes: ast.notes || ''
+                              });
+                            }}
+                          >
+                            <Edit3 size={13} /> 수정
+                          </button>
+                          <button
+                            className={`btn btn-sm ${isActive ? 'btn-secondary' : 'btn-primary'}`}
+                            onClick={() => handleToggleAssetActive(ast.id, ast.name, isActive)}
+                            title={isActive ? "1~3번 탭에서 숨기기 (과거 매매기록은 보존)" : "1~3번 탭에 다시 표시"}
+                          >
+                            {isActive ? '📦 보관' : '♻️ 활성화'}
+                          </button>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleDeleteAsset(ast.id, ast.name)}
+                            title="종목 및 과거 모든 매매기록 영구 삭제"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
+                    등록된 자산(종목)이 없습니다. 상단의 &apos;+ 종목 추가&apos; 버튼을 눌러 새 종목을 등록해 주세요.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -729,32 +763,38 @@ export default function SettingsTab({
               <div className="form-group">
                 <label className="form-label">운용 가능 계좌 선택</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {accounts.map((a) => {
-                    const isChecked = assetForm.allowed_accounts.map(String).includes(String(a.id));
-                    return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => {
-                          const current = assetForm.allowed_accounts.map(String);
-                          const next = isChecked ? current.filter((x) => x !== String(a.id)) : [...current, String(a.id)];
-                          setAssetForm({ ...assetForm, allowed_accounts: next });
-                        }}
-                        style={{
-                          padding: '5px 10px',
-                          borderRadius: 'var(--radius-full)',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          border: isChecked ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                          background: isChecked ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-                          color: isChecked ? '#FFFFFF' : 'var(--text-secondary)'
-                        }}
-                      >
-                        {isChecked && '✓ '} [{a.account_type}] {a.account_alias}
-                      </button>
-                    );
-                  })}
+                  {accounts && accounts.length > 0 ? (
+                    accounts.map((a) => {
+                      const isChecked = assetForm.allowed_accounts.map(String).includes(String(a.id));
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => {
+                            const current = assetForm.allowed_accounts.map(String);
+                            const next = isChecked ? current.filter((x) => x !== String(a.id)) : [...current, String(a.id)];
+                            setAssetForm({ ...assetForm, allowed_accounts: next });
+                          }}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: 'var(--radius-full)',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            border: isChecked ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                            background: isChecked ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                            color: isChecked ? '#FFFFFF' : 'var(--text-secondary)'
+                          }}
+                        >
+                          {isChecked && '✓ '} [{a.account_type}] {a.account_alias}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                      등록된 계좌가 없습니다. 먼저 계좌를 추가해 주세요.
+                    </span>
+                  )}
                 </div>
               </div>
 

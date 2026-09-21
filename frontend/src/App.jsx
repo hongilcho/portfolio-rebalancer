@@ -12,6 +12,8 @@ import RebalanceTab from './components/Tab3Rebalance/RebalanceTab';
 import HistoryTab from './components/Tab4History/HistoryTab';
 import CryptoTab from './components/Tab5Crypto/CryptoTab';
 import SettingsTab from './components/Tab5Settings/SettingsTab';
+import ManagePortfoliosModal from './components/Portfolios/ManagePortfoliosModal';
+import AllPortfoliosOverview from './components/Portfolios/AllPortfoliosOverview';
 
 const TABS = [
   { id: 'tab1', label: '📊 1. 포트폴리오 현황', icon: BarChart3 },
@@ -36,6 +38,13 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
+  // Portfolios State
+  const [portfolios, setPortfolios] = useState([]);
+  const [currentPortfolioId, setCurrentPortfolioId] = useState(() => {
+    return localStorage.getItem('active_portfolio_id') || 'default';
+  });
+  const [isManagePortfoliosOpen, setIsManagePortfoliosOpen] = useState(false);
+
   // Global Data
   const [dashboardData, setDashboardData] = useState(null);
   const [assets, setAssets] = useState([]);
@@ -50,25 +59,42 @@ export default function App() {
     localStorage.setItem('portfolio_theme', theme);
   }, [theme]);
 
-  const loadAllData = async (forceRefresh = false) => {
+  const handleSelectPortfolio = (pid) => {
+    setCurrentPortfolioId(pid);
+    localStorage.setItem('active_portfolio_id', pid);
+  };
+
+  const loadAllData = async (forceRefresh = false, targetPid = currentPortfolioId) => {
     if (forceRefresh) setRefreshing(true);
     else setLoading(true);
     setError('');
 
     try {
-      const [dashRes, assetsRes, accountsRes, pricesRes] = await Promise.all([
-        api.getDashboardSummary(),
-        api.getAssets(),
-        api.getAccounts(),
-        api.getPrices(forceRefresh),
+      // Always fetch portfolios list and prices
+      const [portsRes, pricesRes] = await Promise.all([
+        api.getPortfolios(),
+        api.getPrices(forceRefresh, targetPid),
       ]);
-
-      setDashboardData(dashRes);
-      setAssets(assetsRes.assets || []);
-      setAccounts(accountsRes.accounts || []);
+      setPortfolios(portsRes.portfolios || []);
       setPricesData(pricesRes);
-      setUsdKrw(dashRes.usd_krw || pricesRes.usd_krw || 1380.0);
-      setRateSource(dashRes.rate_source || pricesRes.rate_source || '');
+
+      // If viewing a specific portfolio (not 'all')
+      if (targetPid !== 'all') {
+        const [dashRes, assetsRes, accountsRes] = await Promise.all([
+          api.getDashboardSummary(targetPid),
+          api.getAssets(targetPid),
+          api.getAccounts(targetPid),
+        ]);
+
+        setDashboardData(dashRes);
+        setAssets(assetsRes.assets || []);
+        setAccounts(accountsRes.accounts || []);
+        setUsdKrw(dashRes.usd_krw || pricesRes.usd_krw || 1380.0);
+        setRateSource(dashRes.rate_source || pricesRes.rate_source || '');
+      } else {
+        setUsdKrw(pricesRes.usd_krw || 1380.0);
+        setRateSource(pricesRes.rate_source || '');
+      }
     } catch (err) {
       console.error('Failed to load portfolio data:', err);
       setError(err.message || '데이터를 불러오는 중 오류가 발생했습니다.');
@@ -80,9 +106,9 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadAllData();
+      loadAllData(false, currentPortfolioId);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, currentPortfolioId]);
 
   if (!isAuthenticated) {
     return <AuthModal onAuthenticated={() => setIsAuthenticated(true)} />;
@@ -92,33 +118,19 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Header with Theme Selector */}
+      {/* Header with Theme & Portfolio Selector */}
       <Header
         usdKrw={usdKrw}
         rateSource={rateSource}
-        onRefresh={() => loadAllData(true)}
+        onRefresh={() => loadAllData(true, currentPortfolioId)}
         refreshing={refreshing}
         currentTheme={theme}
         onThemeChange={setTheme}
+        portfolios={portfolios}
+        currentPortfolioId={currentPortfolioId}
+        onSelectPortfolio={handleSelectPortfolio}
+        onOpenManagePortfolios={() => setIsManagePortfoliosOpen(true)}
       />
-
-      {/* Tabs Navigation */}
-      <nav className="tabs-nav">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              className={`tab-btn ${isActive ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <Icon size={18} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
 
       {/* Error Alert */}
       {error && (
@@ -127,60 +139,113 @@ export default function App() {
         </div>
       )}
 
-      {/* Tab Contents */}
-      {loading && !dashboardData ? (
-        <div className="section-card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 16px auto', color: 'var(--accent-primary)' }} />
-          <p style={{ color: 'var(--text-secondary)' }}>포트폴리오 및 실시간 시세 데이터를 불러오는 중입니다...</p>
-        </div>
-      ) : (
+      {/* Content View: When 'all' is selected -> AllPortfoliosOverview */}
+      {currentPortfolioId === 'all' ? (
         <main>
-          {activeTab === 'tab1' && (
-            <DashboardTab
-              dashboardData={dashboardData}
-              assets={assets}
-              accounts={accounts}
-              onRefresh={() => loadAllData(false)}
-            />
-          )}
-
-          {activeTab === 'tab2' && (
-            <WeightsTab
-              assets={assets}
-              accounts={accounts}
-              onSaved={() => loadAllData(false)}
-            />
-          )}
-
-          {activeTab === 'tab3' && (
-            <RebalanceTab
-              onRefresh={() => loadAllData(false)}
-            />
-          )}
-
-          {activeTab === 'tab4' && (
-            <HistoryTab
-              assets={assets}
-              accounts={accounts}
-              priceMap={priceMap}
-              onSaved={() => loadAllData(false)}
-            />
-          )}
-
-          {activeTab === 'tab5' && (
-            <CryptoTab />
-          )}
-
-          {activeTab === 'tab6' && (
-            <SettingsTab
-              pricesData={pricesData}
-              accounts={accounts}
-              assets={assets}
-              onSaved={() => loadAllData(false)}
-            />
-          )}
+          <AllPortfoliosOverview 
+            onSelectPortfolio={(id) => {
+              if (id === 'tab_crypto') {
+                handleSelectPortfolio('default');
+                setActiveTab('tab5');
+              } else {
+                handleSelectPortfolio(id);
+                setActiveTab('tab1');
+              }
+            }} 
+          />
         </main>
+      ) : (
+        <>
+          {/* Tabs Navigation for individual portfolio */}
+          <nav className="tabs-nav">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  className={`tab-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <Icon size={18} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Tab Contents */}
+          {loading && !dashboardData ? (
+            <div className="section-card" style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 16px auto', color: 'var(--accent-primary)' }} />
+              <p style={{ color: 'var(--text-secondary)' }}>포트폴리오 및 실시간 시세 데이터를 불러오는 중입니다...</p>
+            </div>
+          ) : (
+            <main>
+              {activeTab === 'tab1' && (
+                <DashboardTab
+                  dashboardData={dashboardData}
+                  assets={assets}
+                  accounts={accounts}
+                  onRefresh={() => loadAllData(false, currentPortfolioId)}
+                />
+              )}
+
+              {activeTab === 'tab2' && (
+                <WeightsTab
+                  assets={assets}
+                  accounts={accounts}
+                  onSaved={() => loadAllData(false, currentPortfolioId)}
+                />
+              )}
+
+              {activeTab === 'tab3' && (
+                <RebalanceTab
+                  onRefresh={() => loadAllData(false, currentPortfolioId)}
+                  currentPortfolioId={currentPortfolioId}
+                />
+              )}
+
+              {activeTab === 'tab4' && (
+                <HistoryTab
+                  assets={assets}
+                  accounts={accounts}
+                  priceMap={priceMap}
+                  currentPortfolioId={currentPortfolioId}
+                  onSaved={() => loadAllData(false, currentPortfolioId)}
+                />
+              )}
+
+              {activeTab === 'tab5' && (
+                <CryptoTab 
+                  currentPortfolioId={currentPortfolioId}
+                  portfolioName={portfolios.find((p) => p.id === currentPortfolioId)?.name || '금융 포트폴리오'}
+                />
+              )}
+
+              {activeTab === 'tab6' && (
+                <SettingsTab
+                  pricesData={pricesData}
+                  accounts={accounts}
+                  assets={assets}
+                  currentPortfolioId={currentPortfolioId}
+                  onSaved={() => loadAllData(false, currentPortfolioId)}
+                />
+              )}
+            </main>
+          )}
+        </>
       )}
+
+      {/* Manage Portfolios Modal */}
+      <ManagePortfoliosModal
+        isOpen={isManagePortfoliosOpen}
+        onClose={() => setIsManagePortfoliosOpen(false)}
+        portfolios={portfolios}
+        currentPortfolioId={currentPortfolioId}
+        onSelectPortfolio={handleSelectPortfolio}
+        onRefresh={() => loadAllData(false, currentPortfolioId)}
+      />
     </div>
   );
 }

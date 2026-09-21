@@ -8,7 +8,7 @@ if BASE_DIR not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from data.data_manager import init_db
-from backend.routers import auth, market, dashboard, accounts, assets, holdings, rebalance, trades, sync, crypto
+from backend.routers import auth, market, dashboard, accounts, assets, holdings, rebalance, trades, sync, crypto, portfolios
 
 # Initialize Database schema
 init_db()
@@ -39,6 +39,7 @@ app.include_router(rebalance.router)
 app.include_router(trades.router)
 app.include_router(sync.router)
 app.include_router(crypto.router)
+app.include_router(portfolios.router)
 
 @app.get("/api/health")
 def health_check():

@@ -43,14 +43,35 @@ export const api = {
   refreshExchangeRate: () => request('/api/market/exchange-rate/refresh', {
     method: 'POST',
   }),
-  getPrices: (forceRefresh = false) => request(`/api/market/prices?force_refresh=${forceRefresh}`),
+  getPrices: (forceRefresh = false, portfolioId = null) => {
+    let url = `/api/market/prices?force_refresh=${forceRefresh}`;
+    if (portfolioId && portfolioId !== 'all') {
+      url += `&portfolio_id=${portfolioId}`;
+    }
+    return request(url);
+  },
   getExportCsvUrl: () => `${API_BASE_URL}/api/market/export-csv`,
 
   // Dashboard Summary
-  getDashboardSummary: () => request('/api/dashboard/summary'),
+  getDashboardSummary: (portfolioId = 'default') => request(`/api/dashboard/summary?portfolio_id=${portfolioId}`),
+
+  // Portfolios Management & Overview
+  getPortfolios: () => request('/api/portfolios/'),
+  createPortfolio: (name, description = '') => request('/api/portfolios/', {
+    method: 'POST',
+    body: JSON.stringify({ name, description }),
+  }),
+  updatePortfolio: (id, name, description = '') => request(`/api/portfolios/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, description }),
+  }),
+  deletePortfolio: (id) => request(`/api/portfolios/${id}`, {
+    method: 'DELETE',
+  }),
+  getPortfoliosOverview: (includeCrypto = true) => request(`/api/portfolios/overview/summary?include_crypto=${includeCrypto}`),
 
   // Accounts
-  getAccounts: () => request('/api/accounts/'),
+  getAccounts: (portfolioId) => request(`/api/accounts/${portfolioId ? `?portfolio_id=${portfolioId}` : ''}`),
   createAccount: (data) => request('/api/accounts/', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -72,7 +93,7 @@ export const api = {
   }),
 
   // Assets
-  getAssets: () => request('/api/assets/'),
+  getAssets: (portfolioId) => request(`/api/assets/${portfolioId ? `?portfolio_id=${portfolioId}` : ''}`),
   createAsset: (data) => request('/api/assets/', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -130,7 +151,10 @@ export const api = {
   }),
 
   // Crypto (Bitcoin & Ethereum)
-  getCryptoSummary: () => request('/api/crypto/summary'),
+  getCryptoSummary: (portfolioId = 'default') => {
+    const pid = portfolioId || 'default';
+    return request(`/api/crypto/summary?portfolio_id=${encodeURIComponent(pid)}`);
+  },
   updateCryptoHoldings: (holdings) => request('/api/crypto/holdings', {
     method: 'PUT',
     body: JSON.stringify({ holdings }),

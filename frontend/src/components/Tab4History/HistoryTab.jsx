@@ -3,7 +3,7 @@ import { Plus, Trash2, ChevronDown, ChevronUp, Filter, Save, AlertCircle } from 
 import { api } from '../../utils/api';
 import { formatKRW, formatQuantity } from '../../utils/formatters';
 
-export default function HistoryTab({ assets, accounts, priceMap, onSaved }) {
+export default function HistoryTab({ assets, accounts, priceMap, onSaved, currentPortfolioId = 'default' }) {
   // Batch Trade Form State
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().split('T')[0]);
   const [buyRows, setBuyRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0 }]);
@@ -47,6 +47,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved }) {
       if (endDate) params.end_date = endDate;
       if (selectedAccFilter !== 'all') params.account_id = selectedAccFilter;
       if (selectedAssetFilter !== 'all') params.asset_id = selectedAssetFilter;
+      if (currentPortfolioId && currentPortfolioId !== 'all') params.portfolio_id = currentPortfolioId;
 
       const res = await api.getTrades(params);
       setTrades(res.trades || []);
@@ -60,7 +61,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved }) {
 
   useEffect(() => {
     loadTrades();
-  }, [startDate, endDate, selectedAccFilter, selectedAssetFilter]);
+  }, [startDate, endDate, selectedAccFilter, selectedAssetFilter, currentPortfolioId]);
 
   // Add/Remove Buy Row
   const addBuyRow = () => {
