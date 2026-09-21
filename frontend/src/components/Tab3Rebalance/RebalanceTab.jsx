@@ -5,7 +5,7 @@ import { formatKRW, formatQuantity, formatPercent, numToKrMixed } from '../../ut
 import KoreanNumberInput from '../common/KoreanNumberInput';
 import DriftBar from '../common/DriftBar';
 
-export default function RebalanceTab({ onRefresh }) {
+export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default' }) {
   const [scenario, setScenario] = useState('NEW_CASH');
   const [newCash, setNewCash] = useState(0);
   const [driftThreshold, setDriftThreshold] = useState(5.0);
@@ -20,7 +20,8 @@ export default function RebalanceTab({ onRefresh }) {
       const res = await api.calculateRebalance({
         scenario,
         new_cash_krw: Number(newCash),
-        drift_threshold: Number(driftThreshold)
+        drift_threshold: Number(driftThreshold),
+        portfolio_id: currentPortfolioId || 'default'
       });
       setResult(res);
     } catch (err) {

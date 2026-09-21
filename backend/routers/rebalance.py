@@ -13,14 +13,16 @@ class CalculateRebalanceRequest(BaseModel):
     scenario: str = "NEW_CASH" # "NEW_CASH" or "DRIFT"
     new_cash_krw: float = 0.0
     drift_threshold: float = 5.0
+    portfolio_id: Optional[str] = "default"
 
 class ApplyTransfersRequest(BaseModel):
     transfer_plan: List[Dict[str, Any]]
 
 @router.post("/calculate")
 def calculate_plan(req: CalculateRebalanceRequest):
-    assets = get_all_assets()
-    accounts = get_all_accounts()
+    pid = req.portfolio_id or "default"
+    assets = get_all_assets(portfolio_id=pid)
+    accounts = get_all_accounts(portfolio_id=pid)
     
     if not assets or not accounts:
         raise HTTPException(status_code=400, detail="자산과 계좌를 먼저 등록해주세요.")
