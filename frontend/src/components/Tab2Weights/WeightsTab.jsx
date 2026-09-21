@@ -87,7 +87,12 @@ export default function WeightsTab({ assets, accounts, onSaved }) {
         현재 활성화된 자산들의 목표 비중을 슬라이더 또는 숫자로 설정하고, 각 자산을 매수할 수 있는 계좌를 선택해 주세요.
       </p>
 
-      {activeAssets.map((asset) => {
+      {activeAssets.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-secondary)', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
+          현재 포트폴리오에 등록된 활성 자산(종목)이 없습니다. &apos;기초 환경 세팅&apos; 탭에서 종목을 먼저 추가해 주세요.
+        </div>
+      ) : (
+        activeAssets.map((asset) => {
         const aid = String(asset.id);
         const wVal = weightInputs[aid] !== undefined ? weightInputs[aid] : asset.target_weight;
         const currentAccs = accountInputs[aid] || [];
@@ -181,7 +186,7 @@ export default function WeightsTab({ assets, accounts, onSaved }) {
             </div>
           </div>
         );
-      })}
+      }))}
 
       {/* Save Button */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>

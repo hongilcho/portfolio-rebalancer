@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Response
+from typing import Optional
 from pydantic import BaseModel
 import pandas as pd
 import io
@@ -40,8 +41,12 @@ def refresh_exchange_rate():
     }
 
 @router.get("/prices")
-def get_prices(force_refresh: bool = False):
+def get_prices(force_refresh: bool = False, portfolio_id: Optional[str] = None):
     prices, price_map = market_service.get_prices(force_refresh=force_refresh)
+    if portfolio_id and portfolio_id != 'all':
+        portfolio_assets = get_all_assets(portfolio_id=portfolio_id)
+        portfolio_asset_ids = {str(a['id']) for a in portfolio_assets}
+        prices = [p for p in prices if str(p['id']) in portfolio_asset_ids]
     return {
         "prices": prices,
         "price_map": price_map,

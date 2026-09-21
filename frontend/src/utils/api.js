@@ -43,7 +43,13 @@ export const api = {
   refreshExchangeRate: () => request('/api/market/exchange-rate/refresh', {
     method: 'POST',
   }),
-  getPrices: (forceRefresh = false) => request(`/api/market/prices?force_refresh=${forceRefresh}`),
+  getPrices: (forceRefresh = false, portfolioId = null) => {
+    let url = `/api/market/prices?force_refresh=${forceRefresh}`;
+    if (portfolioId && portfolioId !== 'all') {
+      url += `&portfolio_id=${portfolioId}`;
+    }
+    return request(url);
+  },
   getExportCsvUrl: () => `${API_BASE_URL}/api/market/export-csv`,
 
   // Dashboard Summary

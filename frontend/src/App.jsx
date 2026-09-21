@@ -73,7 +73,7 @@ export default function App() {
       // Always fetch portfolios list and prices
       const [portsRes, pricesRes] = await Promise.all([
         api.getPortfolios(),
-        api.getPrices(forceRefresh),
+        api.getPrices(forceRefresh, targetPid),
       ]);
       setPortfolios(portsRes.portfolios || []);
       setPricesData(pricesRes);
@@ -202,6 +202,7 @@ export default function App() {
               {activeTab === 'tab3' && (
                 <RebalanceTab
                   onRefresh={() => loadAllData(false, currentPortfolioId)}
+                  currentPortfolioId={currentPortfolioId}
                 />
               )}
 
