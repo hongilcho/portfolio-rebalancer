@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from data.data_manager import get_crypto_holdings, save_crypto_holding
+from data.data_manager import get_crypto_holdings, save_crypto_holding, get_portfolio
 from logic.crypto_price_fetcher import get_crypto_prices
 from backend.routers.dashboard import get_dashboard_summary
 
@@ -17,7 +17,7 @@ class CryptoHoldingsUpdateRequest(BaseModel):
     holdings: List[CryptoHoldingItem]
 
 @router.get("/summary")
-def get_crypto_summary():
+def get_crypto_summary(portfolio_id: Optional[str] = "default"):
     # 1. Fetch live prices & DB holdings
     prices_map = get_crypto_prices()
     db_holdings = get_crypto_holdings()
@@ -64,8 +64,12 @@ def get_crypto_summary():
     crypto_total_profit_pct = (crypto_total_profit / crypto_total_buy * 100) if crypto_total_buy > 0 else 0.0
 
     # 2. Fetch existing financial portfolio data
+    target_pid = portfolio_id or "default"
+    port = get_portfolio(target_pid)
+    portfolio_name = port.get("name", "금융 포트폴리오") if port else "금융 포트폴리오"
+
     try:
-        dash = get_dashboard_summary()
+        dash = get_dashboard_summary(portfolio_id=target_pid)
         kpi = dash.get("kpi", {})
         cash = dash.get("cash_assets", {})
         
@@ -104,6 +108,8 @@ def get_crypto_summary():
             "total_profit_pct": crypto_total_profit_pct,
         },
         "portfolio_summary": {
+            "portfolio_id": target_pid,
+            "portfolio_name": portfolio_name,
             "total_eval": portfolio_eval,
             "total_buy": portfolio_buy,
             "total_profit": portfolio_profit,

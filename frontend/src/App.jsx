@@ -217,7 +217,10 @@ export default function App() {
               )}
 
               {activeTab === 'tab5' && (
-                <CryptoTab />
+                <CryptoTab 
+                  currentPortfolioId={currentPortfolioId}
+                  portfolioName={portfolios.find((p) => p.id === currentPortfolioId)?.name || '금융 포트폴리오'}
+                />
               )}
 
               {activeTab === 'tab6' && (

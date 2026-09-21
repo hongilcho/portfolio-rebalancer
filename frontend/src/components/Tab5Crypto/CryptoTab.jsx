@@ -7,7 +7,10 @@ import { api } from '../../utils/api';
 import { formatKRW, formatPercent } from '../../utils/formatters';
 import EditCryptoModal from './EditCryptoModal';
 
-export default function CryptoTab() {
+export default function CryptoTab({ 
+  currentPortfolioId = 'default',
+  portfolioName = '금융 포트폴리오'
+}) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -20,7 +23,7 @@ export default function CryptoTab() {
     setError('');
 
     try {
-      const res = await api.getCryptoSummary();
+      const res = await api.getCryptoSummary(currentPortfolioId);
       setData(res);
     } catch (err) {
       console.error('Failed to load crypto summary:', err);
@@ -33,7 +36,7 @@ export default function CryptoTab() {
 
   useEffect(() => {
     loadCryptoSummary();
-  }, []);
+  }, [currentPortfolioId]);
 
   const handleSaveHoldings = async (holdings) => {
     await api.updateCryptoHoldings(holdings);
@@ -60,6 +63,7 @@ export default function CryptoTab() {
 
   const btc = cryptoAssets.find(a => a.symbol === 'BTC') || {};
   const eth = cryptoAssets.find(a => a.symbol === 'ETH') || {};
+  const currentPortName = portfolioSummary.portfolio_name || portfolioName || '금융 포트폴리오';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -71,7 +75,7 @@ export default function CryptoTab() {
             가상화폐(비트코인/이더리움) & 통합 전체 자산
           </h2>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-            기존 금융 포트폴리오와 가상화폐를 합산한 전체 가문 자산 현황을 조회합니다.
+            [{currentPortName}]와 가상화폐를 합산한 전체 자산 현황을 조회합니다.
           </span>
         </div>
 
@@ -109,10 +113,10 @@ export default function CryptoTab() {
         <div className="section-title" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', fontWeight: 800 }}>
             <Sparkles size={18} />
-            🌟 통합 전체 자산 요약 (기존 금융 포트폴리오 + 가상화폐)
+            🌟 통합 전체 자산 요약 ({currentPortName} + 가상화폐)
           </span>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            (금융 포트폴리오 {combined.portfolio_weight_pct?.toFixed(1)}% + 가상화폐 {combined.crypto_weight_pct?.toFixed(1)}%)
+            ({currentPortName} {combined.portfolio_weight_pct?.toFixed(1)}% + 가상화폐 {combined.crypto_weight_pct?.toFixed(1)}%)
           </span>
         </div>
 
@@ -146,11 +150,11 @@ export default function CryptoTab() {
             <div className="kpi-title">⚖️ 전체 자산 배분 비중</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 700 }}>
-                <span style={{ color: 'var(--accent-primary)' }}>🏦 금융 {combined.portfolio_weight_pct?.toFixed(1)}%</span>
+                <span style={{ color: 'var(--accent-primary)' }}>🏦 {currentPortName} {combined.portfolio_weight_pct?.toFixed(1)}%</span>
                 <span style={{ color: '#F59E0B' }}>🪙 코인 {combined.crypto_weight_pct?.toFixed(1)}%</span>
               </div>
               <div style={{ height: '10px', background: 'rgba(255,255,255,0.08)', borderRadius: '5px', overflow: 'hidden', display: 'flex' }}>
-                <div style={{ width: `${combined.portfolio_weight_pct || 0}%`, background: 'var(--accent-primary)' }} title={`금융 포트폴리오: ${combined.portfolio_weight_pct?.toFixed(1)}%`} />
+                <div style={{ width: `${combined.portfolio_weight_pct || 0}%`, background: 'var(--accent-primary)' }} title={`${currentPortName}: ${combined.portfolio_weight_pct?.toFixed(1)}%`} />
                 <div style={{ width: `${btc.weight_in_combined_pct || 0}%`, background: '#F59E0B' }} title={`비트코인: ${btc.weight_in_combined_pct?.toFixed(1)}%`} />
                 <div style={{ width: `${eth.weight_in_combined_pct || 0}%`, background: '#8B5CF6' }} title={`이더리움: ${eth.weight_in_combined_pct?.toFixed(1)}%`} />
               </div>
@@ -293,7 +297,7 @@ export default function CryptoTab() {
               {/* 1) Financial Portfolio Row */}
               <tr>
                 <td style={{ fontWeight: 700 }}>
-                  🏦 기존 금융 포트폴리오
+                  🏦 {currentPortName}
                 </td>
                 <td style={{ color: 'var(--text-secondary)' }}>주식/ETF/금/예수금</td>
                 <td>{formatKRW(portfolioSummary.total_buy)}</td>

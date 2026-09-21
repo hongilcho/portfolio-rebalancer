@@ -151,7 +151,10 @@ export const api = {
   }),
 
   // Crypto (Bitcoin & Ethereum)
-  getCryptoSummary: () => request('/api/crypto/summary'),
+  getCryptoSummary: (portfolioId = 'default') => {
+    const pid = portfolioId || 'default';
+    return request(`/api/crypto/summary?portfolio_id=${encodeURIComponent(pid)}`);
+  },
   updateCryptoHoldings: (holdings) => request('/api/crypto/holdings', {
     method: 'PUT',
     body: JSON.stringify({ holdings }),
