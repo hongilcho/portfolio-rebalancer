@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee } from 'lucide-react';
+import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee, Briefcase, Settings, Layers } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatKRW } from '../utils/formatters';
 
@@ -9,7 +9,11 @@ export default function Header({
   onRefresh, 
   refreshing,
   currentTheme,
-  onThemeChange
+  onThemeChange,
+  portfolios = [],
+  currentPortfolioId = 'default',
+  onSelectPortfolio,
+  onOpenManagePortfolios
 }) {
   const [isEditRateOpen, setIsEditRateOpen] = useState(false);
   const [customRate, setCustomRate] = useState(usdKrw || 1380);
@@ -56,6 +60,48 @@ export default function Header({
           <p>
             계좌별 예수금, 보유 수량/평단가 관리 & IRP 위험자산 70% 제약 및 납입/세액공제 한도 모니터링
           </p>
+        </div>
+
+        {/* Portfolio Switcher & Manager */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-surface)', padding: '5px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-primary)' }}>
+            <Briefcase size={16} color="var(--accent-primary)" />
+            <select
+              value={currentPortfolioId}
+              onChange={(e) => onSelectPortfolio(e.target.value)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontWeight: 700,
+                fontSize: '0.92rem',
+                cursor: 'pointer',
+                outline: 'none',
+                minWidth: '170px'
+              }}
+            >
+              <option value="all" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', fontWeight: 700 }}>
+                🌐 [전체 자산 종합 요약]
+              </option>
+              <optgroup label="💼 개별 포트폴리오" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+                {portfolios.map(p => (
+                  <option key={p.id} value={p.id} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+                    💼 {p.name} {p.is_default ? '(기본)' : ''}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+
+          <button 
+            className="btn btn-secondary btn-sm"
+            onClick={onOpenManagePortfolios}
+            title="포트폴리오 관리 (이름/설명 수정 및 신규 추가)"
+            style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <Settings size={13} />
+            <span>포트폴리오 관리</span>
+          </button>
         </div>
 
         <div className="header-controls">

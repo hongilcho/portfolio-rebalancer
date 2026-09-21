@@ -15,6 +15,7 @@ class CreateAssetRequest(BaseModel):
     is_risk_asset: bool = True
     is_active: bool = True
     notes: Optional[str] = ""
+    portfolio_id: Optional[str] = "default"
 
 class UpdateAssetRequest(BaseModel):
     name: str
@@ -44,8 +45,8 @@ class ToggleActiveRequest(BaseModel):
     is_active: bool
 
 @router.get("/")
-def list_assets():
-    assets = get_all_assets()
+def list_assets(portfolio_id: Optional[str] = None):
+    assets = get_all_assets(portfolio_id=portfolio_id)
     return {"assets": assets}
 
 @router.post("/")
@@ -58,7 +59,8 @@ def create_asset(req: CreateAssetRequest):
         allowed_accounts=req.allowed_accounts or [],
         is_risk_asset=req.is_risk_asset,
         is_active=req.is_active,
-        notes=req.notes or ""
+        notes=req.notes or "",
+        portfolio_id=req.portfolio_id or "default"
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)

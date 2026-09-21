@@ -101,6 +101,23 @@ def init_db():
     cursor = conn.cursor()
     
     # Postgres schema setup
+    # 0. Portfolios table setup
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS portfolios (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            is_default BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('''
+        INSERT INTO portfolios (id, name, description, is_default)
+        VALUES ('default', '메인 포트폴리오', '기본 자산배분 포트폴리오', TRUE)
+        ON CONFLICT (id) DO NOTHING
+    ''')
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS accounts (
             id TEXT PRIMARY KEY,
@@ -120,12 +137,14 @@ def init_db():
         )
     ''')
     cursor.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_limit_exhausted BOOLEAN DEFAULT FALSE")
+    cursor.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS portfolio_id TEXT DEFAULT 'default' REFERENCES portfolios(id)")
+    cursor.execute("UPDATE accounts SET portfolio_id = 'default' WHERE portfolio_id IS NULL")
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS assets (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
-            ticker TEXT NOT NULL UNIQUE,
+            ticker TEXT NOT NULL,
             market TEXT NOT NULL CHECK(market IN ('KR', 'US')),
             target_weight REAL DEFAULT 0.0,
             allowed_accounts TEXT DEFAULT '[]',
@@ -135,6 +154,21 @@ def init_db():
         )
     ''')
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS portfolio_id TEXT DEFAULT 'default' REFERENCES portfolios(id)")
+    cursor.execute("UPDATE assets SET portfolio_id = 'default' WHERE portfolio_id IS NULL")
+
+    try:
+        cursor.execute('''
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'assets_ticker_key') THEN
+                    ALTER TABLE assets DROP CONSTRAINT assets_ticker_key;
+                END IF;
+            END $$;
+        ''')
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_portfolio_ticker ON assets (portfolio_id, ticker)")
+    except Exception as e:
+        print(f"Index migration note: {e}")
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS holdings (
@@ -197,26 +231,121 @@ def init_db():
     conn.close()
 
 # ---------------------------------------------------------
+# Portfolios CRUD
+# ---------------------------------------------------------
+@st.cache_data(ttl=2)
+def get_portfolios():
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cursor.execute("SELECT * FROM portfolios ORDER BY is_default DESC, created_at ASC")
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"Error fetching portfolios: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_portfolio(portfolio_id: str):
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cursor.execute("SELECT * FROM portfolios WHERE id = %s", (portfolio_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+def create_portfolio(name: str, description: str = ""):
+    if not name or not name.strip():
+        return False, "포트폴리오 이름을 입력해주세요.", None
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    new_id = generate_id()
+    try:
+        cursor.execute('''
+            INSERT INTO portfolios (id, name, description, is_default)
+            VALUES (%s, %s, %s, FALSE)
+            RETURNING *
+        ''', (new_id, name.strip(), description.strip() if description else ""))
+        row = cursor.fetchone()
+        conn.commit()
+        return True, "포트폴리오가 성공적으로 생성되었습니다.", dict(row) if row else None
+    except Exception as e:
+        conn.rollback()
+        return False, str(e), None
+    finally:
+        conn.close()
+
+def update_portfolio(portfolio_id: str, name: str, description: str = ""):
+    if not name or not name.strip():
+        return False, "포트폴리오 이름을 입력해주세요."
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            UPDATE portfolios
+            SET name = %s, description = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        ''', (name.strip(), description.strip() if description else "", portfolio_id))
+        conn.commit()
+        return True, "포트폴리오 정보가 성공적으로 수정되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+def delete_portfolio(portfolio_id: str):
+    if portfolio_id == 'default':
+        return False, "기본 포트폴리오는 삭제할 수 없습니다."
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Check if portfolio has accounts or assets
+        cursor.execute("SELECT COUNT(*) FROM accounts WHERE portfolio_id = %s", (portfolio_id,))
+        acc_cnt = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM assets WHERE portfolio_id = %s", (portfolio_id,))
+        ast_cnt = cursor.fetchone()[0]
+        
+        if acc_cnt > 0 or ast_cnt > 0:
+            return False, f"포트폴리오에 등록된 계좌({acc_cnt}개) 또는 종목({ast_cnt}개)이 있어 삭제할 수 없습니다. 먼저 계좌와 종목을 삭제해주세요."
+            
+        cursor.execute("DELETE FROM portfolios WHERE id = %s", (portfolio_id,))
+        conn.commit()
+        return True, "포트폴리오가 성공적으로 삭제되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+# ---------------------------------------------------------
 # Accounts CRUD
 # ---------------------------------------------------------
 @st.cache_data(ttl=2)
-def get_all_accounts():
+def get_all_accounts(portfolio_id: str = None):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    cursor.execute("SELECT * FROM accounts ORDER BY account_alias ASC")
+    if portfolio_id:
+        cursor.execute("SELECT * FROM accounts WHERE portfolio_id = %s ORDER BY account_alias ASC", (portfolio_id,))
+    else:
+        cursor.execute("SELECT * FROM accounts ORDER BY account_alias ASC")
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
-def add_account(account_no, account_alias, account_type, deposit_krw=0.0, deposit_usd=0.0, annual_limit=0.0, tax_limit=0.0, notes="", priority=99, limit_preference="ANNUAL", current_year_deposit=0.0):
+def add_account(account_no, account_alias, account_type, deposit_krw=0.0, deposit_usd=0.0, annual_limit=0.0, tax_limit=0.0, notes="", priority=99, limit_preference="ANNUAL", current_year_deposit=0.0, portfolio_id="default"):
     conn = get_connection()
     cursor = conn.cursor()
     new_id = generate_id()
+    target_pid = portfolio_id or "default"
     try:
         cursor.execute('''
-            INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (new_id, account_no.strip(), account_alias.strip(), account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit))
+            INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, portfolio_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (new_id, account_no.strip(), account_alias.strip(), account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, target_pid))
         conn.commit()
         return True, "계좌가 성공적으로 추가되었습니다."
     except psycopg2.IntegrityError:
@@ -307,10 +436,13 @@ def delete_account(account_id):
 # Assets Helpers
 # ---------------------------------------------------------
 @st.cache_data(ttl=2)
-def get_all_assets():
+def get_all_assets(portfolio_id: str = None):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    cursor.execute("SELECT * FROM assets ORDER BY name ASC")
+    if portfolio_id:
+        cursor.execute("SELECT * FROM assets WHERE portfolio_id = %s ORDER BY name ASC", (portfolio_id,))
+    else:
+        cursor.execute("SELECT * FROM assets ORDER BY name ASC")
     rows = []
     for r in cursor.fetchall():
         r = dict(r)
@@ -325,19 +457,20 @@ def get_all_assets():
     conn.close()
     return rows
 
-def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes=""):
+def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes="", portfolio_id="default"):
     if allowed_accounts is None:
         allowed_accounts = []
     clean_accs = sanitize_account_names(allowed_accounts)
     conn = get_connection()
     cursor = conn.cursor()
     new_id = generate_id()
+    target_pid = portfolio_id or "default"
     try:
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
-            INSERT INTO assets (id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, is_active, notes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (new_id, name, ticker.strip().upper(), market, target_weight, allowed_json, 1 if is_risk_asset else 0, is_active, notes))
+            INSERT INTO assets (id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, is_active, notes, portfolio_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (new_id, name, ticker.strip().upper(), market, target_weight, allowed_json, 1 if is_risk_asset else 0, is_active, notes, target_pid))
         conn.commit()
         return True, "성공적으로 추가되었습니다."
     except psycopg2.IntegrityError:
@@ -630,17 +763,27 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price)
         conn.close()
 
 @st.cache_data(ttl=2)
-def get_trade_history():
+def get_trade_history(portfolio_id: str = None):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    cursor.execute('''
-        SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
-        FROM trade_history t
-        JOIN accounts a ON t.account_id = a.id
-        JOIN assets ast ON t.asset_id = ast.id
-        WHERE t.trade_type != 'INIT'
-        ORDER BY t.trade_date DESC, t.id DESC
-    ''')
+    if portfolio_id:
+        cursor.execute('''
+            SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
+            FROM trade_history t
+            JOIN accounts a ON t.account_id = a.id
+            JOIN assets ast ON t.asset_id = ast.id
+            WHERE t.trade_type != 'INIT' AND a.portfolio_id = %s
+            ORDER BY t.trade_date DESC, t.id DESC
+        ''', (portfolio_id,))
+    else:
+        cursor.execute('''
+            SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
+            FROM trade_history t
+            JOIN accounts a ON t.account_id = a.id
+            JOIN assets ast ON t.asset_id = ast.id
+            WHERE t.trade_type != 'INIT'
+            ORDER BY t.trade_date DESC, t.id DESC
+        ''')
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]

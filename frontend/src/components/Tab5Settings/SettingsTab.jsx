@@ -8,7 +8,8 @@ export default function SettingsTab({
   pricesData, 
   accounts, 
   assets, 
-  onSaved 
+  onSaved,
+  currentPortfolioId = 'default'
 }) {
   // Account Form State
   const [isAddAccOpen, setIsAddAccOpen] = useState(false);
@@ -63,7 +64,8 @@ export default function SettingsTab({
         tax_limit: accForm.is_unlimited ? 0 : Number(accForm.tax_limit),
         priority: Number(accForm.priority),
         limit_preference: accForm.limit_preference,
-        notes: accForm.notes || ''
+        notes: accForm.notes || '',
+        portfolio_id: currentPortfolioId || 'default'
       });
       alert('계좌가 성공적으로 추가되었습니다.');
       setIsAddAccOpen(false);
@@ -133,7 +135,8 @@ export default function SettingsTab({
         allowed_accounts: assetForm.allowed_accounts,
         is_risk_asset: Boolean(assetForm.is_risk_asset),
         is_active: Boolean(assetForm.is_active !== false),
-        notes: assetForm.notes || ''
+        notes: assetForm.notes || '',
+        portfolio_id: currentPortfolioId || 'default'
       });
       alert('자산이 성공적으로 등록되었습니다.');
       setIsAddAssetOpen(false);
