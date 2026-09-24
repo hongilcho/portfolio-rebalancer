@@ -166,6 +166,7 @@ def init_db():
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS tax_rate REAL DEFAULT 15.4")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS lock_rebalance_sell BOOLEAN DEFAULT TRUE")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS account_no TEXT DEFAULT ''")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS include_in_rebalance BOOLEAN DEFAULT TRUE")
 
     try:
         cursor.execute('''
@@ -554,13 +555,15 @@ def get_all_assets(portfolio_id: str = None):
         r['early_termination_rate'] = float(r.get('early_termination_rate') or 0.0)
         r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
         r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
+        r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
         rows.append(r)
     conn.close()
     return rows
 
 def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes="", portfolio_id="default",
               is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
-              early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None, account_no=""):
+              early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None, account_no="",
+              include_in_rebalance=True):
     conn = get_connection()
     cursor = conn.cursor()
     new_id = generate_id()
@@ -584,16 +587,18 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
         cursor.execute('''
             INSERT INTO assets (
                 id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, is_active, notes, portfolio_id,
-                is_deposit, deposit_principal, interest_rate, start_date, maturity_date, early_termination_rate, tax_rate, lock_rebalance_sell, account_no
+                is_deposit, deposit_principal, interest_rate, start_date, maturity_date, early_termination_rate, tax_rate, lock_rebalance_sell, account_no,
+                include_in_rebalance
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             new_id, name, ticker.strip().upper(), market, target_weight, allowed_json,
             1 if is_risk_asset else 0, is_active, notes, target_pid,
             is_deposit, float(deposit_principal or 0.0), float(interest_rate or 0.0),
             str(start_date or ''), str(maturity_date or ''), float(early_termination_rate or 0.0),
             float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell,
-            clean_acc_no if is_deposit else ''
+            clean_acc_no if is_deposit else '',
+            bool(include_in_rebalance)
         ))
 
         conn.commit()
@@ -610,7 +615,8 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
 
 def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset=True, is_active=True, notes="",
                  is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
-                 early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None, account_no=""):
+                 early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None, account_no="",
+                 include_in_rebalance=True):
     conn = get_connection()
     cursor = conn.cursor()
     clean_acc_no = (account_no or '').strip()
@@ -632,7 +638,7 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
                 is_risk_asset = %s, is_active = %s, notes = %s,
                 is_deposit = %s, deposit_principal = %s, interest_rate = %s, start_date = %s,
                 maturity_date = %s, early_termination_rate = %s, tax_rate = %s, lock_rebalance_sell = %s,
-                account_no = %s
+                account_no = %s, include_in_rebalance = %s
             WHERE id = %s
         ''', (
             name, ticker.strip().upper(), market, target_weight, allowed_json,
@@ -641,6 +647,7 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
             str(start_date or ''), str(maturity_date or ''), float(early_termination_rate or 0.0),
             float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell,
             clean_acc_no if is_deposit else '',
+            bool(include_in_rebalance),
             str(asset_id)
         ))
 

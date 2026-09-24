@@ -362,10 +362,18 @@ export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default'
                         const finalQty = s.current_qty + s.qty_diff;
                         const hasDiff = s.qty_diff !== 0;
                         const isPlus = s.qty_diff > 0;
+                        const incRebal = s.include_in_rebalance !== false;
 
                         return (
-                          <tr key={s.asset_id}>
-                            <td style={{ fontWeight: 600 }}>{s.asset_name}</td>
+                          <tr key={s.asset_id} style={!incRebal ? { opacity: 0.75 } : {}}>
+                            <td style={{ fontWeight: 600 }}>
+                              {s.asset_name}
+                              {!incRebal && (
+                                <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(156, 163, 175, 0.2)', color: 'var(--text-muted)' }}>
+                                  비중 제외
+                                </span>
+                              )}
+                            </td>
                             <td>
                               {formatQuantity(finalQty)}{' '}
                               {hasDiff && (
@@ -375,10 +383,20 @@ export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default'
                               )}
                             </td>
                             <td>{formatKRW(s.projected_val)}</td>
-                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{s.target_weight.toFixed(1)}%</td>
-                            <td style={{ textAlign: 'center', fontWeight: 700 }}>{s.projected_weight.toFixed(1)}%</td>
+                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+                              {incRebal ? `${s.target_weight.toFixed(1)}%` : '-'}
+                            </td>
+                            <td style={{ textAlign: 'center', fontWeight: 700 }}>
+                              {incRebal ? `${s.projected_weight.toFixed(1)}%` : '-'}
+                            </td>
                             <td>
-                              <DriftBar drift={s.drift} scaleMax={result.scale_max} />
+                              {incRebal ? (
+                                <DriftBar drift={s.drift} scaleMax={result.scale_max} />
+                              ) : (
+                                <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                  포트폴리오 비중 제외 자산
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );

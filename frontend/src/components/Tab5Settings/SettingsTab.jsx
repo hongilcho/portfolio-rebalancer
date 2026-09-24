@@ -49,7 +49,9 @@ export default function SettingsTab({
     early_termination_rate: 0.5,
     tax_rate: 15.4,
     lock_rebalance_sell: true,
-    account_id: ''
+    account_id: '',
+    account_no: '',
+    include_in_rebalance: true
   });
 
   const [saving, setSaving] = useState(false);
@@ -142,12 +144,13 @@ export default function SettingsTab({
         : (assetForm.is_gold ? 'M04020000' : assetForm.ticker.trim().toUpperCase());
 
       const finalAllowedAccs = isDep ? [] : assetForm.allowed_accounts;
+      const incRebal = assetForm.include_in_rebalance !== false;
 
       await api.createAsset({
         name: assetForm.name.trim(),
         ticker: finalTicker,
         market: isDep ? 'KR' : assetForm.market,
-        target_weight: Number(assetForm.target_weight),
+        target_weight: incRebal ? Number(assetForm.target_weight) : 0,
         allowed_accounts: finalAllowedAccs,
         is_risk_asset: isDep ? false : Boolean(assetForm.is_risk_asset),
         is_active: Boolean(assetForm.is_active !== false),
@@ -161,7 +164,8 @@ export default function SettingsTab({
         early_termination_rate: Number(assetForm.early_termination_rate || 0),
         tax_rate: Number(assetForm.tax_rate !== undefined ? assetForm.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(assetForm.lock_rebalance_sell !== false),
-        account_no: assetForm.account_no ? assetForm.account_no.trim() : ''
+        account_no: assetForm.account_no ? assetForm.account_no.trim() : '',
+        include_in_rebalance: incRebal
       });
       alert('자산이 성공적으로 등록되었습니다.');
       setIsAddAssetOpen(false);
@@ -185,12 +189,13 @@ export default function SettingsTab({
         : (assetForm.is_gold ? 'M04020000' : assetForm.ticker.trim().toUpperCase());
 
       const finalAllowedAccs = isDep ? [] : assetForm.allowed_accounts;
+      const incRebal = assetForm.include_in_rebalance !== false;
 
       await api.updateAsset(editAssetTarget.id, {
         name: assetForm.name.trim(),
         ticker: finalTicker,
         market: isDep ? 'KR' : assetForm.market,
-        target_weight: Number(assetForm.target_weight),
+        target_weight: incRebal ? Number(assetForm.target_weight) : 0,
         allowed_accounts: finalAllowedAccs,
         is_risk_asset: isDep ? false : Boolean(assetForm.is_risk_asset),
         is_active: Boolean(assetForm.is_active !== false),
@@ -203,7 +208,8 @@ export default function SettingsTab({
         early_termination_rate: Number(assetForm.early_termination_rate || 0),
         tax_rate: Number(assetForm.tax_rate !== undefined ? assetForm.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(assetForm.lock_rebalance_sell !== false),
-        account_no: assetForm.account_no ? assetForm.account_no.trim() : ''
+        account_no: assetForm.account_no ? assetForm.account_no.trim() : '',
+        include_in_rebalance: incRebal
       });
       alert('자산이 성공적으로 수정되었습니다.');
       setEditAssetTarget(null);
@@ -243,7 +249,8 @@ export default function SettingsTab({
         early_termination_rate: Number(target.early_termination_rate || 0),
         tax_rate: Number(target.tax_rate !== undefined ? target.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(target.lock_rebalance_sell !== false),
-        account_id: (target.allowed_accounts && target.allowed_accounts.length > 0) ? String(target.allowed_accounts[0]) : null
+        account_id: (target.allowed_accounts && target.allowed_accounts.length > 0) ? String(target.allowed_accounts[0]) : null,
+        include_in_rebalance: Boolean(target.include_in_rebalance !== false)
       });
       alert(`종목이 성공적으로 ${actionText}되었습니다.`);
       onSaved();
@@ -312,6 +319,11 @@ export default function SettingsTab({
                         {item.is_deposit && (
                           <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
                             🏦 예금
+                          </span>
+                        )}
+                        {item.include_in_rebalance === false && (
+                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(156, 163, 175, 0.2)', color: 'var(--text-muted)' }}>
+                            비중 제외
                           </span>
                         )}
                       </td>
@@ -539,6 +551,11 @@ export default function SettingsTab({
                             🏦 예금 (연 {ast.interest_rate}%)
                           </span>
                         )}
+                        {ast.include_in_rebalance === false && (
+                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(156, 163, 175, 0.2)', color: 'var(--text-muted)' }}>
+                            비중 제외
+                          </span>
+                        )}
                         {ast.is_deposit && ast.account_no && (
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400, marginTop: '2px' }}>
                             계좌: {ast.account_no}
@@ -552,7 +569,7 @@ export default function SettingsTab({
                         </span>
                       </td>
                       <td>{ast.market === 'KR' ? '🇰🇷 국내' : '🇺🇸 미국'}</td>
-                      <td>{isActive ? `${ast.target_weight.toFixed(1)}%` : '-'}</td>
+                      <td>{isActive ? (ast.include_in_rebalance === false ? '0.0% (제외)' : `${ast.target_weight.toFixed(1)}%`) : '-'}</td>
                       <td>
                         <span className={`badge ${ast.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
                           {ast.is_risk_asset ? '🔴 위험' : '🟢 안전'}
@@ -583,7 +600,8 @@ export default function SettingsTab({
                                 tax_rate: ast.tax_rate !== undefined ? ast.tax_rate : 15.4,
                                 lock_rebalance_sell: ast.lock_rebalance_sell !== undefined ? ast.lock_rebalance_sell : true,
                                 account_id: (ast.allowed_accounts && ast.allowed_accounts.length > 0) ? String(ast.allowed_accounts[0]) : '',
-                                account_no: ast.account_no || ''
+                                account_no: ast.account_no || '',
+                                include_in_rebalance: ast.include_in_rebalance !== undefined ? Boolean(ast.include_in_rebalance) : true
                               });
                             }}
                           >
@@ -942,19 +960,60 @@ export default function SettingsTab({
                     </div>
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">목표 비중 (%)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="100"
-                      className="input-number"
-                      value={assetForm.target_weight}
-                      onChange={(e) => setAssetForm({ ...assetForm, target_weight: parseFloat(e.target.value) || 0 })}
-                      required
-                    />
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: assetForm.include_in_rebalance !== false ? 'rgba(59, 130, 246, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    border: `1px solid ${assetForm.include_in_rebalance !== false ? 'rgba(59, 130, 246, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`,
+                    marginBottom: '16px'
+                  }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={assetForm.include_in_rebalance !== false}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setAssetForm({
+                            ...assetForm,
+                            include_in_rebalance: checked,
+                            target_weight: checked ? (assetForm.target_weight || 10.0) : 0.0
+                          });
+                        }}
+                      />
+                      ⚖️ <strong>포트폴리오 비중 및 리밸런싱에 포함</strong>
+                    </label>
+                    <p style={{ margin: '6px 0 0 24px', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                      {assetForm.include_in_rebalance !== false 
+                        ? '✅ 거치식 포트폴리오 등: 예금 금액이 포트폴리오 비중(%)에 포함되며 목표 비중을 설정합니다.'
+                        : '🚫 적립식 포트폴리오 등: 예금이 포트폴리오 비중 및 괴리율 계산에서 제외되며, 순수 주식/ETF만으로 100% 비중을 맞춥니다. (자산 종합 요약/총 자산 평가액에는 정상 포함)'}
+                    </p>
                   </div>
+
+                  {assetForm.include_in_rebalance !== false ? (
+                    <div className="form-group">
+                      <label className="form-label">목표 비중 (%)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        className="input-number"
+                        value={assetForm.target_weight}
+                        onChange={(e) => setAssetForm({ ...assetForm, target_weight: parseFloat(e.target.value) || 0 })}
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <div className="form-group" style={{ opacity: 0.7 }}>
+                      <label className="form-label">목표 비중 (%) - 비중 제외 적용 중</label>
+                      <input
+                        type="text"
+                        className="input-text"
+                        value="0.0% (포트폴리오 비중 제외)"
+                        disabled
+                      />
+                    </div>
+                  )}
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '16px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>

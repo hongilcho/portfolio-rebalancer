@@ -98,13 +98,17 @@ def calculate_plan(req: CalculateRebalanceRequest):
         }
         
     # Calculate simulation scale_max for visual drift bar
-    total_sim = sum(s['projected_val'] for s in sim_assets) if sim_assets else 0.0
+    total_sim_rebalance = sum(s['projected_val'] for s in sim_assets if s.get('include_in_rebalance', True))
     max_drift = 0.0
     for s in sim_assets:
-        s['projected_weight'] = (s['projected_val'] / total_sim * 100) if total_sim > 0 else 0.0
-        s['drift'] = s['projected_weight'] - float(s['target_weight'])
-        if abs(s['drift']) > max_drift:
-            max_drift = abs(s['drift'])
+        if s.get('include_in_rebalance', True):
+            s['projected_weight'] = (s['projected_val'] / total_sim_rebalance * 100) if total_sim_rebalance > 0 else 0.0
+            s['drift'] = s['projected_weight'] - float(s['target_weight'])
+            if abs(s['drift']) > max_drift:
+                max_drift = abs(s['drift'])
+        else:
+            s['projected_weight'] = 0.0
+            s['drift'] = 0.0
             
     scale_max = round(max_drift * 3.5, 1) if max_drift > 0 else 1.0
     
@@ -116,7 +120,7 @@ def calculate_plan(req: CalculateRebalanceRequest):
         "trade_plan": t_plan,
         "transfer_plan": tr_plan,
         "simulated_assets": sim_assets,
-        "total_sim": total_sim,
+        "total_sim": total_sim_rebalance,
         "scale_max": scale_max,
         "realized_summary": realized_summary
     }
