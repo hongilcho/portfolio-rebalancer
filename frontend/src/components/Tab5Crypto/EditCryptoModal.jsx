@@ -1,82 +1,112 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle, Coins } from 'lucide-react';
+import { X, Save, Coins, User } from 'lucide-react';
 import { formatKRW } from '../../utils/formatters';
 
-export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSave }) {
+export default function EditCryptoModal({ isOpen, onClose, byOwner, onSave }) {
+  const [activeTab, setActiveTab] = useState('hongil'); // 'hongil' | 'yoona'
   const [formData, setFormData] = useState({
-    BTC: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' },
-    ETH: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' }
+    hongil: {
+      BTC: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' },
+      ETH: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' }
+    },
+    yoona: {
+      BTC: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' },
+      ETH: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' }
+    }
   });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (initialHoldings && initialHoldings.length > 0) {
+    if (byOwner && isOpen) {
       const newForm = {
-        BTC: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' },
-        ETH: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' }
+        hongil: {
+          BTC: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' },
+          ETH: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' }
+        },
+        yoona: {
+          BTC: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' },
+          ETH: { quantity: 0, avg_price: 0, total_buy: 0, notes: '' }
+        }
       };
 
-      initialHoldings.forEach(item => {
-        const sym = item.symbol.toUpperCase();
-        if (newForm[sym]) {
-          const qty = Number(item.quantity) || 0;
-          const avgP = Number(item.avg_price) || 0;
-          newForm[sym] = {
-            quantity: qty,
-            avg_price: avgP,
-            total_buy: qty * avgP,
-            notes: item.notes || ''
-          };
+      const setOwnerAssets = (ownerKey, ownerName) => {
+        const oData = byOwner[ownerName];
+        if (oData && oData.assets) {
+          oData.assets.forEach(item => {
+            const sym = item.symbol.toUpperCase();
+            if (newForm[ownerKey][sym]) {
+              const qty = Number(item.quantity) || 0;
+              const avgP = Number(item.avg_price) || 0;
+              newForm[ownerKey][sym] = {
+                quantity: qty,
+                avg_price: avgP,
+                total_buy: qty * avgP,
+                notes: item.notes || ''
+              };
+            }
+          });
         }
-      });
+      };
+
+      setOwnerAssets('hongil', '홍일');
+      setOwnerAssets('yoona', '윤아');
       setFormData(newForm);
     }
-  }, [initialHoldings, isOpen]);
+  }, [byOwner, isOpen]);
 
   if (!isOpen) return null;
 
-  const handleQtyChange = (sym, qtyVal) => {
+  const handleQtyChange = (ownerKey, sym, qtyVal) => {
     const qty = parseFloat(qtyVal) || 0;
     setFormData(prev => {
-      const curr = prev[sym];
+      const curr = prev[ownerKey][sym];
       return {
         ...prev,
-        [sym]: {
-          ...curr,
-          quantity: qtyVal,
-          total_buy: qty > 0 && curr.avg_price > 0 ? qty * curr.avg_price : curr.total_buy
+        [ownerKey]: {
+          ...prev[ownerKey],
+          [sym]: {
+            ...curr,
+            quantity: qtyVal,
+            total_buy: qty > 0 && curr.avg_price > 0 ? qty * curr.avg_price : curr.total_buy
+          }
         }
       };
     });
   };
 
-  const handleAvgPriceChange = (sym, avgPriceVal) => {
+  const handleAvgPriceChange = (ownerKey, sym, avgPriceVal) => {
     const avgP = parseFloat(avgPriceVal) || 0;
     setFormData(prev => {
-      const curr = prev[sym];
+      const curr = prev[ownerKey][sym];
       const qty = parseFloat(curr.quantity) || 0;
       return {
         ...prev,
-        [sym]: {
-          ...curr,
-          avg_price: avgPriceVal,
-          total_buy: qty > 0 ? qty * avgP : 0
+        [ownerKey]: {
+          ...prev[ownerKey],
+          [sym]: {
+            ...curr,
+            avg_price: avgPriceVal,
+            total_buy: qty > 0 ? qty * avgP : 0
+          }
         }
       };
     });
   };
 
-  const handleTotalBuyChange = (sym, totalBuyVal) => {
+  const handleTotalBuyChange = (ownerKey, sym, totalBuyVal) => {
     const totalB = parseFloat(totalBuyVal) || 0;
     setFormData(prev => {
-      const curr = prev[sym];
+      const curr = prev[ownerKey][sym];
       const qty = parseFloat(curr.quantity) || 0;
       return {
         ...prev,
-        [sym]: {
-          ...curr,
-          total_buy: totalBuyVal,
-          avg_price: qty > 0 ? Math.round(totalB / qty) : curr.avg_price
+        [ownerKey]: {
+          ...prev[ownerKey],
+          [sym]: {
+            ...curr,
+            total_buy: totalBuyVal,
+            avg_price: qty > 0 ? Math.round(totalB / qty) : curr.avg_price
+          }
         }
       };
     });
@@ -88,16 +118,32 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
     try {
       const payload = [
         {
+          owner: '홍일',
           symbol: 'BTC',
-          quantity: parseFloat(formData.BTC.quantity) || 0,
-          avg_price: parseFloat(formData.BTC.avg_price) || 0,
-          notes: formData.BTC.notes || ''
+          quantity: parseFloat(formData.hongil.BTC.quantity) || 0,
+          avg_price: parseFloat(formData.hongil.BTC.avg_price) || 0,
+          notes: formData.hongil.BTC.notes || ''
         },
         {
+          owner: '홍일',
           symbol: 'ETH',
-          quantity: parseFloat(formData.ETH.quantity) || 0,
-          avg_price: parseFloat(formData.ETH.avg_price) || 0,
-          notes: formData.ETH.notes || ''
+          quantity: parseFloat(formData.hongil.ETH.quantity) || 0,
+          avg_price: parseFloat(formData.hongil.ETH.avg_price) || 0,
+          notes: formData.hongil.ETH.notes || ''
+        },
+        {
+          owner: '윤아',
+          symbol: 'BTC',
+          quantity: parseFloat(formData.yoona.BTC.quantity) || 0,
+          avg_price: parseFloat(formData.yoona.BTC.avg_price) || 0,
+          notes: formData.yoona.BTC.notes || ''
+        },
+        {
+          owner: '윤아',
+          symbol: 'ETH',
+          quantity: parseFloat(formData.yoona.ETH.quantity) || 0,
+          avg_price: parseFloat(formData.yoona.ETH.avg_price) || 0,
+          notes: formData.yoona.ETH.notes || ''
         }
       ];
       await onSave(payload);
@@ -109,9 +155,13 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
     }
   };
 
+  const currentForm = formData[activeTab];
+  const ownerLabel = activeTab === 'hongil' ? '홍일' : '윤아';
+  const ownerIcon = activeTab === 'hongil' ? '👤' : '👩';
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: '580px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" style={{ maxWidth: '620px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Coins size={20} color="#F59E0B" />
@@ -124,10 +174,54 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
           </button>
         </div>
 
+        {/* Owner Tab Switcher */}
+        <div style={{ display: 'flex', gap: '8px', padding: '14px 20px 0', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-surface)' }}>
+          <button
+            type="button"
+            className={`tab-btn ${activeTab === 'hongil' ? 'active' : ''}`}
+            onClick={() => setActiveTab('hongil')}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              background: 'none',
+              fontWeight: activeTab === 'hongil' ? 800 : 500,
+              color: activeTab === 'hongil' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'hongil' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.95rem'
+            }}
+          >
+            <span>👤</span> 홍일 계정 (업비트)
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${activeTab === 'yoona' ? 'active' : ''}`}
+            onClick={() => setActiveTab('yoona')}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              background: 'none',
+              fontWeight: activeTab === 'yoona' ? 800 : 500,
+              color: activeTab === 'yoona' ? '#EC4899' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'yoona' ? '2px solid #EC4899' : '2px solid transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.95rem'
+            }}
+          >
+            <span>👩</span> 윤아 계정 (업비트)
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px', padding: '20px' }}>
             <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', background: 'var(--bg-surface)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-              💡 보유 수량(소수점 8자리 가능)과 매수 평단가를 입력해 주세요. (총 매입금액을 입력하시면 평단가가 자동 계산됩니다.)
+              💡 <strong>{ownerIcon} {ownerLabel}</strong> 님의 보유 수량(소수점 8자리 가능)과 매수 평단가를 입력해 주세요. (총 매입액 입력 시 평단가 자동 계산)
             </div>
 
             {/* 1. Bitcoin Form */}
@@ -135,6 +229,7 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                 <span style={{ fontSize: '1.1rem' }}>🪙</span>
                 <strong style={{ fontSize: '1rem', color: '#F59E0B' }}>비트코인 (BTC)</strong>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>- {ownerLabel} 보유분</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
@@ -148,8 +243,8 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
                     min="0"
                     placeholder="예: 0.1542"
                     className="input-text"
-                    value={formData.BTC.quantity}
-                    onChange={(e) => handleQtyChange('BTC', e.target.value)}
+                    value={currentForm.BTC.quantity}
+                    onChange={(e) => handleQtyChange(activeTab, 'BTC', e.target.value)}
                     style={{ width: '100%' }}
                   />
                 </div>
@@ -164,8 +259,8 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
                     min="0"
                     placeholder="예: 85000000"
                     className="input-text"
-                    value={formData.BTC.avg_price}
-                    onChange={(e) => handleAvgPriceChange('BTC', e.target.value)}
+                    value={currentForm.BTC.avg_price}
+                    onChange={(e) => handleAvgPriceChange(activeTab, 'BTC', e.target.value)}
                     style={{ width: '100%' }}
                   />
                 </div>
@@ -180,16 +275,16 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
                     min="0"
                     placeholder="총 매입액"
                     className="input-text"
-                    value={formData.BTC.total_buy}
-                    onChange={(e) => handleTotalBuyChange('BTC', e.target.value)}
+                    value={currentForm.BTC.total_buy}
+                    onChange={(e) => handleTotalBuyChange(activeTab, 'BTC', e.target.value)}
                     style={{ width: '100%' }}
                   />
                 </div>
               </div>
 
-              {Number(formData.BTC.quantity) > 0 && (
+              {Number(currentForm.BTC.quantity) > 0 && (
                 <div style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'right' }}>
-                  예상 매입금액: <strong style={{ color: 'var(--text-primary)' }}>{formatKRW(Number(formData.BTC.quantity) * Number(formData.BTC.avg_price))}</strong>
+                  예상 매입금액: <strong style={{ color: 'var(--text-primary)' }}>{formatKRW(Number(currentForm.BTC.quantity) * Number(currentForm.BTC.avg_price))}</strong>
                 </div>
               )}
             </div>
@@ -199,6 +294,7 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                 <span style={{ fontSize: '1.1rem' }}>💎</span>
                 <strong style={{ fontSize: '1rem', color: '#8B5CF6' }}>이더리움 (ETH)</strong>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>- {ownerLabel} 보유분</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
@@ -212,8 +308,8 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
                     min="0"
                     placeholder="예: 2.5"
                     className="input-text"
-                    value={formData.ETH.quantity}
-                    onChange={(e) => handleQtyChange('ETH', e.target.value)}
+                    value={currentForm.ETH.quantity}
+                    onChange={(e) => handleQtyChange(activeTab, 'ETH', e.target.value)}
                     style={{ width: '100%' }}
                   />
                 </div>
@@ -228,8 +324,8 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
                     min="0"
                     placeholder="예: 4200000"
                     className="input-text"
-                    value={formData.ETH.avg_price}
-                    onChange={(e) => handleAvgPriceChange('ETH', e.target.value)}
+                    value={currentForm.ETH.avg_price}
+                    onChange={(e) => handleAvgPriceChange(activeTab, 'ETH', e.target.value)}
                     style={{ width: '100%' }}
                   />
                 </div>
@@ -244,29 +340,34 @@ export default function EditCryptoModal({ isOpen, onClose, initialHoldings, onSa
                     min="0"
                     placeholder="총 매입액"
                     className="input-text"
-                    value={formData.ETH.total_buy}
-                    onChange={(e) => handleTotalBuyChange('ETH', e.target.value)}
+                    value={currentForm.ETH.total_buy}
+                    onChange={(e) => handleTotalBuyChange(activeTab, 'ETH', e.target.value)}
                     style={{ width: '100%' }}
                   />
                 </div>
               </div>
 
-              {Number(formData.ETH.quantity) > 0 && (
+              {Number(currentForm.ETH.quantity) > 0 && (
                 <div style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'right' }}>
-                  예상 매입금액: <strong style={{ color: 'var(--text-primary)' }}>{formatKRW(Number(formData.ETH.quantity) * Number(formData.ETH.avg_price))}</strong>
+                  예상 매입금액: <strong style={{ color: 'var(--text-primary)' }}>{formatKRW(Number(currentForm.ETH.quantity) * Number(currentForm.ETH.avg_price))}</strong>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="modal-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
-              취소
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Save size={15} />
-              {saving ? '저장 중...' : '저장하기'}
-            </button>
+          <div className="modal-footer" style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderTop: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              * '저장하기'를 누르면 홍일 님과 윤아 님의 설정이 일괄 반영됩니다.
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
+                취소
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Save size={15} />
+                {saving ? '저장 중...' : '전체 저장하기'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

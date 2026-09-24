@@ -4,6 +4,7 @@ import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
+from typing import Optional
 import streamlit as st
 
 # 사용자 정의 6가지 표준 계좌 유형
@@ -212,21 +213,67 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS crypto_holdings (
             id TEXT PRIMARY KEY,
-            symbol TEXT NOT NULL UNIQUE,
+            owner TEXT NOT NULL DEFAULT '윤아',
+            symbol TEXT NOT NULL,
             name TEXT NOT NULL,
             quantity REAL DEFAULT 0.0,
             avg_price REAL DEFAULT 0.0,
             notes TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (owner, symbol)
         )
     ''')
-
+    
+    # 마이그레이션: owner 컬럼 부재 시 추가
     cursor.execute('''
-        INSERT INTO crypto_holdings (id, symbol, name, quantity, avg_price)
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'crypto_holdings' AND column_name = 'owner'
+            ) THEN
+                ALTER TABLE crypto_holdings ADD COLUMN owner TEXT NOT NULL DEFAULT '윤아';
+            END IF;
+        END $$;
+    ''')
+
+    # 마이그레이션: 기존 단일 UNIQUE (symbol) 제약조건 해제 및 복합 UNIQUE (owner, symbol) 설정
+    cursor.execute('''
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_constraint 
+                WHERE conrelid = 'crypto_holdings'::regclass 
+                AND conname = 'crypto_holdings_symbol_key'
+            ) THEN
+                ALTER TABLE crypto_holdings DROP CONSTRAINT crypto_holdings_symbol_key;
+            END IF;
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint 
+                WHERE conrelid = 'crypto_holdings'::regclass 
+                AND conname = 'crypto_holdings_owner_symbol_key'
+            ) THEN
+                ALTER TABLE crypto_holdings ADD CONSTRAINT crypto_holdings_owner_symbol_key UNIQUE (owner, symbol);
+            END IF;
+        END $$;
+    ''')
+
+    # 기존 단일 레코드 id 리네이밍 및 윤아 소유자 보장
+    cursor.execute('''
+        UPDATE crypto_holdings 
+        SET id = 'crypto_yoona_' || LOWER(symbol), owner = '윤아' 
+        WHERE id IN ('crypto_btc', 'crypto_eth');
+    ''')
+
+    # 기본 레코드 프로비저닝 (홍일, 윤아)
+    cursor.execute('''
+        INSERT INTO crypto_holdings (id, owner, symbol, name, quantity, avg_price)
         VALUES 
-            ('crypto_btc', 'BTC', '비트코인', 0.0, 0.0),
-            ('crypto_eth', 'ETH', '이더리움', 0.0, 0.0)
-        ON CONFLICT (symbol) DO NOTHING
+            ('crypto_hongil_btc', '홍일', 'BTC', '비트코인', 0.0, 0.0),
+            ('crypto_hongil_eth', '홍일', 'ETH', '이더리움', 0.0, 0.0),
+            ('crypto_yoona_btc', '윤아', 'BTC', '비트코인', 0.0, 0.0),
+            ('crypto_yoona_eth', '윤아', 'ETH', '이더리움', 0.0, 0.0)
+        ON CONFLICT (owner, symbol) DO NOTHING;
     ''')
     
     # 누적 납입금액 초기화
@@ -1032,11 +1079,14 @@ def apply_transfer_plan(transfer_plan):
 # Crypto Holdings (Bitcoin & Ethereum)
 # ---------------------------------------------------------
 @st.cache_data(ttl=2)
-def get_crypto_holdings():
+def get_crypto_holdings(owner: Optional[str] = None):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     try:
-        cursor.execute("SELECT * FROM crypto_holdings ORDER BY symbol ASC")
+        if owner:
+            cursor.execute("SELECT * FROM crypto_holdings WHERE owner = %s ORDER BY symbol ASC", (owner,))
+        else:
+            cursor.execute("SELECT * FROM crypto_holdings ORDER BY owner ASC, symbol ASC")
         rows = cursor.fetchall()
         return [dict(r) for r in rows]
     except Exception as e:
@@ -1045,29 +1095,36 @@ def get_crypto_holdings():
     finally:
         conn.close()
 
-def save_crypto_holding(symbol: str, quantity: float, avg_price: float, notes: str = ""):
+def save_crypto_holding(symbol: str, quantity: float, avg_price: float, owner: str = "홍일", notes: str = ""):
     conn = get_connection()
     cursor = conn.cursor()
+    owner_clean = owner.strip() if owner else "홍일"
+    sym_clean = symbol.strip().upper()
+    owner_tag = "hongil" if owner_clean == "홍일" else ("yoona" if owner_clean == "윤아" else owner_clean.lower())
+    record_id = f"crypto_{owner_tag}_{sym_clean.lower()}"
+    coin_name = '비트코인' if sym_clean == 'BTC' else ('이더리움' if sym_clean == 'ETH' else sym_clean)
+
     try:
         cursor.execute('''
-            INSERT INTO crypto_holdings (id, symbol, name, quantity, avg_price, notes, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (symbol) DO UPDATE SET
+            INSERT INTO crypto_holdings (id, owner, symbol, name, quantity, avg_price, notes, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (owner, symbol) DO UPDATE SET
                 quantity = EXCLUDED.quantity,
                 avg_price = EXCLUDED.avg_price,
                 notes = EXCLUDED.notes,
                 updated_at = EXCLUDED.updated_at
         ''', (
-            f"crypto_{symbol.lower()}",
-            symbol.upper(),
-            '비트코인' if symbol.upper() == 'BTC' else ('이더리움' if symbol.upper() == 'ETH' else symbol.upper()),
+            record_id,
+            owner_clean,
+            sym_clean,
+            coin_name,
             max(0.0, float(quantity)),
             max(0.0, float(avg_price)),
             notes or "",
             datetime.now()
         ))
         conn.commit()
-        return True, f"{symbol} 보유 정보가 성공적으로 저장되었습니다."
+        return True, f"[{owner_clean}] {sym_clean} 보유 정보가 성공적으로 저장되었습니다."
     except Exception as e:
         conn.rollback()
         return False, str(e)
