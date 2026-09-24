@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Coins, TrendingUp, TrendingDown, RefreshCw, Edit3, 
   ArrowUpRight, ArrowDownRight, PieChart, ShieldCheck, Sparkles, User, Users 
 } from 'lucide-react';
 import { api } from '../../utils/api';
 import { formatKRW, formatPercent } from '../../utils/formatters';
+import DonutChart from '../common/DonutChart';
 import EditCryptoModal from './EditCryptoModal';
 
 export default function CryptoTab({ 
@@ -16,6 +17,56 @@ export default function CryptoTab({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [chartView, setChartView] = useState('both'); // 'both' | 'owner' | 'coin'
+
+  const byOwner = data?.by_owner || {};
+  const hongil = byOwner['홍일'] || { assets: [], total_buy: 0, total_eval: 0, total_profit: 0, total_profit_pct: 0, share_pct: 0 };
+  const yoona = byOwner['윤아'] || { assets: [], total_buy: 0, total_eval: 0, total_profit: 0, total_profit_pct: 0, share_pct: 0 };
+
+  const hongilBtc = hongil.assets?.find(a => a.symbol === 'BTC') || {};
+  const hongilEth = hongil.assets?.find(a => a.symbol === 'ETH') || {};
+
+  const yoonaBtc = yoona.assets?.find(a => a.symbol === 'BTC') || {};
+  const yoonaEth = yoona.assets?.find(a => a.symbol === 'ETH') || {};
+
+  const cryptoAssetsCombined = data?.crypto_assets_combined || [];
+  const btcComb = cryptoAssetsCombined.find(a => a.symbol === 'BTC') || {};
+  const ethComb = cryptoAssetsCombined.find(a => a.symbol === 'ETH') || {};
+
+  const cryptoTotal = data?.crypto_total || {};
+  const portfolioSummary = data?.portfolio_summary || {};
+  const combined = data?.combined_summary || {};
+
+  // 홍일 vs 윤아 지분 비중 도넛 데이터
+  const ownerDonutData = useMemo(() => {
+    return [
+      {
+        label: '👨 홍일 계정',
+        value: Number(hongil.total_eval) || 0,
+        color: '#0EA5E9'
+      },
+      {
+        label: '👩 윤아 계정',
+        value: Number(yoona.total_eval) || 0,
+        color: '#EC4899'
+      }
+    ].filter(item => item.value > 0);
+  }, [hongil.total_eval, yoona.total_eval]);
+
+  // 코인별(BTC vs ETH) 비중 도넛 데이터
+  const coinDonutData = useMemo(() => {
+    const symbolColors = {
+      'BTC': '#F59E0B',
+      'ETH': '#8B5CF6'
+    };
+    return (cryptoAssetsCombined || [])
+      .map(c => ({
+        label: `${c.name || c.symbol} (${c.symbol})`,
+        value: Number(c.eval_amount) || 0,
+        color: symbolColors[c.symbol] || '#06B6D4'
+      }))
+      .filter(c => c.value > 0);
+  }, [cryptoAssetsCombined]);
 
   const loadCryptoSummary = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -51,24 +102,6 @@ export default function CryptoTab({
       </div>
     );
   }
-
-  const byOwner = data?.by_owner || {};
-  const hongil = byOwner['홍일'] || { assets: [], total_buy: 0, total_eval: 0, total_profit: 0, total_profit_pct: 0, share_pct: 0 };
-  const yoona = byOwner['윤아'] || { assets: [], total_buy: 0, total_eval: 0, total_profit: 0, total_profit_pct: 0, share_pct: 0 };
-
-  const hongilBtc = hongil.assets?.find(a => a.symbol === 'BTC') || {};
-  const hongilEth = hongil.assets?.find(a => a.symbol === 'ETH') || {};
-
-  const yoonaBtc = yoona.assets?.find(a => a.symbol === 'BTC') || {};
-  const yoonaEth = yoona.assets?.find(a => a.symbol === 'ETH') || {};
-
-  const cryptoAssetsCombined = data?.crypto_assets_combined || [];
-  const btcComb = cryptoAssetsCombined.find(a => a.symbol === 'BTC') || {};
-  const ethComb = cryptoAssetsCombined.find(a => a.symbol === 'ETH') || {};
-
-  const cryptoTotal = data?.crypto_total || {};
-  const portfolioSummary = data?.portfolio_summary || {};
-  const combined = data?.combined_summary || {};
 
   const isCombinedProfit = (combined.total_profit || 0) >= 0;
   const isCryptoProfit = (cryptoTotal.total_profit || 0) >= 0;
@@ -179,7 +212,110 @@ export default function CryptoTab({
         </div>
       </div>
 
-      {/* 2. 대시보드 비교형 듀얼 카드: [👨 홍일 계정] vs [👩 윤아 계정] */}
+      {/* 2. Interactive Donut Charts Section (지분율 / 코인별 비중) */}
+      <div className="section-card">
+        <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <PieChart size={18} color="#F59E0B" />
+            가상화폐 비중 분석 (도넛 차트)
+          </span>
+
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('both')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'both' ? '#F59E0B' : 'transparent',
+                color: chartView === 'both' ? '#000' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              지분 & 코인 듀얼
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('owner')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'owner' ? '#F59E0B' : 'transparent',
+                color: chartView === 'owner' ? '#000' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              홍일 vs 윤아 지분
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('coin')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'coin' ? '#F59E0B' : 'transparent',
+                color: chartView === 'coin' ? '#000' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              코인별 비중 (BTC/ETH)
+            </button>
+          </div>
+        </div>
+
+        {/* Charts Container */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: chartView === 'both' ? 'repeat(auto-fit, minmax(360px, 1fr))' : '1fr', 
+          gap: '24px',
+          marginTop: '12px' 
+        }}>
+          {(chartView === 'both' || chartView === 'owner') && (
+            <div style={{ 
+              background: 'var(--bg-surface)', 
+              padding: '16px 20px', 
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)' 
+            }}>
+              <DonutChart
+                title="👥 홍일 vs 윤아 지분 비중"
+                data={ownerDonutData}
+                centerLabel="가상화폐 총 평가액"
+                centerValue={formatKRW(cryptoTotal.total_eval)}
+                size={230}
+              />
+            </div>
+          )}
+
+          {(chartView === 'both' || chartView === 'coin') && (
+            <div style={{ 
+              background: 'var(--bg-surface)', 
+              padding: '16px 20px', 
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)' 
+            }}>
+              <DonutChart
+                title="🪙 비트코인 vs 이더리움 비중"
+                data={coinDonutData}
+                centerLabel="코인 총 평가액"
+                centerValue={formatKRW(cryptoTotal.total_eval)}
+                size={230}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. 대시보드 비교형 듀얼 카드: [👨 홍일 계정] vs [👩 윤아 계정] */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '18px' }}>
         
         {/* ===================== [👨 홍일 계정 카드] ===================== */}
