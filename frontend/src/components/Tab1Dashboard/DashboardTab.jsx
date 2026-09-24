@@ -51,6 +51,15 @@ export default function DashboardTab({
     return (visibleStockAssets || []).filter((item) => item.include_in_rebalance !== false);
   }, [visibleStockAssets]);
 
+  // '비중 및 괴리율' 표 전용 데이터 (예금형 자산 및 비중 제외 자산은 아예 삭제/제외)
+  const weightDriftAssets = useMemo(() => {
+    return (visibleStockAssets || []).filter((item) => {
+      if (item.is_deposit) return false;
+      if (item.include_in_rebalance === false) return false;
+      return true;
+    });
+  }, [visibleStockAssets]);
+
   const totalRebalanceStockEval = useMemo(() => {
     return Number(kpi?.rebalance_stock_eval) || rebalanceStockAssets.reduce((sum, item) => sum + (Number(item.eval_amount) || 0), 0);
   }, [kpi, rebalanceStockAssets]);
@@ -405,41 +414,20 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody>
-                {visibleStockAssets?.map((item) => {
-                  const incRebal = item.include_in_rebalance !== false;
-                  return (
-                    <tr key={item.asset_id} style={!incRebal ? { opacity: 0.75 } : {}}>
-                      <td style={{ fontWeight: 600 }}>
-                        {item.name}
-                        {item.is_deposit && (
-                          <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
-                            🏦 예금
-                          </span>
-                        )}
-                        {!incRebal && (
-                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(156, 163, 175, 0.2)', color: 'var(--text-muted)' }}>
-                            비중 제외
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>
-                        {incRebal ? `${item.weight_pct.toFixed(1)}%` : '-'}
-                      </td>
-                      <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                        {incRebal ? `${item.target_weight_pct.toFixed(1)}%` : '-'}
-                      </td>
-                      <td>
-                        {incRebal ? (
-                          <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
-                        ) : (
-                          <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            포트폴리오 비중 제외 자산
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {weightDriftAssets?.map((item) => (
+                  <tr key={item.asset_id}>
+                    <td style={{ fontWeight: 600 }}>{item.name}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 600 }}>
+                      {item.weight_pct.toFixed(1)}%
+                    </td>
+                    <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      {item.target_weight_pct.toFixed(1)}%
+                    </td>
+                    <td>
+                      <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -486,26 +474,20 @@ export default function DashboardTab({
                   </span>
                 </div>
 
-                {/* Row 3: Weight info & Drift */}
-                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
-                  {incRebal ? (
-                    <>
-                      <div className="mobile-card-row" style={{ fontSize: '0.82rem', marginBottom: '6px' }}>
-                        <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          현재 <strong>{item.weight_pct.toFixed(1)}%</strong> / 목표 <strong>{item.target_weight_pct.toFixed(1)}%</strong>
-                        </span>
-                        <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: item.drift_pct > 0 ? 'var(--color-profit)' : item.drift_pct < 0 ? 'var(--color-loss)' : 'var(--text-muted)' }}>
-                          괴리율: {item.drift_pct > 0 ? '+' : ''}{item.drift_pct.toFixed(1)}%
-                        </span>
-                      </div>
-                      <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
-                    </>
-                  ) : (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '4px 0' }}>
-                      ⚖️ 포트폴리오 비중 및 괴리율 제외 자산
+                {/* Row 3: Weight info & Drift (투자 자산만 표시, 예금형 자산은 완전 제외) */}
+                {!item.is_deposit && incRebal && (
+                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+                    <div className="mobile-card-row" style={{ fontSize: '0.82rem', marginBottom: '6px' }}>
+                      <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        현재 <strong>{item.weight_pct.toFixed(1)}%</strong> / 목표 <strong>{item.target_weight_pct.toFixed(1)}%</strong>
+                      </span>
+                      <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: item.drift_pct > 0 ? 'var(--color-profit)' : item.drift_pct < 0 ? 'var(--color-loss)' : 'var(--text-muted)' }}>
+                        괴리율: {item.drift_pct > 0 ? '+' : ''}{item.drift_pct.toFixed(1)}%
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
+                  </div>
+                )}
               </div>
             );
           })}
