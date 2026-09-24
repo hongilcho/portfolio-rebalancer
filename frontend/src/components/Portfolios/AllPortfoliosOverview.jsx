@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Sparkles, RefreshCw, Briefcase, Coins, TrendingUp, TrendingDown, 
-  ArrowUpRight, ArrowDownRight, Layers, ArrowRight, CheckSquare, Square
+  ArrowUpRight, ArrowDownRight, Layers, ArrowRight, CheckSquare, Square, PieChart
 } from 'lucide-react';
 import { api } from '../../utils/api';
 import { formatKRW, formatPercent } from '../../utils/formatters';
+import DonutChart from '../common/DonutChart';
 
 export default function AllPortfoliosOverview({ onSelectPortfolio }) {
   const [data, setData] = useState(null);
@@ -57,6 +58,75 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
 
   // Colors for multi-portfolio bar
   const portfolioColors = ['#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6'];
+
+  const [chartView, setChartView] = useState('dual'); // 'dual' | 'portfolios' | 'assetClasses'
+
+  // 포트폴리오별 구성 비중 도넛 데이터
+  const portfolioDonutData = useMemo(() => {
+    const list = (portfolios || []).map((p, idx) => ({
+      label: p.name,
+      value: Number(p.total_eval) || 0,
+      color: portfolioColors[idx % portfolioColors.length]
+    }));
+
+    if (includeCrypto && crypto && (Number(crypto.total_eval) || 0) > 0) {
+      list.push({
+        label: '🪙 가상화폐 (업비트)',
+        value: Number(crypto.total_eval),
+        color: '#F59E0B'
+      });
+    }
+
+    return list.filter(item => item.value > 0).sort((a, b) => b.value - a.value);
+  }, [portfolios, includeCrypto, crypto, portfolioColors]);
+
+  // 자산군(Asset Class)별 비중 도넛 데이터
+  const assetClassDonutData = useMemo(() => {
+    const classMap = {
+      'us_equity': { label: '🗽 미국/해외 주식 ETF', value: 0, color: '#3B82F6' },
+      'kr_equity': { label: '🇰🇷 국내 주식 ETF', value: 0, color: '#8B5CF6' },
+      'gold_commodities': { label: '🥇 금 현물/원자재', value: 0, color: '#EAB308' },
+      'deposits': { label: '🏦 정기예금', value: 0, color: '#10B981' },
+      'crypto': { label: '🪙 가상화폐', value: 0, color: '#F97316' },
+      'cash': { label: '💵 예수금/현금', value: 0, color: '#64748B' }
+    };
+
+    let aggregatedSum = 0;
+
+    (aggregatedAssets || []).forEach(item => {
+      const evalAmt = Number(item.total_eval_amount) || 0;
+      if (evalAmt <= 0) return;
+      aggregatedSum += evalAmt;
+
+      const name = (item.name || '').toLowerCase();
+      const ticker = (item.ticker || '').toUpperCase();
+      const market = (item.market || '').toUpperCase();
+      const assetType = (item.asset_type || '').toUpperCase();
+
+      if (assetType === 'CRYPTO' || market === 'CRYPTO') {
+        classMap['crypto'].value += evalAmt;
+      } else if (name.includes('금') || name.includes('gold') || ticker.includes('GOLD')) {
+        classMap['gold_commodities'].value += evalAmt;
+      } else if (name.includes('예금') || name.includes('정기예금')) {
+        classMap['deposits'].value += evalAmt;
+      } else if (market === 'US') {
+        classMap['us_equity'].value += evalAmt;
+      } else {
+        classMap['kr_equity'].value += evalAmt;
+      }
+    });
+
+    // 전체 순자산과의 차이(예수금/현금)
+    const grandTotal = Number(grand.total_eval) || 0;
+    const remainingCash = Math.max(0, grandTotal - aggregatedSum);
+    if (remainingCash > 0) {
+      classMap['cash'].value += remainingCash;
+    }
+
+    return Object.values(classMap)
+      .filter(item => item.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [aggregatedAssets, grand.total_eval]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
@@ -185,7 +255,110 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
         </div>
       </div>
 
-      {/* 2. Portfolios & Asset Class Overview Table */}
+      {/* 2. Interactive Donut Charts Section (포트폴리오별 / 자산군별 비중) */}
+      <div className="section-card">
+        <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <PieChart size={18} color="var(--accent-primary)" />
+            통합 자산 구성 비중 분석 (도넛 차트)
+          </span>
+
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('dual')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'dual' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'dual' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              포트폴리오 & 자산군 듀얼
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('portfolios')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'portfolios' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'portfolios' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              포트폴리오별 비중
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('assetClasses')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'assetClasses' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'assetClasses' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              자산군 대분류별 비중
+            </button>
+          </div>
+        </div>
+
+        {/* Charts Grid Container */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: chartView === 'dual' ? 'repeat(auto-fit, minmax(360px, 1fr))' : '1fr', 
+          gap: '24px',
+          marginTop: '12px' 
+        }}>
+          {(chartView === 'dual' || chartView === 'portfolios') && (
+            <div style={{ 
+              background: 'var(--bg-surface)', 
+              padding: '16px 20px', 
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)' 
+            }}>
+              <DonutChart
+                title="💼 포트폴리오별 순자산 구성 비중"
+                data={portfolioDonutData}
+                centerLabel="전체 순자산"
+                centerValue={formatKRW(grand.total_eval)}
+                size={230}
+              />
+            </div>
+          )}
+
+          {(chartView === 'dual' || chartView === 'assetClasses') && (
+            <div style={{ 
+              background: 'var(--bg-surface)', 
+              padding: '16px 20px', 
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)' 
+            }}>
+              <DonutChart
+                title="🌐 자산군 대분류별 자산 비중"
+                data={assetClassDonutData}
+                centerLabel="전체 순자산"
+                centerValue={formatKRW(grand.total_eval)}
+                size={230}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Portfolios & Asset Class Overview Table */}
       <div className="section-card">
         <div className="section-title">
           <span>📊 포트폴리오 및 자산군별 비교 현황</span>

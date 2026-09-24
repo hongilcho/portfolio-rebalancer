@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   TrendingUp, TrendingDown, DollarSign, Wallet, ShieldAlert, 
-  ChevronDown, ChevronUp, Edit2, RefreshCw, AlertCircle, CheckCircle2 
+  ChevronDown, ChevronUp, Edit2, RefreshCw, AlertCircle, CheckCircle2, PieChart 
 } from 'lucide-react';
 import { formatKRW, formatUSD, formatQuantity, formatPercent } from '../../utils/formatters';
 import DriftBar from '../common/DriftBar';
+import DonutChart from '../common/DonutChart';
 import EditHoldingsModal from './EditHoldingsModal';
 import { api } from '../../utils/api';
 
@@ -38,7 +39,46 @@ export default function DashboardTab({
     return (item.quantity || 0) > 0;
   });
 
-  const accSummaries = dashboardData.account_summaries || dashboardData.accounts || [];
+  const [chartView, setChartView] = useState('both'); // 'both' | 'stocks' | 'accounts'
+
+  // 종목별 비중 도넛 차트 데이터 가공
+  const stockDonutData = useMemo(() => {
+    const list = (visibleStockAssets || [])
+      .filter((item) => (item.eval_amount || 0) > 0)
+      .map((item) => ({
+        label: item.name,
+        value: item.eval_amount,
+        subLabel: item.is_deposit ? '예금' : '투자자산'
+      }));
+
+    const cashVal = cash_assets?.total_cash_krw || 0;
+    if (cashVal > 0) {
+      list.push({
+        label: '예수금(현금)',
+        value: cashVal,
+        color: '#64748B'
+      });
+    }
+
+    return list.sort((a, b) => b.value - a.value);
+  }, [visibleStockAssets, cash_assets]);
+
+  // 계좌별 비중 도넛 차트 데이터 가공
+  const accountDonutData = useMemo(() => {
+    return (accSummaries || [])
+      .map((acc) => {
+        const totalVal = acc.total_val || ((acc.stock_eval || 0) + (acc.deposit_krw || 0) + ((acc.deposit_usd || 0) * (usd_krw || 1380)));
+        return {
+          label: acc.account_alias || acc.account_name || acc.account_no || '계좌',
+          value: totalVal,
+          subLabel: acc.account_type
+        };
+      })
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [accSummaries, usd_krw]);
+
+  const totalPortfolioEval = (kpi?.total_stock_eval || 0) + (cash_assets?.total_cash_krw || 0);
 
   const isProfit = (kpi?.total_stock_profit || 0) >= 0;
 
@@ -100,7 +140,110 @@ export default function DashboardTab({
         </div>
       </div>
 
-      {/* 2. Stock Assets Section */}
+      {/* 2. Interactive Donut Charts Section (종목별 / 계좌별 비중) */}
+      <div className="section-card" style={{ marginBottom: '20px' }}>
+        <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <PieChart size={18} color="var(--accent-primary)" />
+            포트폴리오 비중 분석 (도넛 차트)
+          </span>
+
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('both')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'both' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'both' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              종목 & 계좌 듀얼
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('stocks')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'stocks' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'stocks' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              종목별 비중
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('accounts')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'accounts' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'accounts' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              계좌별 비중
+            </button>
+          </div>
+        </div>
+
+        {/* Charts Container */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: chartView === 'both' ? 'repeat(auto-fit, minmax(360px, 1fr))' : '1fr', 
+          gap: '24px',
+          marginTop: '12px' 
+        }}>
+          {(chartView === 'both' || chartView === 'stocks') && (
+            <div style={{ 
+              background: 'var(--bg-surface)', 
+              padding: '16px 20px', 
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)' 
+            }}>
+              <DonutChart
+                title="📈 종목별 자산 평가액 비중"
+                data={stockDonutData}
+                centerLabel="총 자산 평가액"
+                centerValue={formatKRW(totalPortfolioEval)}
+                size={230}
+              />
+            </div>
+          )}
+
+          {(chartView === 'both' || chartView === 'accounts') && (
+            <div style={{ 
+              background: 'var(--bg-surface)', 
+              padding: '16px 20px', 
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)' 
+            }}>
+              <DonutChart
+                title="💳 계좌별 자산 평가액 비중"
+                data={accountDonutData}
+                centerLabel="계좌 총 평가액"
+                centerValue={formatKRW(totalPortfolioEval)}
+                size={230}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Stock Assets Section */}
       <div className="section-card">
         <div className="section-title">
           <span>📈 투자 자산 현황 (주식/ETF/금/예금)</span>
