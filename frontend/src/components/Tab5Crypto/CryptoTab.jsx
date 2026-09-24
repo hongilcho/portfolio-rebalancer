@@ -451,14 +451,25 @@ export default function CryptoTab({
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{formatKRW(btcComb.current_price)}</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: (btcComb.change_24h_pct || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
-                  {(btcComb.change_24h_pct || 0) >= 0 ? '+' : ''}{btcComb.change_24h_pct?.toFixed(2)}%
+                <div style={{ fontWeight: 800, fontSize: '1.15rem', color: 'var(--accent-primary)' }}>
+                  {formatKRW(btcComb.eval_amount)}
+                </div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: (btcComb.profit_krw || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                  {(btcComb.profit_krw || 0) >= 0 ? '+' : ''}{formatKRW(btcComb.profit_krw)} ({formatPercent(btcComb.profit_pct)})
                 </div>
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.86rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>현재가 (1 BTC)</span>
+                <strong style={{ fontSize: '0.92rem' }}>
+                  {formatKRW(btcComb.current_price)}
+                  <span style={{ fontSize: '0.78rem', marginLeft: '5px', color: (btcComb.change_24h_pct || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                    {(btcComb.change_24h_pct || 0) >= 0 ? '+' : ''}{btcComb.change_24h_pct?.toFixed(2)}%
+                  </span>
+                </strong>
+              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>총 보유 수량</span>
                 <strong>{btcComb.quantity ? Number(btcComb.quantity).toFixed(8).replace(/\.?0+$/, '') : '0'} BTC</strong>
@@ -495,14 +506,25 @@ export default function CryptoTab({
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{formatKRW(ethComb.current_price)}</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: (ethComb.change_24h_pct || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
-                  {(ethComb.change_24h_pct || 0) >= 0 ? '+' : ''}{ethComb.change_24h_pct?.toFixed(2)}%
+                <div style={{ fontWeight: 800, fontSize: '1.15rem', color: 'var(--accent-primary)' }}>
+                  {formatKRW(ethComb.eval_amount)}
+                </div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: (ethComb.profit_krw || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                  {(ethComb.profit_krw || 0) >= 0 ? '+' : ''}{formatKRW(ethComb.profit_krw)} ({formatPercent(ethComb.profit_pct)})
                 </div>
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.86rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>현재가 (1 ETH)</span>
+                <strong style={{ fontSize: '0.92rem' }}>
+                  {formatKRW(ethComb.current_price)}
+                  <span style={{ fontSize: '0.78rem', marginLeft: '5px', color: (ethComb.change_24h_pct || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                    {(ethComb.change_24h_pct || 0) >= 0 ? '+' : ''}{ethComb.change_24h_pct?.toFixed(2)}%
+                  </span>
+                </strong>
+              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>총 보유 수량</span>
                 <strong>{ethComb.quantity ? Number(ethComb.quantity).toFixed(8).replace(/\.?0+$/, '') : '0'} ETH</strong>
