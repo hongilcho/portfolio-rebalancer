@@ -4,7 +4,7 @@ echo   Starting Portfolio Rebalancer (FastAPI + React)
 echo ========================================================
 
 start cmd /k "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
-timeout /t 2 /nobreak >nul
+ping 127.0.0.1 -n 3 >nul
 start cmd /k "cd frontend && npm run dev"
 
 echo.
