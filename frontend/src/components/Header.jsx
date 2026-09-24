@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee, Briefcase, Settings, Layers } from 'lucide-react';
+import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee, Briefcase, Settings, Layers, Coins } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatKRW } from '../utils/formatters';
 
@@ -64,8 +64,20 @@ export default function Header({
 
         {/* Portfolio Switcher & Manager */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-surface)', padding: '5px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-primary)' }}>
-            <Briefcase size={16} color="var(--accent-primary)" />
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px', 
+            background: 'var(--bg-surface)', 
+            padding: '5px 10px', 
+            borderRadius: 'var(--radius-md)', 
+            border: `1px solid ${currentPortfolioId === 'crypto' ? '#F59E0B' : 'var(--accent-primary)'}` 
+          }}>
+            {currentPortfolioId === 'crypto' ? (
+              <Coins size={16} color="#F59E0B" />
+            ) : (
+              <Briefcase size={16} color="var(--accent-primary)" />
+            )}
             <select
               value={currentPortfolioId}
               onChange={(e) => onSelectPortfolio(e.target.value)}
@@ -83,12 +95,17 @@ export default function Header({
               <option value="all" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', fontWeight: 700 }}>
                 🌐 [전체 자산 종합 요약]
               </option>
-              <optgroup label="💼 개별 포트폴리오" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+              <optgroup label="💼 금융 포트폴리오" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
                 {portfolios.map(p => (
                   <option key={p.id} value={p.id} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                     💼 {p.name} {p.is_default ? '(기본)' : ''}
                   </option>
                 ))}
+              </optgroup>
+              <optgroup label="🪙 가상화폐" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+                <option value="crypto" style={{ background: 'var(--bg-card)', color: '#F59E0B', fontWeight: 700 }}>
+                  🪙 가상화폐 포트폴리오 (업비트)
+                </option>
               </optgroup>
             </select>
           </div>

@@ -85,10 +85,10 @@ export default function CryptoTab({
         <div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Coins size={24} color="#F59E0B" />
-            가상화폐(비트코인/이더리움) & 통합 전체 자산
+            가상화폐 자산 포트폴리오 (업비트)
           </h2>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-            [{currentPortName}]와 홍일 & 윤아의 가상화폐를 합산한 전체 자산 현황을 조회합니다.
+            홍일 & 윤아의 비트코인 및 이더리움 자산을 개별 관리하고 종합 분석합니다.
           </span>
         </div>
 
@@ -121,79 +121,60 @@ export default function CryptoTab({
         </div>
       )}
 
-      {/* 1. Combined Total Asset Overview (금융 포트폴리오 + 가상화폐 전체) */}
-      <div className="section-card" style={{ background: 'linear-gradient(145deg, var(--bg-card), rgba(99, 102, 241, 0.04))', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+      {/* 1. Standalone Crypto Portfolio Overview (가상화폐 전체 총계) */}
+      <div className="section-card" style={{ background: 'linear-gradient(145deg, var(--bg-card), rgba(245, 158, 11, 0.04))', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
         <div className="section-title" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', fontWeight: 800 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#F59E0B', fontWeight: 800 }}>
             <Sparkles size={18} />
-            🌟 통합 전체 자산 요약 ({currentPortName} + 가상화폐 종합)
+            🪙 가상화폐 자산 종합 총계 (업비트)
           </span>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            ({currentPortName} {combined.portfolio_weight_pct?.toFixed(1)}% + 가상화폐 {combined.crypto_weight_pct?.toFixed(1)}%)
+            홍일 & 윤아 합산 총 평가액: {formatKRW(cryptoTotal.total_eval)}
           </span>
         </div>
 
         {/* 4 KPI Cards Grid */}
         <div className="kpi-grid" style={{ marginTop: '16px', marginBottom: '16px' }}>
           <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-            <div className="kpi-title">💎 통합 총 평가금액 (전체 자산)</div>
+            <div className="kpi-title">💎 가상화폐 총 평가금액</div>
             <div className="kpi-value" style={{ color: 'var(--accent-primary)', fontSize: '1.45rem' }}>
-              {formatKRW(combined.total_eval)}
+              {formatKRW(cryptoTotal.total_eval)}
             </div>
           </div>
 
           <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-            <div className="kpi-title">🛒 통합 총 매입금액 (원금 합계)</div>
+            <div className="kpi-title">🛒 가상화폐 총 매입금액 (원금)</div>
             <div className="kpi-value" style={{ fontSize: '1.45rem' }}>
-              {formatKRW(combined.total_buy)}
+              {formatKRW(cryptoTotal.total_buy)}
             </div>
           </div>
 
           <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-            <div className="kpi-title">📈 통합 총 평가손익 (수익률)</div>
-            <div className="kpi-value" style={{ color: isCombinedProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontSize: '1.45rem' }}>
-              {isCombinedProfit ? '+' : ''}{formatKRW(combined.total_profit)}
+            <div className="kpi-title">📈 가상화폐 총 평가손익 (수익률)</div>
+            <div className="kpi-value" style={{ color: isCryptoProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontSize: '1.45rem' }}>
+              {isCryptoProfit ? '+' : ''}{formatKRW(cryptoTotal.total_profit)}
               <span style={{ fontSize: '0.95rem', marginLeft: '6px', fontWeight: 600 }}>
-                ({formatPercent(combined.total_profit_pct)})
+                ({formatPercent(cryptoTotal.total_profit_pct)})
               </span>
             </div>
           </div>
 
           <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-            <div className="kpi-title">⚖️ 전체 자산 배분 비중</div>
+            <div className="kpi-title">⚖️ 홍일 vs 윤아 지분율 비중</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontWeight: 700 }}>
-                <span style={{ color: 'var(--accent-primary)' }}>🏦 금융 {combined.portfolio_weight_pct?.toFixed(1)}%</span>
-                <span style={{ color: '#F59E0B' }}>🪙 코인 {combined.crypto_weight_pct?.toFixed(1)}%</span>
+                <span style={{ color: '#0EA5E9' }}>👨 홍일 {hongil.share_pct?.toFixed(1)}%</span>
+                <span style={{ color: '#EC4899' }}>👩 윤아 {yoona.share_pct?.toFixed(1)}%</span>
               </div>
               <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
-                <div style={{ width: `${combined.portfolio_weight_pct || 0}%`, background: 'var(--accent-primary)' }} title={`${currentPortName}: ${combined.portfolio_weight_pct?.toFixed(1)}%`} />
-                <div style={{ width: `${btcComb.weight_in_combined_pct || 0}%`, background: '#F59E0B' }} title={`비트코인: ${btcComb.weight_in_combined_pct?.toFixed(1)}%`} />
-                <div style={{ width: `${ethComb.weight_in_combined_pct || 0}%`, background: '#8B5CF6' }} title={`이더리움: ${ethComb.weight_in_combined_pct?.toFixed(1)}%`} />
+                <div style={{ width: `${hongil.share_pct || 0}%`, background: '#0EA5E9' }} title={`홍일: ${hongil.share_pct?.toFixed(1)}%`} />
+                <div style={{ width: `${yoona.share_pct || 0}%`, background: '#EC4899' }} title={`윤아: ${yoona.share_pct?.toFixed(1)}%`} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <span>{formatKRW(hongil.total_eval)}</span>
+                <span>{formatKRW(yoona.total_eval)}</span>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Crypto Owner Share Bar */}
-        <div style={{ background: 'var(--bg-surface)', padding: '12px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-            <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Users size={16} color="#F59E0B" />
-              가상화폐 자산 지분 비중 (총 평가액: {formatKRW(cryptoTotal.total_eval)})
-            </span>
-            <div style={{ display: 'flex', gap: '14px', fontSize: '0.82rem' }}>
-              <span style={{ color: '#0EA5E9', fontWeight: 700 }}>
-                👨 홍일: {formatKRW(hongil.total_eval)} ({hongil.share_pct?.toFixed(1)}%)
-              </span>
-              <span style={{ color: '#EC4899', fontWeight: 700 }}>
-                👩 윤아: {formatKRW(yoona.total_eval)} ({yoona.share_pct?.toFixed(1)}%)
-              </span>
-            </div>
-          </div>
-          <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
-            <div style={{ width: `${hongil.share_pct || 0}%`, background: '#0EA5E9' }} title={`홍일: ${hongil.share_pct?.toFixed(1)}%`} />
-            <div style={{ width: `${yoona.share_pct || 0}%`, background: '#EC4899' }} title={`윤아: ${yoona.share_pct?.toFixed(1)}%`} />
           </div>
         </div>
       </div>
@@ -555,7 +536,7 @@ export default function CryptoTab({
       {/* 4. Detailed Comparison Table */}
       <div className="section-card">
         <div className="section-title">
-          <span>📊 자산군별 세부 비교 및 비중 현황</span>
+          <span>📊 계정별 가상화폐 세부 보유 및 비중 현황</span>
         </div>
 
         <div className="table-container">
@@ -569,31 +550,11 @@ export default function CryptoTab({
                 <th>현재 평가금액(원)</th>
                 <th>평가 손익(원)</th>
                 <th>수익률(%)</th>
-                <th>통합 자산 비중(%)</th>
+                <th>가상화폐 내 비중(%)</th>
               </tr>
             </thead>
             <tbody>
-              {/* 1) Financial Portfolio Row */}
-              <tr>
-                <td style={{ fontWeight: 700 }}>
-                  🏦 {currentPortName}
-                </td>
-                <td style={{ color: 'var(--text-muted)' }}>공통</td>
-                <td style={{ color: 'var(--text-secondary)' }}>주식/ETF/금/예수금</td>
-                <td>{formatKRW(portfolioSummary.total_buy)}</td>
-                <td style={{ fontWeight: 600 }}>{formatKRW(portfolioSummary.total_eval)}</td>
-                <td style={{ color: isPortfolioProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                  {isPortfolioProfit ? '+' : ''}{formatKRW(portfolioSummary.total_profit)}
-                </td>
-                <td style={{ color: isPortfolioProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                  {formatPercent(portfolioSummary.total_profit_pct)}
-                </td>
-                <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
-                  {portfolioSummary.weight_pct?.toFixed(2)}%
-                </td>
-              </tr>
-
-              {/* 2) Hongil BTC */}
+              {/* 1) Hongil BTC */}
               <tr>
                 <td style={{ fontWeight: 600, color: '#F59E0B', paddingLeft: '20px' }}>
                   🪙 비트코인 (BTC)
@@ -608,10 +569,10 @@ export default function CryptoTab({
                 <td style={{ color: (hongilBtc.profit_krw || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
                   {formatPercent(hongilBtc.profit_pct)}
                 </td>
-                <td>{hongilBtc.weight_in_combined_pct?.toFixed(2)}%</td>
+                <td>{hongilBtc.weight_in_crypto_pct?.toFixed(2)}%</td>
               </tr>
 
-              {/* 3) Hongil ETH */}
+              {/* 2) Hongil ETH */}
               <tr>
                 <td style={{ fontWeight: 600, color: '#8B5CF6', paddingLeft: '20px' }}>
                   💎 이더리움 (ETH)
@@ -626,10 +587,10 @@ export default function CryptoTab({
                 <td style={{ color: (hongilEth.profit_krw || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
                   {formatPercent(hongilEth.profit_pct)}
                 </td>
-                <td>{hongilEth.weight_in_combined_pct?.toFixed(2)}%</td>
+                <td>{hongilEth.weight_in_crypto_pct?.toFixed(2)}%</td>
               </tr>
 
-              {/* 4) Hongil Subtotal */}
+              {/* 3) Hongil Subtotal */}
               <tr style={{ background: 'rgba(14, 165, 233, 0.04)', fontStyle: 'italic' }}>
                 <td style={{ fontWeight: 700, paddingLeft: '28px', color: '#0EA5E9' }}>
                   ↳ 👨 홍일 가상화폐 소계
@@ -645,11 +606,11 @@ export default function CryptoTab({
                   {formatPercent(hongil.total_profit_pct)}
                 </td>
                 <td style={{ fontWeight: 700, color: '#0EA5E9' }}>
-                  {hongil.weight_in_combined_pct?.toFixed(2)}%
+                  {hongil.share_pct?.toFixed(2)}%
                 </td>
               </tr>
 
-              {/* 5) Yoona BTC */}
+              {/* 4) Yoona BTC */}
               <tr>
                 <td style={{ fontWeight: 600, color: '#F59E0B', paddingLeft: '20px' }}>
                   🪙 비트코인 (BTC)
@@ -664,10 +625,10 @@ export default function CryptoTab({
                 <td style={{ color: (yoonaBtc.profit_krw || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
                   {formatPercent(yoonaBtc.profit_pct)}
                 </td>
-                <td>{yoonaBtc.weight_in_combined_pct?.toFixed(2)}%</td>
+                <td>{yoonaBtc.weight_in_crypto_pct?.toFixed(2)}%</td>
               </tr>
 
-              {/* 6) Yoona ETH */}
+              {/* 5) Yoona ETH */}
               <tr>
                 <td style={{ fontWeight: 600, color: '#8B5CF6', paddingLeft: '20px' }}>
                   💎 이더리움 (ETH)
@@ -682,10 +643,10 @@ export default function CryptoTab({
                 <td style={{ color: (yoonaEth.profit_krw || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
                   {formatPercent(yoonaEth.profit_pct)}
                 </td>
-                <td>{yoonaEth.weight_in_combined_pct?.toFixed(2)}%</td>
+                <td>{yoonaEth.weight_in_crypto_pct?.toFixed(2)}%</td>
               </tr>
 
-              {/* 7) Yoona Subtotal */}
+              {/* 6) Yoona Subtotal */}
               <tr style={{ background: 'rgba(236, 72, 153, 0.04)', fontStyle: 'italic' }}>
                 <td style={{ fontWeight: 700, paddingLeft: '28px', color: '#EC4899' }}>
                   ↳ 👩 윤아 가상화폐 소계
@@ -701,42 +662,22 @@ export default function CryptoTab({
                   {formatPercent(yoona.total_profit_pct)}
                 </td>
                 <td style={{ fontWeight: 700, color: '#EC4899' }}>
-                  {yoona.weight_in_combined_pct?.toFixed(2)}%
+                  {yoona.share_pct?.toFixed(2)}%
                 </td>
               </tr>
 
-              {/* 8) Crypto Total Subtotal Row */}
-              <tr style={{ background: 'rgba(245, 158, 11, 0.05)', fontStyle: 'italic' }}>
-                <td style={{ fontWeight: 800, paddingLeft: '20px', color: '#F59E0B' }}>
-                  ↳ 🪙 가상화폐 전체 종합 소계
-                </td>
-                <td style={{ fontWeight: 800, color: '#F59E0B' }}>홍일 + 윤아</td>
-                <td>전체 코인 종합</td>
-                <td style={{ fontWeight: 700 }}>{formatKRW(cryptoTotal.total_buy)}</td>
-                <td style={{ fontWeight: 700 }}>{formatKRW(cryptoTotal.total_eval)}</td>
+              {/* 7) Grand Crypto Total Row */}
+              <tr className="total-row" style={{ fontSize: '1rem' }}>
+                <td style={{ fontWeight: 800 }}>🌟 🪙 가상화폐 전체 총계</td>
+                <td style={{ fontWeight: 800 }}>홍일 + 윤아</td>
+                <td>BTC + ETH 종합</td>
+                <td>{formatKRW(cryptoTotal.total_buy)}</td>
+                <td style={{ fontWeight: 800, color: 'var(--accent-primary)' }}>{formatKRW(cryptoTotal.total_eval)}</td>
                 <td style={{ color: isCryptoProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 800 }}>
                   {isCryptoProfit ? '+' : ''}{formatKRW(cryptoTotal.total_profit)}
                 </td>
                 <td style={{ color: isCryptoProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 800 }}>
                   {formatPercent(cryptoTotal.total_profit_pct)}
-                </td>
-                <td style={{ fontWeight: 800, color: '#F59E0B' }}>
-                  {combined.crypto_weight_pct?.toFixed(2)}%
-                </td>
-              </tr>
-
-              {/* 9) Total Combined Row */}
-              <tr className="total-row" style={{ fontSize: '1rem' }}>
-                <td style={{ fontWeight: 800 }}>🌟 통합 전체 합계</td>
-                <td style={{ fontWeight: 800 }}>가족 전체</td>
-                <td>전체 자산 종합</td>
-                <td>{formatKRW(combined.total_buy)}</td>
-                <td style={{ fontWeight: 800, color: 'var(--accent-primary)' }}>{formatKRW(combined.total_eval)}</td>
-                <td style={{ color: isCombinedProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 800 }}>
-                  {isCombinedProfit ? '+' : ''}{formatKRW(combined.total_profit)}
-                </td>
-                <td style={{ color: isCombinedProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 800 }}>
-                  {formatPercent(combined.total_profit_pct)}
                 </td>
                 <td style={{ fontWeight: 800 }}>100.00%</td>
               </tr>

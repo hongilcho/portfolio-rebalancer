@@ -279,7 +279,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
                   <td>
                     <button 
                       className="btn btn-secondary btn-sm"
-                      onClick={() => onSelectPortfolio('tab_crypto')}
+                      onClick={() => onSelectPortfolio('crypto')}
                       style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', fontSize: '0.78rem' }}
                     >
                       이동 <ArrowRight size={12} />

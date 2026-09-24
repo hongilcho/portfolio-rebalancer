@@ -166,16 +166,23 @@ def get_crypto_summary(portfolio_id: Optional[str] = "default"):
     portfolio_weight_pct = (portfolio_eval / combined_eval * 100) if combined_eval > 0 else 0.0
     crypto_weight_pct = (crypto_total_eval / combined_eval * 100) if combined_eval > 0 else 0.0
 
-    # Individual combined crypto weights in total assets
+    # Individual combined crypto weights
     for item in crypto_assets_combined:
+        item["weight_in_crypto_pct"] = (item["eval_amount"] / crypto_total_eval * 100) if crypto_total_eval > 0 else 0.0
         item["weight_in_combined_pct"] = (item["eval_amount"] / combined_eval * 100) if combined_eval > 0 else 0.0
 
-    # Owner weights in total assets
+    # Owner weights
     for owner_name in OWNERS:
+        by_owner[owner_name]["weight_in_crypto_pct"] = (
+            (by_owner[owner_name]["total_eval"] / crypto_total_eval * 100) if crypto_total_eval > 0 else 0.0
+        )
         by_owner[owner_name]["weight_in_combined_pct"] = (
             (by_owner[owner_name]["total_eval"] / combined_eval * 100) if combined_eval > 0 else 0.0
         )
         for a in by_owner[owner_name]["assets"]:
+            a["weight_in_crypto_pct"] = (
+                (a["eval_amount"] / crypto_total_eval * 100) if crypto_total_eval > 0 else 0.0
+            )
             a["weight_in_combined_pct"] = (
                 (a["eval_amount"] / combined_eval * 100) if combined_eval > 0 else 0.0
             )

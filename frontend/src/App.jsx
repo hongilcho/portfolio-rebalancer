@@ -20,8 +20,7 @@ const TABS = [
   { id: 'tab2', label: '🎯 2. 목표 비중 설정', icon: Target },
   { id: 'tab3', label: '⚖️ 3. 리밸런싱 전략', icon: Scale },
   { id: 'tab4', label: '📝 4. 매매 기록', icon: History },
-  { id: 'tab5', label: '🪙 5. 가상화폐 자산', icon: Coins },
-  { id: 'tab6', label: '⚙️ 6. 기초 환경 세팅', icon: Settings },
+  { id: 'tab5', label: '⚙️ 5. 계좌 마스터 관리', icon: Settings },
 ];
 
 export default function App() {
@@ -144,9 +143,8 @@ export default function App() {
         <main>
           <AllPortfoliosOverview 
             onSelectPortfolio={(id) => {
-              if (id === 'tab_crypto') {
-                handleSelectPortfolio('default');
-                setActiveTab('tab5');
+              if (id === 'tab_crypto' || id === 'crypto') {
+                handleSelectPortfolio('crypto');
               } else {
                 handleSelectPortfolio(id);
                 setActiveTab('tab1');
@@ -154,9 +152,14 @@ export default function App() {
             }} 
           />
         </main>
+      ) : currentPortfolioId === 'crypto' ? (
+        /* Content View: When 'crypto' is selected -> Independent Crypto Dashboard */
+        <main>
+          <CryptoTab />
+        </main>
       ) : (
         <>
-          {/* Tabs Navigation for individual portfolio */}
+          {/* Tabs Navigation for individual financial portfolio */}
           <nav className="tabs-nav">
             {TABS.map((tab) => {
               const Icon = tab.icon;
@@ -217,13 +220,6 @@ export default function App() {
               )}
 
               {activeTab === 'tab5' && (
-                <CryptoTab 
-                  currentPortfolioId={currentPortfolioId}
-                  portfolioName={portfolios.find((p) => p.id === currentPortfolioId)?.name || '금융 포트폴리오'}
-                />
-              )}
-
-              {activeTab === 'tab6' && (
                 <SettingsTab
                   pricesData={pricesData}
                   accounts={accounts}
