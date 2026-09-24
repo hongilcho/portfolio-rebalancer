@@ -19,7 +19,9 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
   const portfolioColors = useMemo(() => ['#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6'], []);
 
   const grand = data?.grand_total || {};
+  const portfolios = data?.portfolios || [];
   const crypto = data?.crypto || null;
+  const aggregatedAssets = data?.aggregated_assets || [];
 
   // 포트폴리오별 구성 비중 도넛 데이터
   const portfolioDonutData = useMemo(() => {
