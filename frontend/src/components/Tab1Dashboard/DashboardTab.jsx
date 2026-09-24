@@ -110,9 +110,9 @@ export default function DashboardTab({
   // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (예수금 제외)
   const assetTypeDonutData = useMemo(() => {
     const categories = {
-      '주식': { label: '📈 주식 (국내/해외/ETF)', value: 0, color: '#3B82F6' },
-      '채권': { label: '📜 채권 (국채 등)', value: 0, color: '#8B5CF6' },
-      '대체투자': { label: '🥇 대체투자 (금/원자재)', value: 0, color: '#F59E0B' },
+      '주식': { label: '📈 주식', value: 0, color: '#3B82F6' },
+      '채권': { label: '📜 채권', value: 0, color: '#8B5CF6' },
+      '대체투자': { label: '🥇 대체투자', value: 0, color: '#EAB308' },
       '예금': { label: '🏦 예금', value: 0, color: '#10B981' },
     };
 

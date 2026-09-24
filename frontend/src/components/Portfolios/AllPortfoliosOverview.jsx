@@ -45,11 +45,10 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
   // 자산군(Asset Class)별 비중 도넛 데이터 (예수금/현금 제외, 순수 자산군)
   const assetClassDonutData = useMemo(() => {
     const classMap = {
-      'us_equity': { label: '🗽 미국/해외 주식 ETF', value: 0, color: '#3B82F6' },
-      'kr_equity': { label: '🇰🇷 국내 주식 ETF', value: 0, color: '#6366F1' },
-      'bonds': { label: '📜 채권 (국채 등)', value: 0, color: '#8B5CF6' },
-      'gold_commodities': { label: '🥇 대체투자 (금/원자재)', value: 0, color: '#EAB308' },
-      'deposits': { label: '🏦 정기예금', value: 0, color: '#10B981' },
+      'equity': { label: '📈 주식', value: 0, color: '#3B82F6' },
+      'bonds': { label: '📜 채권', value: 0, color: '#8B5CF6' },
+      'gold_commodities': { label: '🥇 대체투자', value: 0, color: '#EAB308' },
+      'deposits': { label: '🏦 예금', value: 0, color: '#10B981' },
       'crypto': { label: '🪙 가상화폐', value: 0, color: '#F97316' },
     };
 
@@ -78,10 +77,9 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
         classMap['gold_commodities'].value += evalAmt;
       } else if (name.includes('국채') || name.includes('채권') || name.includes('bond') || ticker === '0085P0' || ticker === '476760') {
         classMap['bonds'].value += evalAmt;
-      } else if (market === 'US') {
-        classMap['us_equity'].value += evalAmt;
       } else {
-        classMap['kr_equity'].value += evalAmt;
+        // 국내/해외 구분 없이 모두 '주식'
+        classMap['equity'].value += evalAmt;
       }
     });
 
