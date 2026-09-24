@@ -6,6 +6,8 @@ from backend.config import NAMUH_APP_KEY, NAMUH_APP_SECRET
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+import threading
+
 class NamuhAPIClient:
     """
     NH투자증권 Namuh PLUG 오픈 API 연동 클래스
@@ -17,35 +19,46 @@ class NamuhAPIClient:
         self.base_url = "https://api.nhplug.com:8443" 
         self.access_token = None
         self.token_expiry = 0
+        self.token_cooldown = 0
+        self._lock = threading.Lock()
 
     def get_access_token(self):
         """
-        OAuth 2.0 접근 토큰(Access Token) 발급
+        OAuth 2.0 접근 토큰(Access Token) 발급 (스레드 안전 및 실패 시 쿨다운 적용)
         """
-        if time.time() < self.token_expiry and self.access_token:
-            return self.access_token
+        with self._lock:
+            now = time.time()
+            if now < self.token_expiry and self.access_token:
+                return self.access_token
+            if now < self.token_cooldown:
+                return None
+                
+            url = f"{self.base_url}/oauth2/token"
+            headers = {"content-type": "application/x-www-form-urlencoded"}
+            body = {
+                "grant_type": "client_credentials",
+                "appkey": self.app_key,
+                "appsecretkey": self.app_secret,
+                "scope": "oob"
+            }
             
-        url = f"{self.base_url}/oauth2/token"
-        headers = {"content-type": "application/x-www-form-urlencoded"}
-        body = {
-            "grant_type": "client_credentials",
-            "appkey": self.app_key,
-            "appsecretkey": self.app_secret,
-            "scope": "oob"
-        }
-        
-        try:
-            res = requests.post(url, headers=headers, data=body, timeout=5, verify=False)
-            if res.status_code != 200:
-                print(f"Namuh API Token Error Details: {res.text}")
-            res.raise_for_status()
-            data = res.json()
-            self.access_token = data.get("access_token")
-            self.token_expiry = time.time() + int(data.get("expires_in", 86400)) - 60
-            return self.access_token
-        except Exception as e:
-            print(f"Namuh API Token Error: {e}")
-            return None
+            try:
+                res = requests.post(url, headers=headers, data=body, timeout=3, verify=False)
+                if res.status_code != 200:
+                    print(f"Namuh API Token Error Details: {res.text}")
+                    # 호출 제한(429/403 등) 시 60초간 재요청 방지하여 대체 경로(Naver/yfinance) 즉시 진행
+                    self.token_cooldown = now + 60.0
+                    return None
+                res.raise_for_status()
+                data = res.json()
+                self.access_token = data.get("access_token")
+                self.token_expiry = now + int(data.get("expires_in", 86400)) - 60
+                self.token_cooldown = 0
+                return self.access_token
+            except Exception as e:
+                print(f"Namuh API Token Error: {e}")
+                self.token_cooldown = now + 60.0
+                return None
 
     def fetch_current_price(self, ticker: str, market: str = "KR"):
         """

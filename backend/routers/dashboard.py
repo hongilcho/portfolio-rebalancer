@@ -3,7 +3,7 @@ import math
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any, List
 
-from data.data_manager import get_all_accounts, get_all_assets, get_holdings_by_account, clean_deposit_shadow_accounts
+from data.data_manager import get_all_accounts, get_all_assets, get_all_holdings
 from backend.services import market_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -13,12 +13,17 @@ def get_dashboard_summary(portfolio_id: str = "default"):
     """
     포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
     """
-    clean_deposit_shadow_accounts()
     accounts = get_all_accounts(portfolio_id=portfolio_id)
     assets = get_all_assets(portfolio_id=portfolio_id)
     
     _, price_map = market_service.get_prices()
     usd_krw = market_service.usd_krw
+
+    # N+1 쿼리 방지: 전체 보유 종목을 단일 쿼리로 조회 후 메모리에서 계좌별 매핑
+    all_holdings = get_all_holdings()
+    holdings_by_acc: Dict[str, List[Dict[str, Any]]] = {}
+    for h in all_holdings:
+        holdings_by_acc.setdefault(str(h['account_id']), []).append(h)
     
     # 1. Account-level calculations
     account_summaries = []
@@ -35,7 +40,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
         dep_usd_krw = dep_usd * usd_krw
         total_deposit = dep_krw + dep_usd_krw
         
-        acc_holdings = get_holdings_by_account(acc['id'])
+        acc_holdings = holdings_by_acc.get(acc_id, [])
         
         stock_eval = 0.0
         stock_buy_total = 0.0
@@ -144,7 +149,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
     total_usd_cash = sum(float(a['deposit_usd']) for a in accounts)
     
     for acc in accounts:
-        acc_holdings = get_holdings_by_account(acc['id'])
+        acc_holdings = holdings_by_acc.get(str(acc['id']), [])
         for h in acc_holdings:
             aid = str(h['asset_id'])
             asset_meta = asset_dict_by_id.get(aid, {})

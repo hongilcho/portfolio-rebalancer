@@ -18,7 +18,7 @@ class CryptoHoldingsUpdateRequest(BaseModel):
     holdings: List[CryptoHoldingItem]
 
 @router.get("/summary")
-def get_crypto_summary(portfolio_id: Optional[str] = "default"):
+def get_crypto_summary(portfolio_id: Optional[str] = "default", include_portfolio: bool = False):
     # 1. Fetch live prices & DB holdings
     prices_map = get_crypto_prices()
     db_holdings = get_crypto_holdings()
@@ -134,28 +134,31 @@ def get_crypto_summary(portfolio_id: Optional[str] = "default"):
         else:
             by_owner[owner_name]["share_pct"] = 0.0
 
-    # 3. Fetch existing financial portfolio data
+    # 3. Financial portfolio data (요청 시에만 조회하여 불필요한 시세 동기화 지연 방지)
     target_pid = portfolio_id or "default"
-    port = get_portfolio(target_pid)
-    portfolio_name = port.get("name", "금융 포트폴리오") if port else "금융 포트폴리오"
+    portfolio_name = "금융 포트폴리오"
+    portfolio_eval = 0.0
+    portfolio_buy = 0.0
+    portfolio_profit = 0.0
+    portfolio_profit_pct = 0.0
 
-    try:
-        dash = get_dashboard_summary(portfolio_id=target_pid)
-        kpi = dash.get("kpi", {})
-        cash = dash.get("cash_assets", {})
+    if include_portfolio:
+        port = get_portfolio(target_pid)
+        if port:
+            portfolio_name = port.get("name", "금융 포트폴리오")
+        try:
+            dash = get_dashboard_summary(portfolio_id=target_pid)
+            kpi = dash.get("kpi", {})
+            cash = dash.get("cash_assets", {})
 
-        portfolio_eval = float(kpi.get("total_portfolio_eval", 0.0))
-        portfolio_stock_buy = float(kpi.get("total_stock_buy", 0.0))
-        portfolio_cash = float(cash.get("total_cash_krw", 0.0))
-        portfolio_buy = portfolio_stock_buy + portfolio_cash
-        portfolio_profit = float(kpi.get("total_stock_profit", 0.0))
-        portfolio_profit_pct = float(kpi.get("total_stock_return", 0.0))
-    except Exception as e:
-        print(f"Error loading dashboard summary in crypto router: {e}")
-        portfolio_eval = 0.0
-        portfolio_buy = 0.0
-        portfolio_profit = 0.0
-        portfolio_profit_pct = 0.0
+            portfolio_eval = float(kpi.get("total_portfolio_eval", 0.0))
+            portfolio_stock_buy = float(kpi.get("total_stock_buy", 0.0))
+            portfolio_cash = float(cash.get("total_cash_krw", 0.0))
+            portfolio_buy = portfolio_stock_buy + portfolio_cash
+            portfolio_profit = float(kpi.get("total_stock_profit", 0.0))
+            portfolio_profit_pct = float(kpi.get("total_stock_return", 0.0))
+        except Exception as e:
+            print(f"Error loading dashboard summary in crypto router: {e}")
 
     # 4. Calculate Combined Metrics (Portfolio + All Crypto)
     combined_eval = portfolio_eval + crypto_total_eval
