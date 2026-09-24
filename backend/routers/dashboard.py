@@ -3,7 +3,7 @@ import math
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any, List
 
-from data.data_manager import get_all_accounts, get_all_assets, get_holdings_by_account
+from data.data_manager import get_all_accounts, get_all_assets, get_holdings_by_account, ensure_deposit_holdings_integrity
 from backend.services import market_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -13,6 +13,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
     """
     포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
     """
+    ensure_deposit_holdings_integrity(portfolio_id=portfolio_id)
     accounts = get_all_accounts(portfolio_id=portfolio_id)
     assets = get_all_assets(portfolio_id=portfolio_id)
     

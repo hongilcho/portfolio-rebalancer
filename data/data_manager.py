@@ -238,6 +238,67 @@ def init_db():
 
     conn.commit()
     conn.close()
+    ensure_deposit_holdings_integrity()
+
+def ensure_deposit_holdings_integrity(portfolio_id: str = None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        if portfolio_id:
+            cursor.execute('''
+                SELECT id, name, ticker, deposit_principal, portfolio_id, account_no, allowed_accounts
+                FROM assets
+                WHERE is_deposit = TRUE AND deposit_principal > 0 AND portfolio_id = %s
+            ''', (portfolio_id,))
+        else:
+            cursor.execute('''
+                SELECT id, name, ticker, deposit_principal, portfolio_id, account_no, allowed_accounts
+                FROM assets
+                WHERE is_deposit = TRUE AND deposit_principal > 0
+            ''')
+        deposits = cursor.fetchall()
+        modified = False
+        for dep in deposits:
+            asset_id, name, ticker, principal, pid, acc_no, allowed_raw = dep
+            clean_acc_no = (acc_no or '').strip()
+            if not clean_acc_no:
+                clean_acc_no = ticker if ticker and not ticker.startswith('DEP-') else f'DEP-{str(asset_id)[:6].upper()}'
+
+            cursor.execute('SELECT id FROM accounts WHERE account_no = %s AND portfolio_id = %s', (clean_acc_no, pid or 'default'))
+            acc_row = cursor.fetchone()
+            if acc_row:
+                deposit_acc_id = str(acc_row[0])
+            else:
+                deposit_acc_id = generate_id()
+                cursor.execute('''
+                    INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, portfolio_id)
+                    VALUES (%s, %s, %s, %s, 0.0, 0.0, 0.0, 0.0, %s, 99, 'ANNUAL', 0.0, %s)
+                ''', (deposit_acc_id, clean_acc_no, name.strip(), '정기예금', f'정기예금 ({name.strip()})', pid or 'default'))
+                modified = True
+
+            cursor.execute('SELECT id, quantity, avg_price FROM holdings WHERE account_id = %s AND asset_id = %s', (deposit_acc_id, str(asset_id)))
+            h_row = cursor.fetchone()
+            if not h_row or float(h_row[1]) <= 0 or float(h_row[2]) <= 0:
+                cursor.execute('''
+                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price)
+                    VALUES (%s, %s, %s, 1.0, %s)
+                    ON CONFLICT (account_id, asset_id)
+                    DO UPDATE SET quantity = 1.0, avg_price = EXCLUDED.avg_price
+                ''', (generate_id(), deposit_acc_id, str(asset_id), float(principal)))
+                modified = True
+
+            if not acc_no or not allowed_raw or allowed_raw == '[]':
+                cursor.execute('UPDATE assets SET allowed_accounts = %s, account_no = %s WHERE id = %s', (json.dumps([deposit_acc_id]), clean_acc_no, str(asset_id)))
+                modified = True
+
+        if modified:
+            conn.commit()
+            clear_all_caches()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error ensuring deposit holdings: {e}")
+    finally:
+        conn.close()
 
 # ---------------------------------------------------------
 # Portfolios CRUD
