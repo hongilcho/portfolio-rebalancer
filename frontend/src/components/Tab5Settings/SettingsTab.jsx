@@ -141,10 +141,7 @@ export default function SettingsTab({
         ? (assetForm.ticker.trim() || `DEP-${Date.now().toString(36).slice(-6).toUpperCase()}`)
         : (assetForm.is_gold ? 'M04020000' : assetForm.ticker.trim().toUpperCase());
 
-      const targetAccId = isDep ? (assetForm.account_id || (accounts?.[0]?.id ? String(accounts[0].id) : null)) : null;
-      const finalAllowedAccs = isDep 
-        ? (targetAccId ? [String(targetAccId)] : [])
-        : assetForm.allowed_accounts;
+      const finalAllowedAccs = isDep ? [] : assetForm.allowed_accounts;
 
       await api.createAsset({
         name: assetForm.name.trim(),
@@ -164,7 +161,6 @@ export default function SettingsTab({
         early_termination_rate: Number(assetForm.early_termination_rate || 0),
         tax_rate: Number(assetForm.tax_rate !== undefined ? assetForm.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(assetForm.lock_rebalance_sell !== false),
-        account_id: targetAccId,
         account_no: assetForm.account_no ? assetForm.account_no.trim() : ''
       });
       alert('자산이 성공적으로 등록되었습니다.');
@@ -185,13 +181,10 @@ export default function SettingsTab({
     try {
       const isDep = Boolean(assetForm.is_deposit);
       const finalTicker = isDep 
-        ? (assetForm.ticker.trim() || `DEP-${editAssetTarget.id.slice(0, 6).toUpperCase()}`)
+        ? (assetForm.ticker.trim() || editAssetTarget.ticker || `DEP-${editAssetTarget.id.slice(0, 6).toUpperCase()}`)
         : (assetForm.is_gold ? 'M04020000' : assetForm.ticker.trim().toUpperCase());
 
-      const targetAccId = isDep ? (assetForm.account_id || (accounts?.[0]?.id ? String(accounts[0].id) : null)) : null;
-      const finalAllowedAccs = isDep 
-        ? (targetAccId ? [String(targetAccId)] : [])
-        : assetForm.allowed_accounts;
+      const finalAllowedAccs = isDep ? [] : assetForm.allowed_accounts;
 
       await api.updateAsset(editAssetTarget.id, {
         name: assetForm.name.trim(),
@@ -210,7 +203,6 @@ export default function SettingsTab({
         early_termination_rate: Number(assetForm.early_termination_rate || 0),
         tax_rate: Number(assetForm.tax_rate !== undefined ? assetForm.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(assetForm.lock_rebalance_sell !== false),
-        account_id: targetAccId,
         account_no: assetForm.account_no ? assetForm.account_no.trim() : ''
       });
       alert('자산이 성공적으로 수정되었습니다.');
@@ -289,7 +281,7 @@ export default function SettingsTab({
             <thead>
               <tr>
                 <th>종목명</th>
-                <th>티커</th>
+                <th>티커 / 계좌번호</th>
                 <th>위험구분</th>
                 <th>시장</th>
                 <th>목표비중(%)</th>
@@ -315,8 +307,15 @@ export default function SettingsTab({
 
                   return (
                     <tr key={item.id}>
-                      <td style={{ fontWeight: 700 }}>{item.name}</td>
-                      <td>{item.ticker}</td>
+                      <td style={{ fontWeight: 700 }}>
+                        {item.name}
+                        {item.is_deposit && (
+                          <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
+                            🏦 예금
+                          </span>
+                        )}
+                      </td>
+                      <td>{item.is_deposit ? (item.account_no || '-') : item.ticker}</td>
                       <td>
                         <span className={`badge ${item.is_risk_asset !== false ? 'badge-risk' : 'badge-safe'}`}>
                           {item.is_risk_asset !== false ? '🔴 위험' : '🟢 안전'}
@@ -334,6 +333,8 @@ export default function SettingsTab({
                                 {accName}
                               </span>
                             ))
+                          ) : item.is_deposit ? (
+                            <span className="badge badge-safe" style={{ fontSize: '0.72rem' }}>단독 자산 (운용계좌 불필요)</span>
                           ) : (
                             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>지정 계좌 없음</span>
                           )}
@@ -516,7 +517,7 @@ export default function SettingsTab({
             <thead>
               <tr>
                 <th>자산명</th>
-                <th>티커/종목코드</th>
+                <th>티커 / 계좌번호</th>
                 <th>상태</th>
                 <th>시장</th>
                 <th>목표비중(%)</th>
@@ -544,7 +545,7 @@ export default function SettingsTab({
                           </div>
                         )}
                       </td>
-                      <td>{ast.is_deposit ? (ast.account_no || ast.ticker) : ast.ticker}</td>
+                      <td>{ast.is_deposit ? (ast.account_no || '-') : ast.ticker}</td>
                       <td>
                         <span className={`badge ${isActive ? 'badge-safe' : ''}`} style={!isActive ? { background: 'rgba(128,128,128,0.2)', color: 'var(--text-muted)' } : {}}>
                           {isActive ? '🟢 활성' : '⚪ 보관(비활성)'}
@@ -832,14 +833,13 @@ export default function SettingsTab({
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">계좌번호</label>
+                      <label className="form-label">계좌번호 (선택)</label>
                       <input
                         type="text"
                         className="input-text"
                         value={assetForm.account_no || ''}
                         onChange={(e) => setAssetForm({ ...assetForm, account_no: e.target.value })}
-                        placeholder="예: 110-123-456789"
-                        required
+                        placeholder="예: 110-123-456789 (은행 계좌번호)"
                       />
                     </div>
                   </div>

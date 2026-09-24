@@ -46,6 +46,19 @@ def calculate_plan(req: CalculateRebalanceRequest):
         portfolio_assets[aid]['qty'] += qty
         portfolio_assets[aid]['eval_amt_krw'] += qty * price
         portfolio_assets[aid]['buy_amt_krw'] += qty * float(h['avg_price'])
+
+    # Add pure deposit assets to portfolio_assets
+    for a in assets:
+        if a.get('is_deposit'):
+            aid = str(a['id'])
+            principal = float(a.get('deposit_principal') or 0.0)
+            if principal > 0:
+                price = float(price_map.get(aid, principal))
+                portfolio_assets[aid] = {
+                    'qty': 1.0,
+                    'eval_amt_krw': price,
+                    'buy_amt_krw': principal
+                }
         
     # Filter out inactive assets that have 0 holdings
     active_assets = [

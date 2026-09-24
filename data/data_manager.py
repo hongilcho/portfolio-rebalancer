@@ -238,65 +238,40 @@ def init_db():
 
     conn.commit()
     conn.close()
-    ensure_deposit_holdings_integrity()
+    clean_deposit_shadow_accounts()
 
-def ensure_deposit_holdings_integrity(portfolio_id: str = None):
+def clean_deposit_shadow_accounts():
+    """
+    정기예금은 계좌가 아닌 '순수 자산(Pure Asset)'이므로,
+    기존에 임시로 자동 생성되었던 accounts(정기예금 유형 또는 DEP- 계좌) 및 holdings 레코드를 DB에서 완전 정리.
+    """
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        if portfolio_id:
-            cursor.execute('''
-                SELECT id, name, ticker, deposit_principal, portfolio_id, account_no, allowed_accounts
-                FROM assets
-                WHERE is_deposit = TRUE AND deposit_principal > 0 AND portfolio_id = %s
-            ''', (portfolio_id,))
-        else:
-            cursor.execute('''
-                SELECT id, name, ticker, deposit_principal, portfolio_id, account_no, allowed_accounts
-                FROM assets
-                WHERE is_deposit = TRUE AND deposit_principal > 0
-            ''')
-        deposits = cursor.fetchall()
-        modified = False
-        for dep in deposits:
-            asset_id, name, ticker, principal, pid, acc_no, allowed_raw = dep
-            clean_acc_no = (acc_no or '').strip()
-            if not clean_acc_no:
-                clean_acc_no = ticker if ticker and not ticker.startswith('DEP-') else f'DEP-{str(asset_id)[:6].upper()}'
-
-            cursor.execute('SELECT id FROM accounts WHERE account_no = %s AND portfolio_id = %s', (clean_acc_no, pid or 'default'))
-            acc_row = cursor.fetchone()
-            if acc_row:
-                deposit_acc_id = str(acc_row[0])
-            else:
-                deposit_acc_id = generate_id()
-                cursor.execute('''
-                    INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, portfolio_id)
-                    VALUES (%s, %s, %s, %s, 0.0, 0.0, 0.0, 0.0, %s, 99, 'ANNUAL', 0.0, %s)
-                ''', (deposit_acc_id, clean_acc_no, name.strip(), '정기예금', f'정기예금 ({name.strip()})', pid or 'default'))
-                modified = True
-
-            cursor.execute('SELECT id, quantity, avg_price FROM holdings WHERE account_id = %s AND asset_id = %s', (deposit_acc_id, str(asset_id)))
-            h_row = cursor.fetchone()
-            if not h_row or float(h_row[1]) <= 0 or float(h_row[2]) <= 0:
-                cursor.execute('''
-                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price)
-                    VALUES (%s, %s, %s, 1.0, %s)
-                    ON CONFLICT (account_id, asset_id)
-                    DO UPDATE SET quantity = 1.0, avg_price = EXCLUDED.avg_price
-                ''', (generate_id(), deposit_acc_id, str(asset_id), float(principal)))
-                modified = True
-
-            if not acc_no or not allowed_raw or allowed_raw == '[]':
-                cursor.execute('UPDATE assets SET allowed_accounts = %s, account_no = %s WHERE id = %s', (json.dumps([deposit_acc_id]), clean_acc_no, str(asset_id)))
-                modified = True
-
-        if modified:
-            conn.commit()
-            clear_all_caches()
+        # 1. 정기예금 또는 DEP- 형태의 가상 계좌 조회
+        cursor.execute("SELECT id FROM accounts WHERE account_type = '정기예금' OR account_no LIKE 'DEP-%'")
+        shadow_acc_ids = [str(r[0]) for r in cursor.fetchall()]
+        
+        if shadow_acc_ids:
+            cursor.execute("DELETE FROM holdings WHERE account_id = ANY(%s)", (shadow_acc_ids,))
+            cursor.execute("DELETE FROM trade_history WHERE account_id = ANY(%s)", (shadow_acc_ids,))
+            cursor.execute("DELETE FROM accounts WHERE id = ANY(%s)", (shadow_acc_ids,))
+            
+        cursor.execute('''
+            UPDATE assets 
+            SET allowed_accounts = '[]'
+            WHERE is_deposit = TRUE
+        ''')
+        cursor.execute('''
+            UPDATE assets
+            SET account_no = ''
+            WHERE is_deposit = TRUE AND account_no LIKE 'DEP-%'
+        ''')
+        conn.commit()
+        clear_all_caches()
     except Exception as e:
         conn.rollback()
-        print(f"Error ensuring deposit holdings: {e}")
+        print(f"Error cleaning deposit shadow accounts: {e}")
     finally:
         conn.close()
 
@@ -550,29 +525,8 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
         market = 'KR'
         if not ticker or ticker.strip() in ['', '없음', '-']:
             ticker = f"DEP-{uuid.uuid4().hex[:6].upper()}"
-
-        # 정기예금은 그 자체가 계좌이므로 전용 계좌를 accounts 테이블에 자동 생성/연결
-        if not clean_acc_no:
-            clean_acc_no = f"DEP-{uuid.uuid4().hex[:8].upper()}"
-
-        cursor.execute("SELECT id, account_type, portfolio_id FROM accounts WHERE account_no = %s", (clean_acc_no,))
-        existing_acc = cursor.fetchone()
-        if existing_acc:
-            acc_id_found, acc_type_found, acc_pid_found = existing_acc
-            if acc_type_found != '정기예금':
-                conn.close()
-                return False, f"이미 다른 증권 계좌에서 사용 중인 계좌번호입니다: {clean_acc_no}"
-            deposit_acc_id = str(acc_id_found)
-            cursor.execute("UPDATE accounts SET account_alias = %s WHERE id = %s", (name.strip(), deposit_acc_id))
-        else:
-            deposit_acc_id = generate_id()
-            cursor.execute('''
-                INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, portfolio_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ''', (deposit_acc_id, clean_acc_no, name.strip(), '정기예금', 0.0, 0.0, 0.0, 0.0, f"정기예금 연동 계좌 ({name.strip()})", 99, 'ANNUAL', 0.0, target_pid))
-
-        allowed_accounts = [deposit_acc_id]
-        account_id = deposit_acc_id
+        allowed_accounts = []
+        account_id = None
 
     if allowed_accounts is None:
         allowed_accounts = []
@@ -594,24 +548,6 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
             float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell,
             clean_acc_no if is_deposit else ''
         ))
-
-        # 예금인 경우 holdings 및 trade_history 자동 생성
-        target_account = account_id or (clean_accs[0] if clean_accs else None)
-        if is_deposit and target_account and float(deposit_principal or 0.0) > 0:
-            h_id = generate_id()
-            cursor.execute('''
-                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (account_id, asset_id)
-                DO UPDATE SET quantity = 1.0, avg_price = EXCLUDED.avg_price
-            ''', (h_id, str(target_account), new_id, 1.0, float(deposit_principal)))
-
-            today_str = datetime.now().strftime('%Y-%m-%d')
-            t_id = generate_id()
-            cursor.execute('''
-                INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ''', (t_id, today_str, str(target_account), new_id, 'INIT', 1.0, float(deposit_principal)))
 
         conn.commit()
         clear_all_caches()
@@ -637,35 +573,8 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
         market = 'KR'
         if not ticker or ticker.strip() in ['', '없음', '-']:
             ticker = f"DEP-{str(asset_id)[:6].upper()}"
-
-        cursor.execute("SELECT allowed_accounts, portfolio_id, account_no FROM assets WHERE id = %s", (str(asset_id),))
-        cur_row = cursor.fetchone()
-        cur_allowed = []
-        cur_pid = "default"
-        if cur_row:
-            try:
-                cur_allowed = json.loads(cur_row[0]) if cur_row[0] else []
-            except Exception:
-                cur_allowed = []
-            cur_pid = cur_row[1] or "default"
-            if not clean_acc_no and cur_row[2]:
-                clean_acc_no = cur_row[2]
-
-        if not clean_acc_no:
-            clean_acc_no = f"DEP-{str(asset_id)[:6].upper()}"
-
-        deposit_acc_id = cur_allowed[0] if cur_allowed else None
-        if deposit_acc_id:
-            cursor.execute("UPDATE accounts SET account_no = %s, account_alias = %s WHERE id = %s", (clean_acc_no, name.strip(), str(deposit_acc_id)))
-        else:
-            deposit_acc_id = generate_id()
-            cursor.execute('''
-                INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, portfolio_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ''', (deposit_acc_id, clean_acc_no, name.strip(), '정기예금', 0.0, 0.0, 0.0, 0.0, f"정기예금 연동 계좌 ({name.strip()})", 99, 'ANNUAL', 0.0, cur_pid))
-
-        allowed_accounts = [deposit_acc_id]
-        account_id = deposit_acc_id
+        allowed_accounts = []
+        account_id = None
 
     clean_accs = sanitize_account_names(allowed_accounts)
     try:
@@ -687,18 +596,6 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
             clean_acc_no if is_deposit else '',
             str(asset_id)
         ))
-
-        # 예금인 경우 holdings 동기화
-        target_account = account_id or (clean_accs[0] if clean_accs else None)
-        if is_deposit and target_account and float(deposit_principal or 0.0) > 0:
-            cursor.execute("DELETE FROM holdings WHERE asset_id = %s AND account_id != %s", (str(asset_id), str(target_account)))
-            h_id = generate_id()
-            cursor.execute('''
-                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (account_id, asset_id)
-                DO UPDATE SET quantity = 1.0, avg_price = EXCLUDED.avg_price
-            ''', (h_id, str(target_account), str(asset_id), 1.0, float(deposit_principal)))
 
         conn.commit()
         clear_all_caches()
@@ -728,31 +625,9 @@ def delete_asset(asset_id):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Check holdings to find linked account(s) before deleting
-        cursor.execute("SELECT account_id FROM holdings WHERE asset_id = %s", (str(asset_id),))
-        linked_acc_ids = [str(r[0]) for r in cursor.fetchall()]
-
-        cursor.execute("SELECT is_deposit, allowed_accounts FROM assets WHERE id = %s", (str(asset_id),))
-        row = cursor.fetchone()
-        is_dep = bool(row[0]) if row else False
-        if row and row[1]:
-            try:
-                for a in json.loads(row[1]):
-                    if str(a) not in linked_acc_ids:
-                        linked_acc_ids.append(str(a))
-            except Exception:
-                pass
-
         cursor.execute("DELETE FROM holdings WHERE asset_id = %s", (str(asset_id),))
         cursor.execute("DELETE FROM trade_history WHERE asset_id = %s", (str(asset_id),))
         cursor.execute("DELETE FROM assets WHERE id = %s", (str(asset_id),))
-
-        if is_dep:
-            for acc_id in linked_acc_ids:
-                cursor.execute("SELECT account_type FROM accounts WHERE id = %s", (str(acc_id),))
-                acc_row = cursor.fetchone()
-                if acc_row and acc_row[0] == '정기예금':
-                    cursor.execute("DELETE FROM accounts WHERE id = %s", (str(acc_id),))
 
         conn.commit()
         clear_all_caches()

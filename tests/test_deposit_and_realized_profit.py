@@ -217,7 +217,7 @@ def test_deposit_asset_auto_creates_account_and_holdings():
     principal = 5000000.0
 
     try:
-        # 1. 예금 자산 추가 (운용계좌 선택 없이 계좌번호만 입력)
+        # 1. 예금 자산 추가 (순수 자산으로 등록)
         ok, msg = add_asset(
             name="테스트 카카오뱅크 예금",
             ticker="",
@@ -233,13 +233,10 @@ def test_deposit_asset_auto_creates_account_and_holdings():
         )
         assert ok, f"add_asset failed: {msg}"
 
-        # 2. 계좌 테이블에 '정기예금' 유형으로 자동 생성되었는지 확인
+        # 2. 계좌(accounts) 테이블에 가상 계좌가 생성되지 않았는지 확인 (순수 자산 격리)
         accs = get_all_accounts(portfolio_id=test_pid)
-        matching_accs = [a for a in accs if a['account_no'] == acc_no]
-        assert len(matching_accs) == 1
-        dep_acc = matching_accs[0]
-        assert dep_acc['account_type'] == '정기예금'
-        assert dep_acc['account_alias'] == '테스트 카카오뱅크 예금'
+        matching_accs = [a for a in accs if a['account_no'] == acc_no or a.get('account_type') == '정기예금']
+        assert len(matching_accs) == 0, "정기예금은 accounts 테이블에 가상 계좌로 생성되면 안 됩니다."
 
         # 3. 자산 테이블 확인 및 account_no 확인
         assets = get_all_assets(portfolio_id=test_pid)
@@ -249,17 +246,21 @@ def test_deposit_asset_auto_creates_account_and_holdings():
         assert dep_asset['is_deposit'] is True
         assert dep_asset['deposit_principal'] == principal
 
-        # 4. holdings 테이블 자동 생성 확인 (수량 1.0, 평단가 = 원금)
-        holdings = get_holdings_by_account(dep_acc['id'])
-        assert len(holdings) == 1
-        assert holdings[0]['asset_id'] == dep_asset['id']
-        assert holdings[0]['quantity'] == 1.0
-        assert holdings[0]['avg_price'] == principal
+        # 4. 대시보드 요약 집계에서 정기예금이 자산으로 정상 합산되는지 확인
+        from backend.routers.dashboard import get_dashboard_summary
+        dash = get_dashboard_summary(portfolio_id=test_pid)
+        dep_stock_items = [item for item in dash['stock_assets'] if item['asset_id'] == dep_asset['id']]
+        assert len(dep_stock_items) == 1
+        assert dep_stock_items[0]['is_deposit'] is True
+        assert dep_stock_items[0]['eval_amount'] >= principal
+        assert dep_stock_items[0]['buy_amount'] == principal
+        # 대시보드 계좌 목록에 가상 계좌가 없음을 재확인
+        assert len([a for a in dash['accounts'] if a.get('account_type') == '정기예금']) == 0
 
-        # 5. 삭제 시 연동된 예금 계좌 및 자산 정리 확인
+        # 5. 자산 삭제 확인
         del_ok, _ = delete_asset(dep_asset['id'])
         assert del_ok
-        accs_after = get_all_accounts(portfolio_id=test_pid)
-        assert len([a for a in accs_after if a['account_no'] == acc_no]) == 0
+        assets_after = get_all_assets(portfolio_id=test_pid)
+        assert len([a for a in assets_after if a['account_no'] == acc_no]) == 0
     finally:
         delete_portfolio(test_pid)
