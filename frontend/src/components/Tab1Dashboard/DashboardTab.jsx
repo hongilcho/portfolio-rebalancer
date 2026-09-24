@@ -67,7 +67,15 @@ export default function DashboardTab({
     const ticker = (item.ticker || '').toUpperCase();
 
     // 1. 예금
-    if (name.includes('예금') || name.includes('정기예금')) {
+    if (
+      item.is_deposit || 
+      item.asset_type === 'DEPOSIT' || 
+      ticker.startsWith('DEP') || 
+      name.includes('예금') || 
+      name.includes('적금') || 
+      name.includes('새마을') || 
+      name.includes('금고')
+    ) {
       return '예금';
     }
 

@@ -62,14 +62,22 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
       const market = (item.market || '').toUpperCase();
       const assetType = (item.asset_type || '').toUpperCase();
 
-      if (assetType === 'CRYPTO' || market === 'CRYPTO') {
+      const isDep = item.is_deposit || 
+                    assetType === 'DEPOSIT' || 
+                    ticker.startsWith('DEP') || 
+                    name.includes('예금') || 
+                    name.includes('적금') || 
+                    name.includes('새마을') || 
+                    name.includes('금고');
+
+      if (isDep) {
+        classMap['deposits'].value += evalAmt;
+      } else if (assetType === 'CRYPTO' || market === 'CRYPTO') {
         classMap['crypto'].value += evalAmt;
       } else if (name.includes('금99') || name.includes('금 99') || name.includes('원자재') || name.includes('gold') || ticker === 'PDBC' || ticker === 'M04020000') {
         classMap['gold_commodities'].value += evalAmt;
       } else if (name.includes('국채') || name.includes('채권') || name.includes('bond') || ticker === '0085P0' || ticker === '476760') {
         classMap['bonds'].value += evalAmt;
-      } else if (name.includes('예금') || name.includes('정기예금')) {
-        classMap['deposits'].value += evalAmt;
       } else if (market === 'US') {
         classMap['us_equity'].value += evalAmt;
       } else {
