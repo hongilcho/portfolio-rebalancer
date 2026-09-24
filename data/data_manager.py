@@ -1,11 +1,13 @@
 import os
 import json
 import uuid
+import threading
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from typing import Optional
-import streamlit as st
+from backend.config import SUPABASE_URL
 
 # 사용자 정의 6가지 표준 계좌 유형
 from data.enums import AccountType
@@ -29,40 +31,19 @@ ACCOUNT_TYPE_ALIASES = {
     "개인형 IRP": AccountType.IRP
 }
 
-from psycopg2 import pool
+_connection_pool = None
+_pool_lock = threading.Lock()
 
-@st.cache_resource
 def get_connection_pool():
-    pg_url = os.getenv("SUPABASE_URL")
-    if not pg_url:
-        try:
-            pg_url = st.secrets.get("SUPABASE_URL")
-        except Exception:
-            pass
-            
-    if not pg_url:
-        import toml
-        possible_paths = [
-            os.path.join(os.path.dirname(__file__), "..", ".streamlit", "secrets.toml"),
-            os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml"),
-            os.path.join(os.getcwd(), ".streamlit", "secrets.toml")
-        ]
-        for p in possible_paths:
-            if os.path.exists(p):
-                try:
-                    with open(p, "r", encoding="utf-8") as f:
-                        sec = toml.load(f)
-                        pg_url = sec.get("SUPABASE_URL")
-                        if pg_url:
-                            break
-                except Exception:
-                    pass
-
-    if not pg_url:
-        raise ValueError("SUPABASE_URL 환경 변수가 설정되지 않았습니다.")
-        
-    # 최소 1개, 최대 20개의 커넥션을 유지하는 풀 생성
-    return psycopg2.pool.ThreadedConnectionPool(1, 20, pg_url)
+    global _connection_pool
+    if _connection_pool is None:
+        with _pool_lock:
+            if _connection_pool is None:
+                pg_url = os.getenv("SUPABASE_URL") or SUPABASE_URL
+                if not pg_url:
+                    raise ValueError("SUPABASE_URL 환경 변수가 설정되지 않았습니다.")
+                _connection_pool = psycopg2.pool.ThreadedConnectionPool(1, 20, pg_url)
+    return _connection_pool
 
 class PoolConnectionWrapper:
     def __init__(self, pool_obj, conn):
@@ -326,7 +307,6 @@ def clean_deposit_shadow_accounts():
 # ---------------------------------------------------------
 # Portfolios CRUD
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)
 def get_portfolios():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -417,7 +397,6 @@ def delete_portfolio(portfolio_id: str):
 # ---------------------------------------------------------
 # Accounts CRUD
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)
 def get_all_accounts(portfolio_id: str = None):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -528,7 +507,6 @@ def delete_account(account_id):
 # ---------------------------------------------------------
 # Assets Helpers
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)
 def get_all_assets(portfolio_id: str = None):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -695,7 +673,6 @@ def delete_asset(asset_id):
 # ---------------------------------------------------------
 # Holdings Helpers
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)
 def get_holdings_by_account(account_id):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -710,7 +687,6 @@ def get_holdings_by_account(account_id):
     conn.close()
     return [dict(r) for r in rows]
 
-@st.cache_data(ttl=2)
 def get_all_holdings():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -727,26 +703,7 @@ def get_all_holdings():
     return [dict(r) for r in rows]
 
 def clear_all_caches():
-    try:
-        get_portfolios.clear()
-    except Exception:
-        pass
-    try:
-        get_all_accounts.clear()
-    except Exception:
-        pass
-    try:
-        get_all_assets.clear()
-    except Exception:
-        pass
-    try:
-        get_holdings_by_account.clear()
-    except Exception:
-        pass
-    try:
-        get_all_holdings.clear()
-    except Exception:
-        pass
+    pass
 
 def save_account_holdings(account_id, holdings_data):
     conn = get_connection()
@@ -951,7 +908,6 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price)
     finally:
         conn.close()
 
-@st.cache_data(ttl=2)
 def get_trade_history(portfolio_id: str = None):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -1085,7 +1041,6 @@ def apply_transfer_plan(transfer_plan):
 # ---------------------------------------------------------
 # Crypto Holdings (Bitcoin & Ethereum)
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)
 def get_crypto_holdings(owner: Optional[str] = None):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)

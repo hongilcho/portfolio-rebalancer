@@ -3,6 +3,7 @@ fastapi
 uvicorn
 pydantic
 python-multipart
+python-dotenv
 toml
 
 # Database & Data Processing
@@ -14,6 +15,3 @@ requests
 yfinance
 lxml
 urllib3
-
-# Streamlit (Compatibility)
-streamlit

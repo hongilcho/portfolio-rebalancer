@@ -1,8 +1,8 @@
 import os
 import time
 import requests
-import streamlit as st
 import urllib3
+from backend.config import NAMUH_APP_KEY, NAMUH_APP_SECRET
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -11,12 +11,8 @@ class NamuhAPIClient:
     NH투자증권 Namuh PLUG 오픈 API 연동 클래스
     """
     def __init__(self):
-        try:
-            self.app_key = st.secrets["nh_api"]["app_key"]
-            self.app_secret = st.secrets["nh_api"]["app_secret"]
-        except Exception:
-            self.app_key = os.getenv("NAMUH_APP_KEY", "")
-            self.app_secret = os.getenv("NAMUH_APP_SECRET", "")
+        self.app_key = os.getenv("NAMUH_APP_KEY") or NAMUH_APP_KEY
+        self.app_secret = os.getenv("NAMUH_APP_SECRET") or NAMUH_APP_SECRET
             
         self.base_url = "https://api.nhplug.com:8443" 
         self.access_token = None
