@@ -183,8 +183,8 @@ export default function CryptoTab({
               가상화폐 자산 지분 비중 (총 평가액: {formatKRW(cryptoTotal.total_eval)})
             </span>
             <div style={{ display: 'flex', gap: '14px', fontSize: '0.82rem' }}>
-              <span style={{ color: '#3B82F6', fontWeight: 700 }}>
-                👤 홍일: {formatKRW(hongil.total_eval)} ({hongil.share_pct?.toFixed(1)}%)
+              <span style={{ color: '#0EA5E9', fontWeight: 700 }}>
+                👨 홍일: {formatKRW(hongil.total_eval)} ({hongil.share_pct?.toFixed(1)}%)
               </span>
               <span style={{ color: '#EC4899', fontWeight: 700 }}>
                 👩 윤아: {formatKRW(yoona.total_eval)} ({yoona.share_pct?.toFixed(1)}%)
@@ -192,25 +192,25 @@ export default function CryptoTab({
             </div>
           </div>
           <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
-            <div style={{ width: `${hongil.share_pct || 0}%`, background: '#3B82F6' }} title={`홍일: ${hongil.share_pct?.toFixed(1)}%`} />
+            <div style={{ width: `${hongil.share_pct || 0}%`, background: '#0EA5E9' }} title={`홍일: ${hongil.share_pct?.toFixed(1)}%`} />
             <div style={{ width: `${yoona.share_pct || 0}%`, background: '#EC4899' }} title={`윤아: ${yoona.share_pct?.toFixed(1)}%`} />
           </div>
         </div>
       </div>
 
-      {/* 2. 대시보드 비교형 듀얼 카드: [👤 홍일 계정] vs [👩 윤아 계정] */}
+      {/* 2. 대시보드 비교형 듀얼 카드: [👨 홍일 계정] vs [👩 윤아 계정] */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '18px' }}>
         
-        {/* ===================== [👤 홍일 계정 카드] ===================== */}
-        <div className="section-card" style={{ border: '1px solid rgba(59, 130, 246, 0.35)', background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.03) 0%, var(--bg-card) 100%)' }}>
+        {/* ===================== [👨 홍일 계정 카드] ===================== */}
+        <div className="section-card" style={{ border: '1px solid rgba(14, 165, 233, 0.35)', background: 'linear-gradient(180deg, rgba(14, 165, 233, 0.04) 0%, var(--bg-card) 100%)' }}>
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.2)', paddingBottom: '12px', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(14, 165, 233, 0.2)', paddingBottom: '12px', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
-                👤
+              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'rgba(14, 165, 233, 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem' }}>
+                👨
               </div>
               <div>
-                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#3B82F6' }}>홍일 계정 (업비트)</div>
+                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0EA5E9' }}>홍일 계정 (업비트)</div>
                 <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>가상화폐 지분 {hongil.share_pct?.toFixed(1)}%</div>
               </div>
             </div>
@@ -576,7 +576,7 @@ export default function CryptoTab({
                 <td style={{ fontWeight: 600, color: '#F59E0B', paddingLeft: '20px' }}>
                   🪙 비트코인 (BTC)
                 </td>
-                <td><span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3B82F6', fontWeight: 700 }}>👤 홍일</span></td>
+                <td><span className="badge" style={{ background: 'rgba(14, 165, 233, 0.15)', color: '#0EA5E9', fontWeight: 700 }}>👨 홍일</span></td>
                 <td>{hongilBtc.quantity ? Number(hongilBtc.quantity).toFixed(8).replace(/\.?0+$/, '') : '0'} BTC</td>
                 <td>{formatKRW(hongilBtc.buy_amount)}</td>
                 <td style={{ fontWeight: 600 }}>{formatKRW(hongilBtc.eval_amount)}</td>
@@ -594,7 +594,7 @@ export default function CryptoTab({
                 <td style={{ fontWeight: 600, color: '#8B5CF6', paddingLeft: '20px' }}>
                   💎 이더리움 (ETH)
                 </td>
-                <td><span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3B82F6', fontWeight: 700 }}>👤 홍일</span></td>
+                <td><span className="badge" style={{ background: 'rgba(14, 165, 233, 0.15)', color: '#0EA5E9', fontWeight: 700 }}>👨 홍일</span></td>
                 <td>{hongilEth.quantity ? Number(hongilEth.quantity).toFixed(8).replace(/\.?0+$/, '') : '0'} ETH</td>
                 <td>{formatKRW(hongilEth.buy_amount)}</td>
                 <td style={{ fontWeight: 600 }}>{formatKRW(hongilEth.eval_amount)}</td>
@@ -608,11 +608,11 @@ export default function CryptoTab({
               </tr>
 
               {/* 4) Hongil Subtotal */}
-              <tr style={{ background: 'rgba(59, 130, 246, 0.04)', fontStyle: 'italic' }}>
-                <td style={{ fontWeight: 700, paddingLeft: '28px', color: '#3B82F6' }}>
-                  ↳ 👤 홍일 가상화폐 소계
+              <tr style={{ background: 'rgba(14, 165, 233, 0.04)', fontStyle: 'italic' }}>
+                <td style={{ fontWeight: 700, paddingLeft: '28px', color: '#0EA5E9' }}>
+                  ↳ 👨 홍일 가상화폐 소계
                 </td>
-                <td style={{ fontWeight: 700, color: '#3B82F6' }}>홍일 합계</td>
+                <td style={{ fontWeight: 700, color: '#0EA5E9' }}>홍일 합계</td>
                 <td>BTC + ETH</td>
                 <td>{formatKRW(hongil.total_buy)}</td>
                 <td style={{ fontWeight: 600 }}>{formatKRW(hongil.total_eval)}</td>
@@ -622,7 +622,7 @@ export default function CryptoTab({
                 <td style={{ color: isHongilProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
                   {formatPercent(hongil.total_profit_pct)}
                 </td>
-                <td style={{ fontWeight: 700, color: '#3B82F6' }}>
+                <td style={{ fontWeight: 700, color: '#0EA5E9' }}>
                   {hongil.weight_in_combined_pct?.toFixed(2)}%
                 </td>
               </tr>

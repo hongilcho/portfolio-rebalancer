@@ -157,7 +157,7 @@ export default function EditCryptoModal({ isOpen, onClose, byOwner, onSave }) {
 
   const currentForm = formData[activeTab];
   const ownerLabel = activeTab === 'hongil' ? '홍일' : '윤아';
-  const ownerIcon = activeTab === 'hongil' ? '👤' : '👩';
+  const ownerIcon = activeTab === 'hongil' ? '👨' : '👩';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -185,8 +185,8 @@ export default function EditCryptoModal({ isOpen, onClose, byOwner, onSave }) {
               border: 'none',
               background: 'none',
               fontWeight: activeTab === 'hongil' ? 800 : 500,
-              color: activeTab === 'hongil' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'hongil' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+              color: activeTab === 'hongil' ? '#0EA5E9' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'hongil' ? '2px solid #0EA5E9' : '2px solid transparent',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -194,7 +194,7 @@ export default function EditCryptoModal({ isOpen, onClose, byOwner, onSave }) {
               fontSize: '0.95rem'
             }}
           >
-            <span>👤</span> 홍일 계정 (업비트)
+            <span>👨</span> 홍일 계정 (업비트)
           </button>
           <button
             type="button"
