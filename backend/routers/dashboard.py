@@ -3,7 +3,7 @@ import math
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any, List
 
-from data.data_manager import get_all_accounts, get_all_assets, get_holdings_by_account, ensure_deposit_holdings_integrity
+from data.data_manager import get_all_accounts, get_all_assets, get_holdings_by_account, clean_deposit_shadow_accounts
 from backend.services import market_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -13,7 +13,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
     """
     포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
     """
-    ensure_deposit_holdings_integrity(portfolio_id=portfolio_id)
+    clean_deposit_shadow_accounts()
     accounts = get_all_accounts(portfolio_id=portfolio_id)
     assets = get_all_assets(portfolio_id=portfolio_id)
     
@@ -167,11 +167,34 @@ def get_dashboard_summary(portfolio_id: str = "default"):
             portfolio_assets[aid]['buy_amt_krw'] += qty * avg_p_krw
             portfolio_assets[aid]['eval_amt_krw'] += qty * curr_p
 
+    # Add pure deposit assets directly from assets table
+    for a in assets:
+        if a.get('is_deposit'):
+            aid = str(a['id'])
+            principal = float(a.get('deposit_principal') or 0.0)
+            if principal > 0:
+                curr_p = float(price_map.get(aid, principal))
+                portfolio_assets[aid] = {
+                    "asset_id": aid,
+                    "name": a['name'],
+                    "ticker": a.get('ticker') or a['name'],
+                    "market": a.get('market', 'KR'),
+                    "is_risk_asset": False,
+                    "quantity": 1.0,
+                    "buy_amt_krw": principal,
+                    "eval_amt_krw": curr_p,
+                    "is_deposit": True,
+                    "account_no": a.get('account_no', ''),
+                    "maturity_date": a.get('maturity_date', ''),
+                    "interest_rate": float(a.get('interest_rate') or 0.0)
+                }
+
     total_stock_eval = sum(d['eval_amt_krw'] for d in portfolio_assets.values() if d['quantity'] > 0)
     total_stock_buy = sum(d['buy_amt_krw'] for d in portfolio_assets.values() if d['quantity'] > 0)
     total_stock_profit = total_stock_eval - total_stock_buy
     total_stock_return = (total_stock_profit / total_stock_buy * 100) if total_stock_buy > 0 else 0.0
-    
+    total_portfolio_eval = total_krw_cash + (total_usd_cash * usd_krw) + total_stock_eval
+
     target_weight_map = {str(a['id']): float(a.get('target_weight', 0.0)) for a in assets}
     
     stock_summary_rows = []

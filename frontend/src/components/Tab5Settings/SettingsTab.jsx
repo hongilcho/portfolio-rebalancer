@@ -141,10 +141,7 @@ export default function SettingsTab({
         ? (assetForm.ticker.trim() || `DEP-${Date.now().toString(36).slice(-6).toUpperCase()}`)
         : (assetForm.is_gold ? 'M04020000' : assetForm.ticker.trim().toUpperCase());
 
-      const targetAccId = isDep ? (assetForm.account_id || (accounts?.[0]?.id ? String(accounts[0].id) : null)) : null;
-      const finalAllowedAccs = isDep 
-        ? (targetAccId ? [String(targetAccId)] : [])
-        : assetForm.allowed_accounts;
+      const finalAllowedAccs = isDep ? [] : assetForm.allowed_accounts;
 
       await api.createAsset({
         name: assetForm.name.trim(),
@@ -185,13 +182,10 @@ export default function SettingsTab({
     try {
       const isDep = Boolean(assetForm.is_deposit);
       const finalTicker = isDep 
-        ? (assetForm.ticker.trim() || `DEP-${editAssetTarget.id.slice(0, 6).toUpperCase()}`)
+        ? (assetForm.ticker.trim() || editAssetTarget.ticker || `DEP-${editAssetTarget.id.slice(0, 6).toUpperCase()}`)
         : (assetForm.is_gold ? 'M04020000' : assetForm.ticker.trim().toUpperCase());
 
-      const targetAccId = isDep ? (assetForm.account_id || (accounts?.[0]?.id ? String(accounts[0].id) : null)) : null;
-      const finalAllowedAccs = isDep 
-        ? (targetAccId ? [String(targetAccId)] : [])
-        : assetForm.allowed_accounts;
+      const finalAllowedAccs = isDep ? [] : assetForm.allowed_accounts;
 
       await api.updateAsset(editAssetTarget.id, {
         name: assetForm.name.trim(),
@@ -832,14 +826,13 @@ export default function SettingsTab({
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">계좌번호</label>
+                      <label className="form-label">계좌번호 (선택)</label>
                       <input
                         type="text"
                         className="input-text"
                         value={assetForm.account_no || ''}
                         onChange={(e) => setAssetForm({ ...assetForm, account_no: e.target.value })}
-                        placeholder="예: 110-123-456789"
-                        required
+                        placeholder="예: 110-123-456789 (은행 계좌번호)"
                       />
                     </div>
                   </div>
