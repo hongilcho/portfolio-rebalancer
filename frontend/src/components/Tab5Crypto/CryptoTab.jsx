@@ -17,6 +17,56 @@ export default function CryptoTab({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [chartView, setChartView] = useState('both'); // 'both' | 'owner' | 'coin'
+
+  const byOwner = data?.by_owner || {};
+  const hongil = byOwner['홍일'] || { assets: [], total_buy: 0, total_eval: 0, total_profit: 0, total_profit_pct: 0, share_pct: 0 };
+  const yoona = byOwner['윤아'] || { assets: [], total_buy: 0, total_eval: 0, total_profit: 0, total_profit_pct: 0, share_pct: 0 };
+
+  const hongilBtc = hongil.assets?.find(a => a.symbol === 'BTC') || {};
+  const hongilEth = hongil.assets?.find(a => a.symbol === 'ETH') || {};
+
+  const yoonaBtc = yoona.assets?.find(a => a.symbol === 'BTC') || {};
+  const yoonaEth = yoona.assets?.find(a => a.symbol === 'ETH') || {};
+
+  const cryptoAssetsCombined = data?.crypto_assets_combined || [];
+  const btcComb = cryptoAssetsCombined.find(a => a.symbol === 'BTC') || {};
+  const ethComb = cryptoAssetsCombined.find(a => a.symbol === 'ETH') || {};
+
+  const cryptoTotal = data?.crypto_total || {};
+  const portfolioSummary = data?.portfolio_summary || {};
+  const combined = data?.combined_summary || {};
+
+  // 홍일 vs 윤아 지분 비중 도넛 데이터
+  const ownerDonutData = useMemo(() => {
+    return [
+      {
+        label: '👨 홍일 계정',
+        value: Number(hongil.total_eval) || 0,
+        color: '#0EA5E9'
+      },
+      {
+        label: '👩 윤아 계정',
+        value: Number(yoona.total_eval) || 0,
+        color: '#EC4899'
+      }
+    ].filter(item => item.value > 0);
+  }, [hongil.total_eval, yoona.total_eval]);
+
+  // 코인별(BTC vs ETH) 비중 도넛 데이터
+  const coinDonutData = useMemo(() => {
+    const symbolColors = {
+      'BTC': '#F59E0B',
+      'ETH': '#8B5CF6'
+    };
+    return (cryptoAssetsCombined || [])
+      .map(c => ({
+        label: `${c.name || c.symbol} (${c.symbol})`,
+        value: Number(c.eval_amount) || 0,
+        color: symbolColors[c.symbol] || '#06B6D4'
+      }))
+      .filter(c => c.value > 0);
+  }, [cryptoAssetsCombined]);
 
   const loadCryptoSummary = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -53,24 +103,6 @@ export default function CryptoTab({
     );
   }
 
-  const byOwner = data?.by_owner || {};
-  const hongil = byOwner['홍일'] || { assets: [], total_buy: 0, total_eval: 0, total_profit: 0, total_profit_pct: 0, share_pct: 0 };
-  const yoona = byOwner['윤아'] || { assets: [], total_buy: 0, total_eval: 0, total_profit: 0, total_profit_pct: 0, share_pct: 0 };
-
-  const hongilBtc = hongil.assets?.find(a => a.symbol === 'BTC') || {};
-  const hongilEth = hongil.assets?.find(a => a.symbol === 'ETH') || {};
-
-  const yoonaBtc = yoona.assets?.find(a => a.symbol === 'BTC') || {};
-  const yoonaEth = yoona.assets?.find(a => a.symbol === 'ETH') || {};
-
-  const cryptoAssetsCombined = data?.crypto_assets_combined || [];
-  const btcComb = cryptoAssetsCombined.find(a => a.symbol === 'BTC') || {};
-  const ethComb = cryptoAssetsCombined.find(a => a.symbol === 'ETH') || {};
-
-  const cryptoTotal = data?.crypto_total || {};
-  const portfolioSummary = data?.portfolio_summary || {};
-  const combined = data?.combined_summary || {};
-
   const isCombinedProfit = (combined.total_profit || 0) >= 0;
   const isCryptoProfit = (cryptoTotal.total_profit || 0) >= 0;
   const isPortfolioProfit = (portfolioSummary.total_profit || 0) >= 0;
@@ -78,39 +110,6 @@ export default function CryptoTab({
   const isYoonaProfit = (yoona.total_profit || 0) >= 0;
 
   const currentPortName = portfolioSummary.portfolio_name || portfolioName || '금융 포트폴리오';
-
-  const [chartView, setChartView] = useState('both'); // 'both' | 'owner' | 'coin'
-
-  // 홍일 vs 윤아 지분 비중 도넛 데이터
-  const ownerDonutData = useMemo(() => {
-    return [
-      {
-        label: '👨 홍일 계정',
-        value: Number(hongil.total_eval) || 0,
-        color: '#0EA5E9'
-      },
-      {
-        label: '👩 윤아 계정',
-        value: Number(yoona.total_eval) || 0,
-        color: '#EC4899'
-      }
-    ].filter(item => item.value > 0);
-  }, [hongil.total_eval, yoona.total_eval]);
-
-  // 코인별(BTC vs ETH) 비중 도넛 데이터
-  const coinDonutData = useMemo(() => {
-    const symbolColors = {
-      'BTC': '#F59E0B',
-      'ETH': '#8B5CF6'
-    };
-    return (cryptoAssetsCombined || [])
-      .map(c => ({
-        label: `${c.name || c.symbol} (${c.symbol})`,
-        value: Number(c.eval_amount) || 0,
-        color: symbolColors[c.symbol] || '#06B6D4'
-      }))
-      .filter(c => c.value > 0);
-  }, [cryptoAssetsCombined]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

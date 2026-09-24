@@ -18,28 +18,33 @@ export default function DashboardTab({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [expandedAccs, setExpandedAccs] = useState({});
   const [syncingNamuh, setSyncingNamuh] = useState(false);
-
-  if (!dashboardData) {
-    return <div className="section-card">데이터를 불러오는 중입니다...</div>;
-  }
-
-  const {
-    kpi,
-    stock_assets,
-    cash_assets,
-    drift_scale_max,
-    usd_krw
-  } = dashboardData;
-
-  const activeAssetIds = new Set(
-    (assets || []).filter((a) => a.is_active !== false).map((a) => String(a.id))
-  );
-  const visibleStockAssets = (stock_assets || []).filter((item) => {
-    if (activeAssetIds.has(String(item.asset_id))) return true;
-    return (item.quantity || 0) > 0;
-  });
-
   const [chartView, setChartView] = useState('both'); // 'both' | 'stocks' | 'accounts'
+
+  const safeData = dashboardData || {};
+  const {
+    kpi = {},
+    stock_assets = [],
+    cash_assets = {},
+    drift_scale_max,
+    usd_krw = 1380
+  } = safeData;
+
+  const activeAssetIds = useMemo(() => {
+    return new Set(
+      (assets || []).filter((a) => a.is_active !== false).map((a) => String(a.id))
+    );
+  }, [assets]);
+
+  const visibleStockAssets = useMemo(() => {
+    return (stock_assets || []).filter((item) => {
+      if (activeAssetIds.has(String(item.asset_id))) return true;
+      return (item.quantity || 0) > 0;
+    });
+  }, [stock_assets, activeAssetIds]);
+
+  const accSummaries = useMemo(() => {
+    return safeData.account_summaries || safeData.accounts || [];
+  }, [safeData]);
 
   // 종목별 비중 도넛 차트 데이터 가공
   const stockDonutData = useMemo(() => {
@@ -78,8 +83,11 @@ export default function DashboardTab({
       .sort((a, b) => b.value - a.value);
   }, [accSummaries, usd_krw]);
 
-  const totalPortfolioEval = (kpi?.total_stock_eval || 0) + (cash_assets?.total_cash_krw || 0);
+  if (!dashboardData) {
+    return <div className="section-card">데이터를 불러오는 중입니다...</div>;
+  }
 
+  const totalPortfolioEval = (kpi?.total_stock_eval || 0) + (cash_assets?.total_cash_krw || 0);
   const isProfit = (kpi?.total_stock_profit || 0) >= 0;
 
   const toggleAccordion = (accId) => {

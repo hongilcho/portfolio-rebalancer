@@ -21,8 +21,15 @@ export const DEFAULT_PALETTE = [
  * SVG 도넛 호(Arc) Path 문자열 생성 유틸리티
  */
 function createArcPath(cx, cy, rInner, rOuter, startAngle, endAngle) {
-  // 전체 원인 경우 (데이터가 1개)
-  if (endAngle - startAngle >= 2 * Math.PI - 0.001) {
+  // 안전 반경 보장
+  if (rInner <= 0 || rOuter <= rInner) return '';
+
+  const angleDiff = Math.max(0, endAngle - startAngle);
+  // 각도 차이가 거의 없으면 그리지 않음
+  if (angleDiff <= 0.0001) return '';
+
+  // 전체 원인 경우 (데이터가 1개이거나 100%)
+  if (angleDiff >= 2 * Math.PI - 0.01) {
     return [
       `M ${cx} ${cy - rOuter}`,
       `A ${rOuter} ${rOuter} 0 1 0 ${cx} ${cy + rOuter}`,
@@ -43,7 +50,7 @@ function createArcPath(cx, cy, rInner, rOuter, startAngle, endAngle) {
   const x4 = cx + rInner * Math.cos(startAngle);
   const y4 = cy + rInner * Math.sin(startAngle);
 
-  const largeArc = (endAngle - startAngle) > Math.PI ? 1 : 0;
+  const largeArc = angleDiff > Math.PI ? 1 : 0;
 
   return [
     `M ${x1.toFixed(3)} ${y1.toFixed(3)}`,
@@ -113,9 +120,10 @@ export default function DonutChart({
       const rOuter = isHovered ? baseOuterR + 4 : baseOuterR;
       const rInner = isHovered ? baseInnerR - 2 : baseInnerR;
 
-      // 패딩 적용
-      const startAngle = currentAngle + (padAngle / 2);
-      const endAngle = currentAngle + sliceAngle - (padAngle / 2);
+      // 패딩 안전 적용: 슬라이스 각도가 작으면 패딩을 없애거나 비례 축소
+      const effectivePad = (items.length > 1 && sliceAngle > 0.05) ? Math.min(0.02, sliceAngle * 0.2) : 0;
+      const startAngle = currentAngle + (effectivePad / 2);
+      const endAngle = currentAngle + sliceAngle - (effectivePad / 2);
       currentAngle += sliceAngle;
 
       const path = createArcPath(cx, cy, rInner, rOuter, startAngle, endAngle);
@@ -211,9 +219,9 @@ export default function DonutChart({
                         fill: 'var(--text-secondary)'
                       }}
                     >
-                      {currentHovered.label?.length > 12 
-                        ? `${currentHovered.label.substring(0, 11)}...` 
-                        : currentHovered.label}
+                      {String(currentHovered.label || '').length > 12 
+                        ? `${String(currentHovered.label || '').substring(0, 11)}...` 
+                        : String(currentHovered.label || '')}
                     </text>
                     {/* 호버 시: 금액 */}
                     <text

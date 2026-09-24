@@ -14,52 +14,14 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
   const [includeCrypto, setIncludeCrypto] = useState(true);
   const [error, setError] = useState('');
 
-  const loadOverview = async (isRefresh = false, cryptoToggle = includeCrypto) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError('');
+  const [chartView, setChartView] = useState('dual'); // 'dual' | 'portfolios' | 'assetClasses'
 
-    try {
-      const res = await api.getPortfoliosOverview(cryptoToggle);
-      setData(res);
-    } catch (err) {
-      console.error('Failed to load portfolios overview:', err);
-      setError(err.message || '전체 자산 종합 요약을 불러오는 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    loadOverview(false, includeCrypto);
-  }, [includeCrypto]);
-
-  const handleToggleCrypto = () => {
-    const nextVal = !includeCrypto;
-    setIncludeCrypto(nextVal);
-  };
-
-  if (loading && !data) {
-    return (
-      <div className="section-card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px', color: 'var(--accent-primary)' }} />
-        <p style={{ color: 'var(--text-secondary)' }}>모든 포트폴리오 및 자산 종합 데이터를 불러오는 중입니다...</p>
-      </div>
-    );
-  }
+  const portfolioColors = ['#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6'];
 
   const grand = data?.grand_total || {};
   const portfolios = data?.portfolios || [];
   const crypto = data?.crypto || null;
   const aggregatedAssets = data?.aggregated_assets || [];
-
-  const isGrandProfit = (grand.total_profit || 0) >= 0;
-
-  // Colors for multi-portfolio bar
-  const portfolioColors = ['#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6'];
-
-  const [chartView, setChartView] = useState('dual'); // 'dual' | 'portfolios' | 'assetClasses'
 
   // 포트폴리오별 구성 비중 도넛 데이터
   const portfolioDonutData = useMemo(() => {
@@ -127,6 +89,43 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
       .filter(item => item.value > 0)
       .sort((a, b) => b.value - a.value);
   }, [aggregatedAssets, grand.total_eval]);
+
+  const loadOverview = async (isRefresh = false, cryptoToggle = includeCrypto) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError('');
+
+    try {
+      const res = await api.getPortfoliosOverview(cryptoToggle);
+      setData(res);
+    } catch (err) {
+      console.error('Failed to load portfolios overview:', err);
+      setError(err.message || '전체 자산 종합 요약을 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOverview(false, includeCrypto);
+  }, [includeCrypto]);
+
+  const handleToggleCrypto = () => {
+    const nextVal = !includeCrypto;
+    setIncludeCrypto(nextVal);
+  };
+
+  if (loading && !data) {
+    return (
+      <div className="section-card" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px', color: 'var(--accent-primary)' }} />
+        <p style={{ color: 'var(--text-secondary)' }}>모든 포트폴리오 및 자산 종합 데이터를 불러오는 중입니다...</p>
+      </div>
+    );
+  }
+
+  const isGrandProfit = (grand.total_profit || 0) >= 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
