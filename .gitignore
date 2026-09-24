@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
 # Virtual Environments
 venv/
@@ -12,24 +13,19 @@ env/
 # Environment variables & secrets
 .env
 .env.*
+!.env.example
 .streamlit/secrets.toml
 secrets.toml
 
-# SQLite databases
+# Databases & backups
 *.db
 *.sqlite3
+backups/
+*.zip
 
-# Log files & scratch dumps
+# Logs
 *.log
-debug_output.txt
 debug*.txt
-out.json
-out_acc.json
-temp_tickers.txt
-print_accs.py
-print_tickers.py
-.web/
-.states/
 
 # Node / Frontend
 node_modules/
@@ -41,7 +37,3 @@ frontend/node_modules/
 # OS generated files
 .DS_Store
 Thumbs.db
-
-# Backups
-backups/
-*.zip
