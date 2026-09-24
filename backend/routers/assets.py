@@ -8,7 +8,7 @@ router = APIRouter(prefix="/api/assets", tags=["assets"])
 
 class CreateAssetRequest(BaseModel):
     name: str
-    ticker: str
+    ticker: Optional[str] = ""
     market: str = "KR"
     target_weight: float = 0.0
     allowed_accounts: Optional[List[str]] = []
@@ -16,16 +16,38 @@ class CreateAssetRequest(BaseModel):
     is_active: bool = True
     notes: Optional[str] = ""
     portfolio_id: Optional[str] = "default"
+    # Deposit fields
+    is_deposit: Optional[bool] = False
+    deposit_principal: Optional[float] = 0.0
+    interest_rate: Optional[float] = 0.0
+    start_date: Optional[str] = ""
+    maturity_date: Optional[str] = ""
+    early_termination_rate: Optional[float] = 0.0
+    tax_rate: Optional[float] = 15.4
+    lock_rebalance_sell: Optional[bool] = True
+    account_id: Optional[str] = None
+    account_no: Optional[str] = ""
 
 class UpdateAssetRequest(BaseModel):
     name: str
-    ticker: str
+    ticker: Optional[str] = ""
     market: str = "KR"
     target_weight: float = 0.0
     allowed_accounts: Optional[List[str]] = []
     is_risk_asset: bool = True
     is_active: bool = True
     notes: Optional[str] = ""
+    # Deposit fields
+    is_deposit: Optional[bool] = False
+    deposit_principal: Optional[float] = 0.0
+    interest_rate: Optional[float] = 0.0
+    start_date: Optional[str] = ""
+    maturity_date: Optional[str] = ""
+    early_termination_rate: Optional[float] = 0.0
+    tax_rate: Optional[float] = 15.4
+    lock_rebalance_sell: Optional[bool] = True
+    account_id: Optional[str] = None
+    account_no: Optional[str] = ""
 
 class AssetWeightMappingItem(BaseModel):
     id: str
@@ -37,6 +59,16 @@ class AssetWeightMappingItem(BaseModel):
     is_risk_asset: bool
     is_active: Optional[bool] = True
     notes: Optional[str] = ""
+    is_deposit: Optional[bool] = False
+    deposit_principal: Optional[float] = 0.0
+    interest_rate: Optional[float] = 0.0
+    start_date: Optional[str] = ""
+    maturity_date: Optional[str] = ""
+    early_termination_rate: Optional[float] = 0.0
+    tax_rate: Optional[float] = 15.4
+    lock_rebalance_sell: Optional[bool] = True
+    account_id: Optional[str] = None
+    account_no: Optional[str] = ""
 
 class BatchWeightsRequest(BaseModel):
     items: List[AssetWeightMappingItem]
@@ -53,14 +85,24 @@ def list_assets(portfolio_id: Optional[str] = None):
 def create_asset(req: CreateAssetRequest):
     success, msg = add_asset(
         name=req.name,
-        ticker=req.ticker,
+        ticker=req.ticker or "",
         market=req.market,
         target_weight=req.target_weight,
         allowed_accounts=req.allowed_accounts or [],
         is_risk_asset=req.is_risk_asset,
         is_active=req.is_active,
         notes=req.notes or "",
-        portfolio_id=req.portfolio_id or "default"
+        portfolio_id=req.portfolio_id or "default",
+        is_deposit=bool(req.is_deposit),
+        deposit_principal=float(req.deposit_principal or 0.0),
+        interest_rate=float(req.interest_rate or 0.0),
+        start_date=req.start_date or "",
+        maturity_date=req.maturity_date or "",
+        early_termination_rate=float(req.early_termination_rate or 0.0),
+        tax_rate=float(req.tax_rate if req.tax_rate is not None else 15.4),
+        lock_rebalance_sell=bool(req.lock_rebalance_sell if req.lock_rebalance_sell is not None else True),
+        account_id=req.account_id,
+        account_no=req.account_no or ""
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)
@@ -72,13 +114,23 @@ def edit_asset(asset_id: str, req: UpdateAssetRequest):
     success, msg = update_asset(
         asset_id=asset_id,
         name=req.name,
-        ticker=req.ticker,
+        ticker=req.ticker or "",
         market=req.market,
         target_weight=req.target_weight,
         allowed_accounts=req.allowed_accounts or [],
         is_risk_asset=req.is_risk_asset,
         is_active=req.is_active,
-        notes=req.notes or ""
+        notes=req.notes or "",
+        is_deposit=bool(req.is_deposit),
+        deposit_principal=float(req.deposit_principal or 0.0),
+        interest_rate=float(req.interest_rate or 0.0),
+        start_date=req.start_date or "",
+        maturity_date=req.maturity_date or "",
+        early_termination_rate=float(req.early_termination_rate or 0.0),
+        tax_rate=float(req.tax_rate if req.tax_rate is not None else 15.4),
+        lock_rebalance_sell=bool(req.lock_rebalance_sell if req.lock_rebalance_sell is not None else True),
+        account_id=req.account_id,
+        account_no=req.account_no or ""
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)
@@ -108,7 +160,16 @@ def batch_update_weights(req: BatchWeightsRequest):
             allowed_accounts=item.allowed_accounts,
             is_risk_asset=item.is_risk_asset,
             is_active=item.is_active if item.is_active is not None else True,
-            notes=item.notes or ""
+            notes=item.notes or "",
+            is_deposit=bool(item.is_deposit),
+            deposit_principal=float(item.deposit_principal or 0.0),
+            interest_rate=float(item.interest_rate or 0.0),
+            start_date=item.start_date or "",
+            maturity_date=item.maturity_date or "",
+            early_termination_rate=float(item.early_termination_rate or 0.0),
+            tax_rate=float(item.tax_rate if item.tax_rate is not None else 15.4),
+            lock_rebalance_sell=bool(item.lock_rebalance_sell if item.lock_rebalance_sell is not None else True),
+            account_id=item.account_id
         )
         if not success:
             errors.append(f"[{item.name}] {msg}")

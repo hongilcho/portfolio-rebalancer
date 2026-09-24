@@ -202,34 +202,130 @@ export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default'
                   📊 2️⃣ 매매 지시서
                 </h4>
 
+                {/* 매도 발생 시 예상 확정(실현) 손익 요약 카드 (대한민국 관례: 이익=빨간색, 손실=파란색) */}
+                {result.realized_summary?.has_sell && (
+                  <div style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '18px 20px',
+                    marginBottom: '16px',
+                    boxShadow: 'var(--shadow-sm)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '0.96rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>💡 과비중 매도에 따른 예상 확정(실현) 손익 요약</span>
+                      </span>
+                      <span className="badge" style={{ background: 'var(--bg-card-subtle)', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                        매도 종목 {result.realized_summary.sell_count}건
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                      <div style={{ background: 'var(--bg-card-subtle)', padding: '12px 16px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>총 매도 예정액</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatKRW(result.realized_summary.total_sell_amount)}</div>
+                      </div>
+
+                      <div style={{ background: 'var(--bg-card-subtle)', padding: '12px 16px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>매도 종목 매입 원금</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatKRW(result.realized_summary.total_cost_basis)}</div>
+                      </div>
+
+                      <div style={{ background: 'var(--bg-card-subtle)', padding: '12px 16px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>총 예상 확정 손익</div>
+                        <div style={{
+                          fontSize: '1.15rem',
+                          fontWeight: 800,
+                          color: result.realized_summary.total_realized_profit > 0 
+                            ? 'var(--color-profit)' 
+                            : result.realized_summary.total_realized_profit < 0 
+                            ? 'var(--color-loss)' 
+                            : 'var(--text-secondary)'
+                        }}>
+                          {result.realized_summary.total_realized_profit > 0 ? '+' : ''}
+                          {formatKRW(result.realized_summary.total_realized_profit)}
+                        </div>
+                      </div>
+
+                      <div style={{ background: 'var(--bg-card-subtle)', padding: '12px 16px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>예상 확정 수익률</div>
+                        <div style={{
+                          fontSize: '1.15rem',
+                          fontWeight: 800,
+                          color: result.realized_summary.total_realized_profit > 0 
+                            ? 'var(--color-profit)' 
+                            : result.realized_summary.total_realized_profit < 0 
+                            ? 'var(--color-loss)' 
+                            : 'var(--text-secondary)'
+                        }}>
+                          {formatPercent(result.realized_summary.total_realized_return_pct)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {result.trade_plan && result.trade_plan.length > 0 ? (
                   <div className="table-container">
                     <table className="custom-table">
                       <thead>
                         <tr>
                           <th>계좌</th>
-                          <th>종류</th>
+                          <th>구분</th>
                           <th>자산명</th>
                           <th>수량</th>
+                          <th>평단가</th>
                           <th>예상 체결가</th>
-                          <th>총액</th>
+                          <th>총 매매액</th>
+                          <th>예상 확정손익</th>
                         </tr>
                       </thead>
                       <tbody>
                         {result.trade_plan.map((t, idx) => {
                           const isBuy = t.type === 'BUY';
+                          const isSell = t.type === 'SELL';
+                          const profitKrw = t.realized_profit_krw || 0;
+                          const profitPct = t.realized_profit_pct || 0;
+                          const isProfit = profitKrw > 0;
+                          const isLoss = profitKrw < 0;
+
                           return (
                             <tr key={idx}>
                               <td style={{ fontWeight: 600 }}>{t.account_alias}</td>
                               <td>
-                                <span className={`badge ${isBuy ? 'badge-profit' : 'badge-loss'}`} style={{ fontSize: '0.82rem' }}>
-                                  {isBuy ? '🔵 매수' : '🔴 매도'}
+                                <span 
+                                  className="badge" 
+                                  style={{ 
+                                    fontSize: '0.82rem',
+                                    fontWeight: 700,
+                                    background: isBuy ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                    color: isBuy ? '#3B82F6' : '#EF4444',
+                                    border: isBuy ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)'
+                                  }}
+                                >
+                                  {isBuy ? '매수' : '매도'}
                                 </span>
                               </td>
                               <td style={{ fontWeight: 600 }}>{t.asset_name}</td>
                               <td>{formatQuantity(t.qty)}</td>
+                              <td>{isSell ? formatKRW(t.avg_price) : '-'}</td>
                               <td>{formatKRW(t.price)}</td>
                               <td style={{ fontWeight: 700 }}>{formatKRW(t.total_krw)}</td>
+                              <td>
+                                {isSell ? (
+                                  <span 
+                                    style={{
+                                      fontWeight: 700,
+                                      color: isProfit ? 'var(--color-profit)' : isLoss ? 'var(--color-loss)' : 'var(--text-muted)'
+                                    }}
+                                  >
+                                    {isProfit ? '+' : ''}{formatKRW(profitKrw)} ({formatPercent(profitPct)})
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)' }}>-</span>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}

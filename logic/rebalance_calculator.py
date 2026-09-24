@@ -75,6 +75,12 @@ def calculate_rebalancing_plan(
         if scenario == "NEW_CASH" and diff_qty < 0:
             diff_qty = 0 # No selling allowed
 
+        # Deposit lock constraint: locked deposits are excluded from rebalance selling
+        is_deposit = bool(a.get('is_deposit', False))
+        lock_sell = bool(a.get('lock_rebalance_sell', True) if a.get('lock_rebalance_sell') is not None else True)
+        if is_deposit and lock_sell and diff_qty < 0:
+            diff_qty = 0
+
         targets[aid] = {
             "target_qty": target_qty,
             "diff_qty": diff_qty,
@@ -105,6 +111,12 @@ def calculate_rebalancing_plan(
                 
                 if acc_qty > 0:
                     sell_amt = min(acc_qty, qty_to_sell)
+                    acc_avg_price = acc_holdings[0].get('avg_price', 0.0) if acc_holdings else 0.0
+                    cost_basis = sell_amt * acc_avg_price
+                    total_krw = sell_amt * t_data["price"]
+                    realized_profit_krw = total_krw - cost_basis
+                    realized_profit_pct = ((t_data["price"] - acc_avg_price) / acc_avg_price * 100.0) if acc_avg_price > 0 else 0.0
+
                     trade_plan.append({
                         "account_id": acc['id'],
                         "account_alias": acc['account_alias'],
@@ -113,7 +125,11 @@ def calculate_rebalancing_plan(
                         "type": "SELL",
                         "qty": sell_amt,
                         "price": t_data["price"],
-                        "total_krw": sell_amt * t_data["price"]
+                        "avg_price": acc_avg_price,
+                        "cost_basis_krw": cost_basis,
+                        "total_krw": total_krw,
+                        "realized_profit_krw": realized_profit_krw,
+                        "realized_profit_pct": realized_profit_pct
                     })
                     qty_to_sell -= sell_amt
                     t_data["current_qty"] -= sell_amt
@@ -366,3 +382,22 @@ def calculate_rebalancing_plan(
         })
         
     return trade_plan, transfer_plan, simulated, True, "리밸런싱 계산 완료"
+
+def compute_realized_summary(trade_plan: List[dict]) -> dict:
+    """
+    매도 주문 목록에 대한 총 매도금액, 총 매입원가, 총 예상 확정 손익 및 수익률 집계
+    """
+    sell_trades = [t for t in trade_plan if t.get('type') == 'SELL']
+    total_sell_amount = sum(float(t.get('total_krw', 0.0)) for t in sell_trades)
+    total_cost_basis = sum(float(t.get('cost_basis_krw', 0.0)) for t in sell_trades)
+    total_realized_profit = sum(float(t.get('realized_profit_krw', 0.0)) for t in sell_trades)
+    total_realized_return_pct = ((total_realized_profit / total_cost_basis) * 100.0) if total_cost_basis > 0 else 0.0
+    return {
+        "has_sell": len(sell_trades) > 0,
+        "sell_count": len(sell_trades),
+        "total_sell_amount": total_sell_amount,
+        "total_cost_basis": total_cost_basis,
+        "total_realized_profit": total_realized_profit,
+        "total_realized_return_pct": total_realized_return_pct
+    }
+
