@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  TrendingUp, TrendingDown, DollarSign, Wallet, ShieldAlert, 
-  ChevronDown, ChevronUp, Edit2, RefreshCw, AlertCircle, CheckCircle2, PieChart 
+  ShieldAlert, 
+  ChevronDown, ChevronUp, Edit2, RefreshCw, PieChart 
 } from 'lucide-react';
 import { formatKRW, formatUSD, formatQuantity, formatPercent } from '../../utils/formatters';
 import DriftBar from '../common/DriftBar';
@@ -43,13 +43,8 @@ export default function DashboardTab({
   }, [stock_assets, activeAssetIds]);
 
   const accSummaries = useMemo(() => {
-    return safeData.account_summaries || safeData.accounts || [];
-  }, [safeData]);
-
-  // 종목별 비중 도넛 차트 데이터 가공 (예수금/현금 제외, 순수 투자자산)
-  const rebalanceStockAssets = useMemo(() => {
-    return (visibleStockAssets || []).filter((item) => item.include_in_rebalance !== false);
-  }, [visibleStockAssets]);
+    return dashboardData?.account_summaries || dashboardData?.accounts || [];
+  }, [dashboardData?.account_summaries, dashboardData?.accounts]);
 
   // '비중 및 괴리율' 표 전용 데이터 (예금형 자산 및 비중 제외 자산은 아예 삭제/제외)
   const weightDriftAssets = useMemo(() => {
@@ -59,10 +54,6 @@ export default function DashboardTab({
       return true;
     });
   }, [visibleStockAssets]);
-
-  const totalRebalanceStockEval = useMemo(() => {
-    return Number(kpi?.rebalance_stock_eval) || rebalanceStockAssets.reduce((sum, item) => sum + (Number(item.eval_amount) || 0), 0);
-  }, [kpi, rebalanceStockAssets]);
 
   // 종목별 비중 도넛 차트 데이터 가공 (예금 포함, 예수금 제외)
   const stockDonutData = useMemo(() => {

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Sparkles, RefreshCw, Briefcase, Coins, TrendingUp, TrendingDown, 
-  ArrowUpRight, ArrowDownRight, Layers, ArrowRight, CheckSquare, Square, PieChart
+  Sparkles, RefreshCw, TrendingUp, 
+  Layers, ArrowRight, CheckSquare, Square, PieChart
 } from 'lucide-react';
 import { api } from '../../utils/api';
 import { formatKRW, formatPercent } from '../../utils/formatters';
@@ -16,16 +16,14 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
 
   const [chartView, setChartView] = useState('dual'); // 'dual' | 'portfolios' | 'assetClasses'
 
-  const portfolioColors = ['#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6'];
+  const portfolioColors = useMemo(() => ['#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6'], []);
 
   const grand = data?.grand_total || {};
-  const portfolios = data?.portfolios || [];
   const crypto = data?.crypto || null;
-  const aggregatedAssets = data?.aggregated_assets || [];
 
   // 포트폴리오별 구성 비중 도넛 데이터
   const portfolioDonutData = useMemo(() => {
-    const list = (portfolios || []).map((p, idx) => ({
+    const list = (data?.portfolios || []).map((p, idx) => ({
       label: p.name,
       value: Number(p.total_eval) || 0,
       color: portfolioColors[idx % portfolioColors.length]
@@ -40,7 +38,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
     }
 
     return list.filter(item => item.value > 0).sort((a, b) => b.value - a.value);
-  }, [portfolios, includeCrypto, crypto, portfolioColors]);
+  }, [data?.portfolios, includeCrypto, crypto, portfolioColors]);
 
   // 자산군(Asset Class)별 비중 도넛 데이터 (예수금/현금 제외, 순수 자산군)
   const assetClassDonutData = useMemo(() => {
@@ -52,7 +50,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
       'crypto': { label: '🪙 가상화폐', value: 0, color: '#F97316' },
     };
 
-    (aggregatedAssets || []).forEach(item => {
+    (data?.aggregated_assets || []).forEach(item => {
       const evalAmt = Number(item.total_eval_amount) || 0;
       if (evalAmt <= 0) return;
 
@@ -86,9 +84,9 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
     return Object.values(classMap)
       .filter(item => item.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [aggregatedAssets]);
+  }, [data?.aggregated_assets]);
 
-  const loadOverview = async (isRefresh = false, cryptoToggle = includeCrypto) => {
+  const loadOverview = useCallback(async (isRefresh = false, cryptoToggle = includeCrypto) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError('');
@@ -103,11 +101,11 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [includeCrypto]);
 
   useEffect(() => {
     loadOverview(false, includeCrypto);
-  }, [includeCrypto]);
+  }, [loadOverview, includeCrypto]);
 
   const handleToggleCrypto = () => {
     const nextVal = !includeCrypto;

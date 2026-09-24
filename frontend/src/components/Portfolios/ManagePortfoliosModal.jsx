@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Edit3, Trash2, Check, FolderPlus, Briefcase, AlertCircle } from 'lucide-react';
+import { X, Plus, Edit3, Trash2, Briefcase, AlertCircle } from 'lucide-react';
 import { api } from '../../utils/api';
 
 export default function ManagePortfoliosModal({ 

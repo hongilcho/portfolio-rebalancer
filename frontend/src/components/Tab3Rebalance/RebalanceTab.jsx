@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Play, ArrowRightLeft, DollarSign, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '../../utils/api';
-import { formatKRW, formatQuantity, formatPercent, numToKrMixed } from '../../utils/formatters';
+import { formatKRW, formatQuantity, formatPercent } from '../../utils/formatters';
 import KoreanNumberInput from '../common/KoreanNumberInput';
 import DriftBar from '../common/DriftBar';
 

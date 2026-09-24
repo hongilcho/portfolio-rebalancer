@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Coins, TrendingUp, TrendingDown, RefreshCw, Edit3, 
-  ArrowUpRight, ArrowDownRight, PieChart, ShieldCheck, Sparkles, User, Users 
+  Coins, RefreshCw, Edit3, 
+  PieChart, Sparkles 
 } from 'lucide-react';
 import { api } from '../../utils/api';
 import { formatKRW, formatPercent } from '../../utils/formatters';
@@ -9,8 +9,7 @@ import DonutChart from '../common/DonutChart';
 import EditCryptoModal from './EditCryptoModal';
 
 export default function CryptoTab({ 
-  currentPortfolioId = 'default',
-  portfolioName = '금융 포트폴리오'
+  currentPortfolioId = 'default'
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,8 +33,6 @@ export default function CryptoTab({
   const ethComb = cryptoAssetsCombined.find(a => a.symbol === 'ETH') || {};
 
   const cryptoTotal = data?.crypto_total || {};
-  const portfolioSummary = data?.portfolio_summary || {};
-  const combined = data?.combined_summary || {};
 
   // 홍일 vs 윤아 지분 비중 도넛 데이터
   const ownerDonutData = useMemo(() => {
@@ -59,16 +56,17 @@ export default function CryptoTab({
       'BTC': '#F59E0B',
       'ETH': '#8B5CF6'
     };
-    return (cryptoAssetsCombined || [])
+    const list = data?.crypto_assets_combined || [];
+    return list
       .map(c => ({
         label: `${c.name || c.symbol} (${c.symbol})`,
         value: Number(c.eval_amount) || 0,
         color: symbolColors[c.symbol] || '#06B6D4'
       }))
       .filter(c => c.value > 0);
-  }, [cryptoAssetsCombined]);
+  }, [data?.crypto_assets_combined]);
 
-  const loadCryptoSummary = async (isRefresh = false) => {
+  const loadCryptoSummary = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError('');
@@ -83,11 +81,11 @@ export default function CryptoTab({
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [currentPortfolioId]);
 
   useEffect(() => {
     loadCryptoSummary();
-  }, [currentPortfolioId]);
+  }, [loadCryptoSummary]);
 
   const handleSaveHoldings = async (holdings) => {
     await api.updateCryptoHoldings(holdings);
@@ -103,13 +101,9 @@ export default function CryptoTab({
     );
   }
 
-  const isCombinedProfit = (combined.total_profit || 0) >= 0;
   const isCryptoProfit = (cryptoTotal.total_profit || 0) >= 0;
-  const isPortfolioProfit = (portfolioSummary.total_profit || 0) >= 0;
   const isHongilProfit = (hongil.total_profit || 0) >= 0;
   const isYoonaProfit = (yoona.total_profit || 0) >= 0;
-
-  const currentPortName = portfolioSummary.portfolio_name || portfolioName || '금융 포트폴리오';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

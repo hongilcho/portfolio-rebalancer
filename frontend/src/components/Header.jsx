@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee, Briefcase, Settings, Layers, Coins } from 'lucide-react';
+import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee, Briefcase, Settings, Coins } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatKRW } from '../utils/formatters';
 

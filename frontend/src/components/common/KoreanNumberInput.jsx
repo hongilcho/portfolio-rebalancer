@@ -10,7 +10,6 @@ export default function KoreanNumberInput({
   max,
   disabled = false,
   placeholder = '',
-  suffix = '원',
   className = ''
 }) {
   const handleChange = (e) => {

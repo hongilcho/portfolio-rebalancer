@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { formatKRW } from '../../utils/formatters';
 
 // 세련된 기본 컬러 팔레트 (다크/라이트 모드 모두에 어울리는 색상군)
-export const DEFAULT_PALETTE = [
+const DEFAULT_PALETTE = [
   '#3B82F6', // Blue
   '#10B981', // Emerald
   '#F59E0B', // Amber
@@ -108,8 +108,6 @@ export default function DonutChart({
   // 슬라이스 패스 정보 계산
   const slices = useMemo(() => {
     if (items.length === 0 || total <= 0) return [];
-
-    const padAngle = items.length > 1 ? 0.02 : 0; // 슬라이스 간 틈새 (라디안)
     let currentAngle = -Math.PI / 2; // 12시 방향부터 시작
 
     return items.map((item, idx) => {

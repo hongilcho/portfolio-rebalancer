@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, Filter, Save, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { api } from '../../utils/api';
 import { formatKRW, formatQuantity } from '../../utils/formatters';
 
@@ -39,7 +39,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
   }, [accounts]);
 
   // Load trade history
-  const loadTrades = async () => {
+  const loadTrades = useCallback(async () => {
     setLoadingTrades(true);
     try {
       const params = {};
@@ -57,11 +57,11 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
     } finally {
       setLoadingTrades(false);
     }
-  };
+  }, [startDate, endDate, selectedAccFilter, selectedAssetFilter, currentPortfolioId]);
 
   useEffect(() => {
     loadTrades();
-  }, [startDate, endDate, selectedAccFilter, selectedAssetFilter, currentPortfolioId]);
+  }, [loadTrades]);
 
   // Add/Remove Buy Row
   const addBuyRow = () => {
@@ -254,7 +254,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
               <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>{buyRows.length}건</span>
             </h4>
 
-            {buyRows.map((row, idx) => {
+            {buyRows.map((row) => {
               const allowedForAcc = assets.filter((ast) =>
                 (ast.allowed_accounts || []).map(String).includes(String(row.accountId))
               );
@@ -390,7 +390,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
               <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>{sellRows.length}건</span>
             </h4>
 
-            {sellRows.map((row, idx) => {
+            {sellRows.map((row) => {
               const accHoldings = (accountHoldingsMap[String(row.accountId)] || []).filter((h) => h.quantity > 0);
 
               return (

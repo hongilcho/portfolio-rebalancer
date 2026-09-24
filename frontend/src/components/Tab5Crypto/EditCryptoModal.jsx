@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Coins, User } from 'lucide-react';
+import { X, Save, Coins } from 'lucide-react';
 import { formatKRW } from '../../utils/formatters';
 
 export default function EditCryptoModal({ isOpen, onClose, byOwner, onSave }) {

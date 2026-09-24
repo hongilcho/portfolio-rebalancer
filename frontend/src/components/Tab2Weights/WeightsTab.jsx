@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Target, Check, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { api } from '../../utils/api';
 
 export default function WeightsTab({ assets, accounts, onSaved }) {

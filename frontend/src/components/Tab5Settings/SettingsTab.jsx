@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Edit3, Trash2, Shield, DollarSign, Database, Tag } from 'lucide-react';
+import { Plus, Edit3, Trash2 } from 'lucide-react';
 import { api } from '../../utils/api';
-import { formatKRW, formatUSD, numToKrMixed } from '../../utils/formatters';
+import { formatKRW, formatUSD } from '../../utils/formatters';
 import KoreanNumberInput from '../common/KoreanNumberInput';
 
 export default function SettingsTab({ 

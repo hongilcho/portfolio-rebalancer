@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
-import { numToKrMixed, formatKRW } from '../../utils/formatters';
+import { formatKRW } from '../../utils/formatters';
 import KoreanNumberInput from '../common/KoreanNumberInput';
 
 export default function EditHoldingsModal({ 
@@ -20,13 +20,14 @@ export default function EditHoldingsModal({
 
   // Load account data when selected account changes
   useEffect(() => {
-    if (!selectedAcc) return;
-    setDepositKrw(Number(selectedAcc.deposit_krw || 0));
-    setDepositUsd(Number(selectedAcc.deposit_usd || 0));
+    const acc = accounts.find((a) => String(a.id) === String(selectedAccId));
+    if (!acc) return;
+    setDepositKrw(Number(acc.deposit_krw || 0));
+    setDepositUsd(Number(acc.deposit_usd || 0));
 
     // Load holdings
     setLoading(true);
-    api.getAccountHoldings(selectedAcc.id)
+    api.getAccountHoldings(acc.id)
       .then((res) => {
         const map = {};
         (res.holdings || []).forEach((h) => {
@@ -39,7 +40,7 @@ export default function EditHoldingsModal({
       })
       .catch((err) => console.error(err))
       .finally(() => setLoading(false));
-  }, [selectedAccId]);
+  }, [selectedAccId, accounts]);
 
   // Filter allowed assets for this account
   const allowedAssets = assets.filter((ast) => 

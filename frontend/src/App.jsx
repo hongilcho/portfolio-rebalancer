@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  BarChart3, Target, Scale, History, Settings, ShieldCheck, 
-  RefreshCw, Coins 
+  BarChart3, Target, Scale, History, Settings, RefreshCw 
 } from 'lucide-react';
 import { api } from './utils/api';
 import Header from './components/Header';
