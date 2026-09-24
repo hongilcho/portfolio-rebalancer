@@ -64,9 +64,9 @@ export default function DashboardTab({
     return Number(kpi?.rebalance_stock_eval) || rebalanceStockAssets.reduce((sum, item) => sum + (Number(item.eval_amount) || 0), 0);
   }, [kpi, rebalanceStockAssets]);
 
-  // 종목별 비중 도넛 차트 데이터 가공 (비중 제외 예금/예수금 제외, 순수 리밸런싱 운용 자산)
+  // 종목별 비중 도넛 차트 데이터 가공 (예금 포함, 예수금 제외)
   const stockDonutData = useMemo(() => {
-    return (rebalanceStockAssets || [])
+    return (visibleStockAssets || [])
       .filter((item) => (Number(item.eval_amount) || 0) > 0)
       .map((item) => ({
         label: item.name,
@@ -74,7 +74,7 @@ export default function DashboardTab({
         subLabel: item.is_deposit ? '예금' : '투자자산'
       }))
       .sort((a, b) => b.value - a.value);
-  }, [rebalanceStockAssets]);
+  }, [visibleStockAssets]);
 
   // 종목 유형별 자산 분류 헬퍼 함수
   const classifyAssetType = (item) => {
@@ -125,7 +125,7 @@ export default function DashboardTab({
     return '주식';
   };
 
-  // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (리밸런싱 운용 자산 기준)
+  // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (예금 포함, 예수금 제외)
   const assetTypeDonutData = useMemo(() => {
     const categories = {
       '주식': { label: '📈 주식', value: 0, color: '#3B82F6' },
@@ -134,7 +134,7 @@ export default function DashboardTab({
       '예금': { label: '🏦 예금', value: 0, color: '#10B981' },
     };
 
-    (rebalanceStockAssets || []).forEach((item) => {
+    (visibleStockAssets || []).forEach((item) => {
       const evalAmt = Number(item.eval_amount) || 0;
       if (evalAmt <= 0) return;
 
@@ -149,7 +149,7 @@ export default function DashboardTab({
     return Object.values(categories)
       .filter((cat) => cat.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [rebalanceStockAssets]);
+  }, [visibleStockAssets]);
 
   if (!dashboardData) {
     return <div className="section-card">데이터를 불러오는 중입니다...</div>;
@@ -293,8 +293,8 @@ export default function DashboardTab({
               <DonutChart
                 title="📈 개별 종목별 자산 평가액 비중"
                 data={stockDonutData}
-                centerLabel="운용자산 평가액"
-                centerValue={formatKRW(totalRebalanceStockEval)}
+                centerLabel="투자자산 총 평가액"
+                centerValue={formatKRW(totalStockEval)}
                 size={230}
               />
             </div>
@@ -310,8 +310,8 @@ export default function DashboardTab({
               <DonutChart
                 title="🏛️ 종목 유형별 자산 평가액 비중 (주식/채권/대체투자/예금)"
                 data={assetTypeDonutData}
-                centerLabel="운용자산 평가액"
-                centerValue={formatKRW(totalRebalanceStockEval)}
+                centerLabel="투자자산 총 평가액"
+                centerValue={formatKRW(totalStockEval)}
                 size={230}
               />
             </div>
