@@ -26,12 +26,15 @@ def calculate_rebalancing_plan(
     price_map = {str(k): float(v) for k, v in price_map.items()}
 
     # 1. Total Current Value
-    total_asset_krw = sum(d['eval_amt_krw'] for d in portfolio_assets.values())
+    rebalance_assets = [a for a in assets if a.get('include_in_rebalance', True)]
+    rebalance_asset_ids = {str(a['id']) for a in rebalance_assets}
+    
+    rebalance_asset_krw = sum(d['eval_amt_krw'] for aid, d in portfolio_assets.items() if str(aid) in rebalance_asset_ids)
     total_cash_krw = total_krw_cash + new_cash_krw
     
-    total_portfolio_krw = total_asset_krw + total_cash_krw
-    if total_portfolio_krw <= 0:
-        return [], [], [], False, "포트폴리오 총액이 0원입니다."
+    total_rebalance_portfolio_krw = rebalance_asset_krw + total_cash_krw
+    if total_rebalance_portfolio_krw <= 0:
+        return [], [], [], False, "리밸런싱 대상 포트폴리오 총액이 0원입니다."
 
     # Sort accounts by user priority (lowest number = highest priority)
     # Default to 99 if not set.
@@ -41,8 +44,9 @@ def calculate_rebalancing_plan(
     # 2. Check Drift Condition (if scenario == "DRIFT")
     if scenario == "DRIFT":
         needs_rebalance = False
-        for aid, data in portfolio_assets.items():
-            current_w = (data['eval_amt_krw'] / total_asset_krw * 100) if total_asset_krw > 0 else 0
+        for aid in rebalance_asset_ids:
+            data = portfolio_assets.get(aid, {'eval_amt_krw': 0.0})
+            current_w = (data['eval_amt_krw'] / rebalance_asset_krw * 100) if rebalance_asset_krw > 0 else 0
             # We match with asset target
             target_w = next((a['target_weight'] for a in assets if str(a['id']) == str(aid)), 0)
             if abs(current_w - target_w) >= drift_threshold:
@@ -55,14 +59,26 @@ def calculate_rebalancing_plan(
     targets = {}
     for a in assets:
         aid = str(a['id'])
-        t_weight = a.get('target_weight', 0) / 100.0
-        t_value = total_portfolio_krw * t_weight
-        current_price = price_map.get(aid, 0.0)
-        
-        current_price_krw = current_price
-
         current_qty = portfolio_assets.get(aid, {}).get('qty', 0)
-        current_val = portfolio_assets.get(aid, {}).get('eval_amt_krw', 0.0)
+        current_price = price_map.get(aid, 0.0)
+        current_price_krw = current_price
+        
+        inc_rebalance = bool(a.get('include_in_rebalance', True))
+        if not inc_rebalance:
+            targets[aid] = {
+                "target_qty": current_qty,
+                "diff_qty": 0,
+                "current_qty": current_qty,
+                "price": current_price,
+                "price_krw": current_price_krw,
+                "is_risk": a['is_risk_asset'],
+                "allowed_accounts": a.get('allowed_accounts', []),
+                "include_in_rebalance": False
+            }
+            continue
+
+        t_weight = a.get('target_weight', 0) / 100.0
+        t_value = total_rebalance_portfolio_krw * t_weight
 
         if current_price_krw > 0:
             target_qty = math.floor(t_value / current_price_krw)
@@ -88,7 +104,8 @@ def calculate_rebalancing_plan(
             "price": current_price,
             "price_krw": current_price_krw,
             "is_risk": a['is_risk_asset'],
-            "allowed_accounts": a.get('allowed_accounts', [])
+            "allowed_accounts": a.get('allowed_accounts', []),
+            "include_in_rebalance": True
         }
 
     # 4. Handle Sells First (to free up cash)
@@ -199,11 +216,13 @@ def calculate_rebalancing_plan(
         max_shortfall = -float('inf') if scenario == "NEW_CASH" else 0.0
         
         for aid, t in targets.items():
+            if not t.get("include_in_rebalance", True):
+                continue
             price = t["price_krw"]
             if price <= 0: continue
             
             t_weight = next((a['target_weight'] for a in assets if str(a['id']) == aid), 0) / 100.0
-            orig_target_val = total_portfolio_krw * t_weight
+            orig_target_val = total_rebalance_portfolio_krw * t_weight
             
             planned_global_qty = sum(planned_holdings[acc_id].get(aid, 0) for acc_id in planned_holdings)
             target_qty_floored = math.floor(orig_target_val / price)
@@ -378,7 +397,8 @@ def calculate_rebalancing_plan(
             "projected_val": current_val,
             "current_qty": current_qty,
             "qty_diff": qty_diff,
-            "target_weight": a.get('target_weight', 0.0)
+            "target_weight": a.get('target_weight', 0.0) if a.get('include_in_rebalance', True) else 0.0,
+            "include_in_rebalance": bool(a.get('include_in_rebalance', True))
         })
         
     return trade_plan, transfer_plan, simulated, True, "리밸런싱 계산 완료"

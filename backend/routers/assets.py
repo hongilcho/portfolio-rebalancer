@@ -27,6 +27,7 @@ class CreateAssetRequest(BaseModel):
     lock_rebalance_sell: Optional[bool] = True
     account_id: Optional[str] = None
     account_no: Optional[str] = ""
+    include_in_rebalance: Optional[bool] = True
 
 class UpdateAssetRequest(BaseModel):
     name: str
@@ -48,6 +49,7 @@ class UpdateAssetRequest(BaseModel):
     lock_rebalance_sell: Optional[bool] = True
     account_id: Optional[str] = None
     account_no: Optional[str] = ""
+    include_in_rebalance: Optional[bool] = True
 
 class AssetWeightMappingItem(BaseModel):
     id: str
@@ -69,6 +71,7 @@ class AssetWeightMappingItem(BaseModel):
     lock_rebalance_sell: Optional[bool] = True
     account_id: Optional[str] = None
     account_no: Optional[str] = ""
+    include_in_rebalance: Optional[bool] = True
 
 class BatchWeightsRequest(BaseModel):
     items: List[AssetWeightMappingItem]
@@ -102,7 +105,8 @@ def create_asset(req: CreateAssetRequest):
         tax_rate=float(req.tax_rate if req.tax_rate is not None else 15.4),
         lock_rebalance_sell=bool(req.lock_rebalance_sell if req.lock_rebalance_sell is not None else True),
         account_id=req.account_id,
-        account_no=req.account_no or ""
+        account_no=req.account_no or "",
+        include_in_rebalance=bool(req.include_in_rebalance if req.include_in_rebalance is not None else True)
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)
@@ -130,7 +134,8 @@ def edit_asset(asset_id: str, req: UpdateAssetRequest):
         tax_rate=float(req.tax_rate if req.tax_rate is not None else 15.4),
         lock_rebalance_sell=bool(req.lock_rebalance_sell if req.lock_rebalance_sell is not None else True),
         account_id=req.account_id,
-        account_no=req.account_no or ""
+        account_no=req.account_no or "",
+        include_in_rebalance=bool(req.include_in_rebalance if req.include_in_rebalance is not None else True)
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)
@@ -169,7 +174,9 @@ def batch_update_weights(req: BatchWeightsRequest):
             early_termination_rate=float(item.early_termination_rate or 0.0),
             tax_rate=float(item.tax_rate if item.tax_rate is not None else 15.4),
             lock_rebalance_sell=bool(item.lock_rebalance_sell if item.lock_rebalance_sell is not None else True),
-            account_id=item.account_id
+            account_id=item.account_id,
+            account_no=item.account_no or "",
+            include_in_rebalance=bool(item.include_in_rebalance if item.include_in_rebalance is not None else True)
         )
         if not success:
             errors.append(f"[{item.name}] {msg}")

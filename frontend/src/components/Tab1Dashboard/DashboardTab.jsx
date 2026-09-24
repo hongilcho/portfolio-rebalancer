@@ -47,8 +47,17 @@ export default function DashboardTab({
   }, [safeData]);
 
   // 종목별 비중 도넛 차트 데이터 가공 (예수금/현금 제외, 순수 투자자산)
+  const rebalanceStockAssets = useMemo(() => {
+    return (visibleStockAssets || []).filter((item) => item.include_in_rebalance !== false);
+  }, [visibleStockAssets]);
+
+  const totalRebalanceStockEval = useMemo(() => {
+    return Number(kpi?.rebalance_stock_eval) || rebalanceStockAssets.reduce((sum, item) => sum + (Number(item.eval_amount) || 0), 0);
+  }, [kpi, rebalanceStockAssets]);
+
+  // 종목별 비중 도넛 차트 데이터 가공 (비중 제외 예금/예수금 제외, 순수 리밸런싱 운용 자산)
   const stockDonutData = useMemo(() => {
-    return (visibleStockAssets || [])
+    return (rebalanceStockAssets || [])
       .filter((item) => (Number(item.eval_amount) || 0) > 0)
       .map((item) => ({
         label: item.name,
@@ -56,7 +65,7 @@ export default function DashboardTab({
         subLabel: item.is_deposit ? '예금' : '투자자산'
       }))
       .sort((a, b) => b.value - a.value);
-  }, [visibleStockAssets]);
+  }, [rebalanceStockAssets]);
 
   // 종목 유형별 자산 분류 헬퍼 함수
   const classifyAssetType = (item) => {
@@ -107,7 +116,7 @@ export default function DashboardTab({
     return '주식';
   };
 
-  // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (예수금 제외)
+  // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (리밸런싱 운용 자산 기준)
   const assetTypeDonutData = useMemo(() => {
     const categories = {
       '주식': { label: '📈 주식', value: 0, color: '#3B82F6' },
@@ -116,7 +125,7 @@ export default function DashboardTab({
       '예금': { label: '🏦 예금', value: 0, color: '#10B981' },
     };
 
-    (visibleStockAssets || []).forEach((item) => {
+    (rebalanceStockAssets || []).forEach((item) => {
       const evalAmt = Number(item.eval_amount) || 0;
       if (evalAmt <= 0) return;
 
@@ -131,7 +140,7 @@ export default function DashboardTab({
     return Object.values(categories)
       .filter((cat) => cat.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [visibleStockAssets]);
+  }, [rebalanceStockAssets]);
 
   if (!dashboardData) {
     return <div className="section-card">데이터를 불러오는 중입니다...</div>;
@@ -275,8 +284,8 @@ export default function DashboardTab({
               <DonutChart
                 title="📈 개별 종목별 자산 평가액 비중"
                 data={stockDonutData}
-                centerLabel="투자자산 총 평가액"
-                centerValue={formatKRW(totalStockEval)}
+                centerLabel="운용자산 평가액"
+                centerValue={formatKRW(totalRebalanceStockEval)}
                 size={230}
               />
             </div>
@@ -292,8 +301,8 @@ export default function DashboardTab({
               <DonutChart
                 title="🏛️ 종목 유형별 자산 평가액 비중 (주식/채권/대체투자/예금)"
                 data={assetTypeDonutData}
-                centerLabel="투자자산 총 평가액"
-                centerValue={formatKRW(totalStockEval)}
+                centerLabel="운용자산 평가액"
+                centerValue={formatKRW(totalRebalanceStockEval)}
                 size={230}
               />
             </div>
@@ -396,23 +405,41 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody>
-                {visibleStockAssets?.map((item) => (
-                  <tr key={item.asset_id}>
-                    <td style={{ fontWeight: 600 }}>
-                      {item.name}
-                      {item.is_deposit && (
-                        <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
-                          🏦 예금
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'center', fontWeight: 600 }}>{item.weight_pct.toFixed(1)}%</td>
-                    <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{item.target_weight_pct.toFixed(1)}%</td>
-                    <td>
-                      <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
-                    </td>
-                  </tr>
-                ))}
+                {visibleStockAssets?.map((item) => {
+                  const incRebal = item.include_in_rebalance !== false;
+                  return (
+                    <tr key={item.asset_id} style={!incRebal ? { opacity: 0.75 } : {}}>
+                      <td style={{ fontWeight: 600 }}>
+                        {item.name}
+                        {item.is_deposit && (
+                          <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
+                            🏦 예금
+                          </span>
+                        )}
+                        {!incRebal && (
+                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(156, 163, 175, 0.2)', color: 'var(--text-muted)' }}>
+                            비중 제외
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>
+                        {incRebal ? `${item.weight_pct.toFixed(1)}%` : '-'}
+                      </td>
+                      <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        {incRebal ? `${item.target_weight_pct.toFixed(1)}%` : '-'}
+                      </td>
+                      <td>
+                        {incRebal ? (
+                          <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
+                        ) : (
+                          <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            포트폴리오 비중 제외 자산
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -422,6 +449,7 @@ export default function DashboardTab({
         <div className="mobile-view">
           {visibleStockAssets?.map((item) => {
             const isItemProfit = item.profit_krw >= 0;
+            const incRebal = item.include_in_rebalance !== false;
             return (
               <div key={item.asset_id} className="mobile-card-item">
                 {/* Row 1: Name + Eval Amount */}
@@ -434,6 +462,11 @@ export default function DashboardTab({
                       </span>
                     ) : (
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: '6px', whiteSpace: 'nowrap' }}>({item.ticker})</span>
+                    )}
+                    {!incRebal && (
+                      <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(156, 163, 175, 0.2)', color: 'var(--text-muted)' }}>
+                        비중 제외
+                      </span>
                     )}
                   </div>
                   <span className="mobile-card-value">{formatKRW(item.eval_amount)}</span>
@@ -455,15 +488,23 @@ export default function DashboardTab({
 
                 {/* Row 3: Weight info & Drift */}
                 <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
-                  <div className="mobile-card-row" style={{ fontSize: '0.82rem', marginBottom: '6px' }}>
-                    <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                      현재 <strong>{item.weight_pct.toFixed(1)}%</strong> / 목표 <strong>{item.target_weight_pct.toFixed(1)}%</strong>
-                    </span>
-                    <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: item.drift_pct > 0 ? 'var(--color-profit)' : item.drift_pct < 0 ? 'var(--color-loss)' : 'var(--text-muted)' }}>
-                      괴리율: {item.drift_pct > 0 ? '+' : ''}{item.drift_pct.toFixed(1)}%
-                    </span>
-                  </div>
-                  <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
+                  {incRebal ? (
+                    <>
+                      <div className="mobile-card-row" style={{ fontSize: '0.82rem', marginBottom: '6px' }}>
+                        <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                          현재 <strong>{item.weight_pct.toFixed(1)}%</strong> / 목표 <strong>{item.target_weight_pct.toFixed(1)}%</strong>
+                        </span>
+                        <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: item.drift_pct > 0 ? 'var(--color-profit)' : item.drift_pct < 0 ? 'var(--color-loss)' : 'var(--text-muted)' }}>
+                          괴리율: {item.drift_pct > 0 ? '+' : ''}{item.drift_pct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
+                    </>
+                  ) : (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '4px 0' }}>
+                      ⚖️ 포트폴리오 비중 및 괴리율 제외 자산
+                    </div>
+                  )}
                 </div>
               </div>
             );

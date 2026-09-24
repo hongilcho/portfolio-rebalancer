@@ -138,6 +138,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
         })
         
     # 2. Portfolio-wide aggregated asset summary
+    asset_dict_by_id = {str(a['id']): a for a in assets}
     portfolio_assets = {}
     total_krw_cash = sum(float(a['deposit_krw']) for a in accounts)
     total_usd_cash = sum(float(a['deposit_usd']) for a in accounts)
@@ -146,6 +147,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
         acc_holdings = get_holdings_by_account(acc['id'])
         for h in acc_holdings:
             aid = str(h['asset_id'])
+            asset_meta = asset_dict_by_id.get(aid, {})
             if aid not in portfolio_assets:
                 portfolio_assets[aid] = {
                     "asset_id": aid,
@@ -156,6 +158,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
                     "quantity": 0.0,
                     "buy_amt_krw": 0.0,
                     "eval_amt_krw": 0.0,
+                    "include_in_rebalance": bool(asset_meta.get('include_in_rebalance', True))
                 }
             qty = float(h['quantity'])
             avg_p_krw = float(h['avg_price'])
@@ -186,10 +189,12 @@ def get_dashboard_summary(portfolio_id: str = "default"):
                     "is_deposit": True,
                     "account_no": a.get('account_no', ''),
                     "maturity_date": a.get('maturity_date', ''),
-                    "interest_rate": float(a.get('interest_rate') or 0.0)
+                    "interest_rate": float(a.get('interest_rate') or 0.0),
+                    "include_in_rebalance": bool(a.get('include_in_rebalance', True))
                 }
 
     total_stock_eval = sum(d['eval_amt_krw'] for d in portfolio_assets.values() if d['quantity'] > 0)
+    rebalance_stock_eval = sum(d['eval_amt_krw'] for d in portfolio_assets.values() if d['quantity'] > 0 and d.get('include_in_rebalance', True))
     total_stock_buy = sum(d['buy_amt_krw'] for d in portfolio_assets.values() if d['quantity'] > 0)
     total_stock_profit = total_stock_eval - total_stock_buy
     total_stock_return = (total_stock_profit / total_stock_buy * 100) if total_stock_buy > 0 else 0.0
@@ -203,6 +208,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
     for a in assets:
         aid = str(a['id'])
         is_active = a.get('is_active', True)
+        include_in_rebal = bool(a.get('include_in_rebalance', True))
         data = portfolio_assets.get(aid, {
             "asset_id": aid,
             "name": a['name'],
@@ -211,7 +217,8 @@ def get_dashboard_summary(portfolio_id: str = "default"):
             "is_risk_asset": bool(a.get('is_risk_asset', True)),
             "quantity": 0.0,
             "buy_amt_krw": 0.0,
-            "eval_amt_krw": 0.0
+            "eval_amt_krw": 0.0,
+            "include_in_rebalance": include_in_rebal
         })
         
         # If asset is inactive and has no holdings, do not display in Dashboard Tab 1
@@ -221,12 +228,16 @@ def get_dashboard_summary(portfolio_id: str = "default"):
         profit_krw = data['eval_amt_krw'] - data['buy_amt_krw']
         profit_pct = (profit_krw / data['buy_amt_krw'] * 100) if data['buy_amt_krw'] > 0 else 0.0
         
-        weight_pct = (data['eval_amt_krw'] / total_stock_eval * 100) if total_stock_eval > 0 else 0.0
-        target_w = target_weight_map.get(aid, 0.0)
-        drift_pct = weight_pct - target_w
-        
-        if abs(drift_pct) > max_drift_abs:
-            max_drift_abs = abs(drift_pct)
+        if include_in_rebal:
+            weight_pct = (data['eval_amt_krw'] / rebalance_stock_eval * 100) if rebalance_stock_eval > 0 else 0.0
+            target_w = target_weight_map.get(aid, 0.0)
+            drift_pct = weight_pct - target_w
+            if abs(drift_pct) > max_drift_abs:
+                max_drift_abs = abs(drift_pct)
+        else:
+            weight_pct = 0.0
+            target_w = 0.0
+            drift_pct = 0.0
             
         is_deposit = bool(a.get('is_deposit', False))
         is_gold = "금" in data['name'] or data.get('ticker') == 'M04020000'
@@ -254,6 +265,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
             "weight_pct": weight_pct,
             "target_weight_pct": target_w,
             "drift_pct": drift_pct,
+            "include_in_rebalance": include_in_rebal,
             "is_deposit": is_deposit,
             "deposit_principal": float(a.get('deposit_principal') or 0.0),
             "interest_rate": float(a.get('interest_rate') or 0.0),
@@ -264,7 +276,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
             "account_no": a.get('account_no', '')
         })
         
-    stock_summary_rows.sort(key=lambda x: x['weight_pct'], reverse=True)
+    stock_summary_rows.sort(key=lambda x: (not x['include_in_rebalance'], -x['weight_pct'], -x['eval_amount']))
     
     scale_max = round(max_drift_abs * 3.5, 1) if max_drift_abs > 0 else 1.0
     
@@ -279,6 +291,7 @@ def get_dashboard_summary(portfolio_id: str = "default"):
         "kpi": {
             "total_stock_buy": total_stock_buy,
             "total_stock_eval": total_stock_eval,
+            "rebalance_stock_eval": rebalance_stock_eval,
             "total_stock_profit": total_stock_profit,
             "total_stock_return": total_stock_return,
             "total_portfolio_eval": total_portfolio_eval
