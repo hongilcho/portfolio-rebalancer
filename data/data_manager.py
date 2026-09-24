@@ -89,8 +89,8 @@ def get_connection():
 def sanitize_account_names(acc_list):
     clean_set = set()
     for acc in acc_list:
-        if str(acc).isdigit():
-            clean_set.add(str(acc))
+        if acc is not None and str(acc).strip():
+            clean_set.add(str(acc).strip())
     return sorted(list(clean_set))
 
 def generate_id():
@@ -164,6 +164,7 @@ def init_db():
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS early_termination_rate REAL DEFAULT 0.0")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS tax_rate REAL DEFAULT 15.4")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS lock_rebalance_sell BOOLEAN DEFAULT TRUE")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS account_no TEXT DEFAULT ''")
 
     try:
         cursor.execute('''
@@ -459,6 +460,7 @@ def get_all_assets(portfolio_id: str = None):
         except Exception:
             raw_accs = []
         r['allowed_accounts'] = sanitize_account_names(raw_accs)
+        r['account_no'] = r.get('account_no') or ''
         r['is_risk_asset'] = bool(r.get('is_risk_asset', 1))
         r['is_active'] = bool(r.get('is_active', True) if r.get('is_active') is not None else True)
         r['is_deposit'] = bool(r.get('is_deposit', False))
@@ -475,36 +477,61 @@ def get_all_assets(portfolio_id: str = None):
 
 def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes="", portfolio_id="default",
               is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
-              early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None):
+              early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None, account_no=""):
+    conn = get_connection()
+    cursor = conn.cursor()
+    new_id = generate_id()
+    target_pid = portfolio_id or "default"
+    clean_acc_no = (account_no or '').strip()
+
     if is_deposit:
         is_risk_asset = False
         market = 'KR'
         if not ticker or ticker.strip() in ['', '없음', '-']:
             ticker = f"DEP-{uuid.uuid4().hex[:6].upper()}"
-        if account_id:
-            allowed_accounts = [str(account_id)]
+
+        # 정기예금은 그 자체가 계좌이므로 전용 계좌를 accounts 테이블에 자동 생성/연결
+        if not clean_acc_no:
+            clean_acc_no = f"DEP-{uuid.uuid4().hex[:8].upper()}"
+
+        cursor.execute("SELECT id, account_type, portfolio_id FROM accounts WHERE account_no = %s", (clean_acc_no,))
+        existing_acc = cursor.fetchone()
+        if existing_acc:
+            acc_id_found, acc_type_found, acc_pid_found = existing_acc
+            if acc_type_found != '정기예금':
+                conn.close()
+                return False, f"이미 다른 증권 계좌에서 사용 중인 계좌번호입니다: {clean_acc_no}"
+            deposit_acc_id = str(acc_id_found)
+            cursor.execute("UPDATE accounts SET account_alias = %s WHERE id = %s", (name.strip(), deposit_acc_id))
+        else:
+            deposit_acc_id = generate_id()
+            cursor.execute('''
+                INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, portfolio_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (deposit_acc_id, clean_acc_no, name.strip(), '정기예금', 0.0, 0.0, 0.0, 0.0, f"정기예금 연동 계좌 ({name.strip()})", 99, 'ANNUAL', 0.0, target_pid))
+
+        allowed_accounts = [deposit_acc_id]
+        account_id = deposit_acc_id
 
     if allowed_accounts is None:
         allowed_accounts = []
     clean_accs = sanitize_account_names(allowed_accounts)
-    conn = get_connection()
-    cursor = conn.cursor()
-    new_id = generate_id()
-    target_pid = portfolio_id or "default"
+
     try:
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
             INSERT INTO assets (
                 id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, is_active, notes, portfolio_id,
-                is_deposit, deposit_principal, interest_rate, start_date, maturity_date, early_termination_rate, tax_rate, lock_rebalance_sell
+                is_deposit, deposit_principal, interest_rate, start_date, maturity_date, early_termination_rate, tax_rate, lock_rebalance_sell, account_no
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             new_id, name, ticker.strip().upper(), market, target_weight, allowed_json,
             1 if is_risk_asset else 0, is_active, notes, target_pid,
             is_deposit, float(deposit_principal or 0.0), float(interest_rate or 0.0),
             str(start_date or ''), str(maturity_date or ''), float(early_termination_rate or 0.0),
-            float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell
+            float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell,
+            clean_acc_no if is_deposit else ''
         ))
 
         # 예금인 경우 holdings 및 trade_history 자동 생성
@@ -526,6 +553,7 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
             ''', (t_id, today_str, str(target_account), new_id, 'INIT', 1.0, float(deposit_principal)))
 
         conn.commit()
+        clear_all_caches()
         return True, "성공적으로 추가되었습니다."
     except psycopg2.IntegrityError:
         conn.rollback()
@@ -538,18 +566,47 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
 
 def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset=True, is_active=True, notes="",
                  is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
-                 early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None):
+                 early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None, account_no=""):
+    conn = get_connection()
+    cursor = conn.cursor()
+    clean_acc_no = (account_no or '').strip()
+
     if is_deposit:
         is_risk_asset = False
         market = 'KR'
         if not ticker or ticker.strip() in ['', '없음', '-']:
             ticker = f"DEP-{str(asset_id)[:6].upper()}"
-        if account_id:
-            allowed_accounts = [str(account_id)]
+
+        cursor.execute("SELECT allowed_accounts, portfolio_id, account_no FROM assets WHERE id = %s", (str(asset_id),))
+        cur_row = cursor.fetchone()
+        cur_allowed = []
+        cur_pid = "default"
+        if cur_row:
+            try:
+                cur_allowed = json.loads(cur_row[0]) if cur_row[0] else []
+            except Exception:
+                cur_allowed = []
+            cur_pid = cur_row[1] or "default"
+            if not clean_acc_no and cur_row[2]:
+                clean_acc_no = cur_row[2]
+
+        if not clean_acc_no:
+            clean_acc_no = f"DEP-{str(asset_id)[:6].upper()}"
+
+        deposit_acc_id = cur_allowed[0] if cur_allowed else None
+        if deposit_acc_id:
+            cursor.execute("UPDATE accounts SET account_no = %s, account_alias = %s WHERE id = %s", (clean_acc_no, name.strip(), str(deposit_acc_id)))
+        else:
+            deposit_acc_id = generate_id()
+            cursor.execute('''
+                INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, portfolio_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (deposit_acc_id, clean_acc_no, name.strip(), '정기예금', 0.0, 0.0, 0.0, 0.0, f"정기예금 연동 계좌 ({name.strip()})", 99, 'ANNUAL', 0.0, cur_pid))
+
+        allowed_accounts = [deposit_acc_id]
+        account_id = deposit_acc_id
 
     clean_accs = sanitize_account_names(allowed_accounts)
-    conn = get_connection()
-    cursor = conn.cursor()
     try:
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
@@ -557,7 +614,8 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
             SET name = %s, ticker = %s, market = %s, target_weight = %s, allowed_accounts = %s,
                 is_risk_asset = %s, is_active = %s, notes = %s,
                 is_deposit = %s, deposit_principal = %s, interest_rate = %s, start_date = %s,
-                maturity_date = %s, early_termination_rate = %s, tax_rate = %s, lock_rebalance_sell = %s
+                maturity_date = %s, early_termination_rate = %s, tax_rate = %s, lock_rebalance_sell = %s,
+                account_no = %s
             WHERE id = %s
         ''', (
             name, ticker.strip().upper(), market, target_weight, allowed_json,
@@ -565,6 +623,7 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
             is_deposit, float(deposit_principal or 0.0), float(interest_rate or 0.0),
             str(start_date or ''), str(maturity_date or ''), float(early_termination_rate or 0.0),
             float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell,
+            clean_acc_no if is_deposit else '',
             str(asset_id)
         ))
 
@@ -581,6 +640,7 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
             ''', (h_id, str(target_account), str(asset_id), 1.0, float(deposit_principal)))
 
         conn.commit()
+        clear_all_caches()
         return True, "성공적으로 수정되었습니다."
     except Exception as e:
         conn.rollback()
@@ -594,6 +654,7 @@ def toggle_asset_active(asset_id, is_active: bool):
     try:
         cursor.execute("UPDATE assets SET is_active = %s WHERE id = %s", (is_active, str(asset_id)))
         conn.commit()
+        clear_all_caches()
         status_str = "활성화" if is_active else "비활성화(보관)"
         return True, f"종목이 성공적으로 {status_str}되었습니다."
     except Exception as e:
@@ -606,10 +667,34 @@ def delete_asset(asset_id):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Check holdings to find linked account(s) before deleting
+        cursor.execute("SELECT account_id FROM holdings WHERE asset_id = %s", (str(asset_id),))
+        linked_acc_ids = [str(r[0]) for r in cursor.fetchall()]
+
+        cursor.execute("SELECT is_deposit, allowed_accounts FROM assets WHERE id = %s", (str(asset_id),))
+        row = cursor.fetchone()
+        is_dep = bool(row[0]) if row else False
+        if row and row[1]:
+            try:
+                for a in json.loads(row[1]):
+                    if str(a) not in linked_acc_ids:
+                        linked_acc_ids.append(str(a))
+            except Exception:
+                pass
+
         cursor.execute("DELETE FROM holdings WHERE asset_id = %s", (str(asset_id),))
         cursor.execute("DELETE FROM trade_history WHERE asset_id = %s", (str(asset_id),))
         cursor.execute("DELETE FROM assets WHERE id = %s", (str(asset_id),))
+
+        if is_dep:
+            for acc_id in linked_acc_ids:
+                cursor.execute("SELECT account_type FROM accounts WHERE id = %s", (str(acc_id),))
+                acc_row = cursor.fetchone()
+                if acc_row and acc_row[0] == '정기예금':
+                    cursor.execute("DELETE FROM accounts WHERE id = %s", (str(acc_id),))
+
         conn.commit()
+        clear_all_caches()
         return True, "종목이 성공적으로 삭제되었습니다."
     except Exception as e:
         conn.rollback()
@@ -650,6 +735,28 @@ def get_all_holdings():
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+def clear_all_caches():
+    try:
+        get_portfolios.clear()
+    except Exception:
+        pass
+    try:
+        get_all_accounts.clear()
+    except Exception:
+        pass
+    try:
+        get_all_assets.clear()
+    except Exception:
+        pass
+    try:
+        get_holdings_by_account.clear()
+    except Exception:
+        pass
+    try:
+        get_all_holdings.clear()
+    except Exception:
+        pass
 
 def save_account_holdings(account_id, holdings_data):
     conn = get_connection()

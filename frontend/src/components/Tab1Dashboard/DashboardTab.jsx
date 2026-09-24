@@ -143,6 +143,11 @@ export default function DashboardTab({
                             🏦 예금
                           </span>
                         )}
+                        {item.is_deposit && item.account_no && (
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+                            계좌: {item.account_no}
+                          </div>
+                        )}
                       </td>
                       <td>{formatQuantity(item.quantity, item.unit)}</td>
                       <td style={{ color: isItemProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
@@ -224,7 +229,7 @@ export default function DashboardTab({
                     <span>{item.name}</span>
                     {item.is_deposit ? (
                       <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
-                        🏦 예금
+                        🏦 예금 {item.account_no ? `(${item.account_no})` : ''}
                       </span>
                     ) : (
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: '6px', whiteSpace: 'nowrap' }}>({item.ticker})</span>
@@ -360,14 +365,16 @@ export default function DashboardTab({
                 <div className="accordion-header" onClick={() => toggleAccordion(acc.id)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>
-                      📌 [{acc.account_type}] {acc.account_alias}
+                      📌 [{acc.account_type === '정기예금' ? '🏦 정기예금' : acc.account_type}] {acc.account_alias}
                     </span>
                     <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                       ({acc.account_no})
                     </span>
-                    <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)' }}>
-                      우선순위: {acc.priority || 99}
-                    </span>
+                    {acc.account_type !== '정기예금' && (
+                      <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)' }}>
+                        우선순위: {acc.priority || 99}
+                      </span>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -385,7 +392,9 @@ export default function DashboardTab({
                     {/* Account Stat Highlight Row */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'var(--bg-surface)', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '16px', border: '1px solid var(--border-color)' }}>
                       <div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>📈 주식 평가금액</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          {acc.account_type === '정기예금' ? '🏦 예금 평가금액' : '📈 주식 평가금액'}
+                        </div>
                         <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatKRW(acc.stock_eval)}</div>
                       </div>
                       <div>

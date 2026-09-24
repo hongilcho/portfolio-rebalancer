@@ -236,7 +236,8 @@ def get_dashboard_summary(portfolio_id: str = "default"):
             "start_date": a.get('start_date', ''),
             "maturity_date": a.get('maturity_date', ''),
             "tax_rate": float(a.get('tax_rate') if a.get('tax_rate') is not None else 15.4),
-            "lock_rebalance_sell": bool(a.get('lock_rebalance_sell', True) if a.get('lock_rebalance_sell') is not None else True)
+            "lock_rebalance_sell": bool(a.get('lock_rebalance_sell', True) if a.get('lock_rebalance_sell') is not None else True),
+            "account_no": a.get('account_no', '')
         })
         
     stock_summary_rows.sort(key=lambda x: x['weight_pct'], reverse=True)

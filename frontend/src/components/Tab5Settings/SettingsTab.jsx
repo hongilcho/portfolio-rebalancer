@@ -164,7 +164,8 @@ export default function SettingsTab({
         early_termination_rate: Number(assetForm.early_termination_rate || 0),
         tax_rate: Number(assetForm.tax_rate !== undefined ? assetForm.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(assetForm.lock_rebalance_sell !== false),
-        account_id: targetAccId
+        account_id: targetAccId,
+        account_no: assetForm.account_no ? assetForm.account_no.trim() : ''
       });
       alert('자산이 성공적으로 등록되었습니다.');
       setIsAddAssetOpen(false);
@@ -209,7 +210,8 @@ export default function SettingsTab({
         early_termination_rate: Number(assetForm.early_termination_rate || 0),
         tax_rate: Number(assetForm.tax_rate !== undefined ? assetForm.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(assetForm.lock_rebalance_sell !== false),
-        account_id: targetAccId
+        account_id: targetAccId,
+        account_no: assetForm.account_no ? assetForm.account_no.trim() : ''
       });
       alert('자산이 성공적으로 수정되었습니다.');
       setEditAssetTarget(null);
@@ -499,7 +501,8 @@ export default function SettingsTab({
                 early_termination_rate: 0.5,
                 tax_rate: 15.4,
                 lock_rebalance_sell: true,
-                account_id: accounts?.[0]?.id ? String(accounts[0].id) : ''
+                account_id: accounts?.[0]?.id ? String(accounts[0].id) : '',
+                account_no: ''
               });
               setIsAddAssetOpen(true);
             }}
@@ -535,8 +538,13 @@ export default function SettingsTab({
                             🏦 예금 (연 {ast.interest_rate}%)
                           </span>
                         )}
+                        {ast.is_deposit && ast.account_no && (
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400, marginTop: '2px' }}>
+                            계좌: {ast.account_no}
+                          </div>
+                        )}
                       </td>
-                      <td>{ast.ticker}</td>
+                      <td>{ast.is_deposit ? (ast.account_no || ast.ticker) : ast.ticker}</td>
                       <td>
                         <span className={`badge ${isActive ? 'badge-safe' : ''}`} style={!isActive ? { background: 'rgba(128,128,128,0.2)', color: 'var(--text-muted)' } : {}}>
                           {isActive ? '🟢 활성' : '⚪ 보관(비활성)'}
@@ -573,7 +581,8 @@ export default function SettingsTab({
                                 early_termination_rate: ast.early_termination_rate || 0.0,
                                 tax_rate: ast.tax_rate !== undefined ? ast.tax_rate : 15.4,
                                 lock_rebalance_sell: ast.lock_rebalance_sell !== undefined ? ast.lock_rebalance_sell : true,
-                                account_id: (ast.allowed_accounts && ast.allowed_accounts.length > 0) ? String(ast.allowed_accounts[0]) : ''
+                                account_id: (ast.allowed_accounts && ast.allowed_accounts.length > 0) ? String(ast.allowed_accounts[0]) : '',
+                                account_no: ast.account_no || ''
                               });
                             }}
                           >
@@ -810,43 +819,29 @@ export default function SettingsTab({
                     💡 <strong>정기예금 안내</strong>: 원금에 매일 경과된 <strong>세후 이자(원천징수 15.4% 기본)</strong>가 일할 계산되어 실시간 현재가로 반영됩니다. IRP 규정상 <strong>안전자산(🟢)</strong>으로 자동 분류됩니다.
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">예금 상품명</label>
-                    <input
-                      type="text"
-                      className="input-text"
-                      value={assetForm.name}
-                      onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })}
-                      placeholder="예: 신한 정기예금 1년, 국민 특판예금"
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">운용 계좌 선택</label>
-                    <select
-                      className="input-select"
-                      value={assetForm.account_id || (assetForm.allowed_accounts?.[0] || '')}
-                      onChange={(e) => {
-                        const accId = e.target.value;
-                        setAssetForm({
-                          ...assetForm,
-                          account_id: accId,
-                          allowed_accounts: [accId]
-                        });
-                      }}
-                      required
-                    >
-                      {accounts && accounts.length > 0 ? (
-                        accounts.map((a) => (
-                          <option key={a.id} value={String(a.id)}>
-                            [{a.account_type}] {a.account_alias} ({a.account_no})
-                          </option>
-                        ))
-                      ) : (
-                        <option value="">계좌 없음</option>
-                      )}
-                    </select>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+                    <div className="form-group">
+                      <label className="form-label">예금 상품명</label>
+                      <input
+                        type="text"
+                        className="input-text"
+                        value={assetForm.name}
+                        onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })}
+                        placeholder="예: 신한 정기예금 1년, 국민 특판예금"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">계좌번호</label>
+                      <input
+                        type="text"
+                        className="input-text"
+                        value={assetForm.account_no || ''}
+                        onChange={(e) => setAssetForm({ ...assetForm, account_no: e.target.value })}
+                        placeholder="예: 110-123-456789"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <KoreanNumberInput

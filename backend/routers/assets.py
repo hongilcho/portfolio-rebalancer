@@ -26,6 +26,7 @@ class CreateAssetRequest(BaseModel):
     tax_rate: Optional[float] = 15.4
     lock_rebalance_sell: Optional[bool] = True
     account_id: Optional[str] = None
+    account_no: Optional[str] = ""
 
 class UpdateAssetRequest(BaseModel):
     name: str
@@ -46,6 +47,7 @@ class UpdateAssetRequest(BaseModel):
     tax_rate: Optional[float] = 15.4
     lock_rebalance_sell: Optional[bool] = True
     account_id: Optional[str] = None
+    account_no: Optional[str] = ""
 
 class AssetWeightMappingItem(BaseModel):
     id: str
@@ -66,6 +68,7 @@ class AssetWeightMappingItem(BaseModel):
     tax_rate: Optional[float] = 15.4
     lock_rebalance_sell: Optional[bool] = True
     account_id: Optional[str] = None
+    account_no: Optional[str] = ""
 
 class BatchWeightsRequest(BaseModel):
     items: List[AssetWeightMappingItem]
@@ -98,7 +101,8 @@ def create_asset(req: CreateAssetRequest):
         early_termination_rate=float(req.early_termination_rate or 0.0),
         tax_rate=float(req.tax_rate if req.tax_rate is not None else 15.4),
         lock_rebalance_sell=bool(req.lock_rebalance_sell if req.lock_rebalance_sell is not None else True),
-        account_id=req.account_id
+        account_id=req.account_id,
+        account_no=req.account_no or ""
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)
@@ -125,7 +129,8 @@ def edit_asset(asset_id: str, req: UpdateAssetRequest):
         early_termination_rate=float(req.early_termination_rate or 0.0),
         tax_rate=float(req.tax_rate if req.tax_rate is not None else 15.4),
         lock_rebalance_sell=bool(req.lock_rebalance_sell if req.lock_rebalance_sell is not None else True),
-        account_id=req.account_id
+        account_id=req.account_id,
+        account_no=req.account_no or ""
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)

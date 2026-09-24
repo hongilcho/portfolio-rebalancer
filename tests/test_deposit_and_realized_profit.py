@@ -204,3 +204,62 @@ def test_locked_deposit_not_sold_in_rebalance():
     # 예금은 lock_rebalance_sell=True 이므로 매도 주문이 절대 발생하지 않아야 함
     sell_trades = [t for t in trade_plan if t['type'] == 'SELL' and t['asset_id'] == 'ast_deposit']
     assert len(sell_trades) == 0
+
+def test_deposit_asset_auto_creates_account_and_holdings():
+    from data.data_manager import add_asset, get_all_assets, get_all_accounts, get_holdings_by_account, delete_asset, create_portfolio, delete_portfolio
+
+    # 0. 테스트용 독립 포트폴리오 생성
+    p_ok, _, port = create_portfolio("테스트 예금 포트폴리오")
+    assert p_ok and port
+    test_pid = port['id']
+
+    acc_no = f"123-999-{test_pid[:4]}"
+    principal = 5000000.0
+
+    try:
+        # 1. 예금 자산 추가 (운용계좌 선택 없이 계좌번호만 입력)
+        ok, msg = add_asset(
+            name="테스트 카카오뱅크 예금",
+            ticker="",
+            market="KR",
+            target_weight=10.0,
+            portfolio_id=test_pid,
+            is_deposit=True,
+            deposit_principal=principal,
+            interest_rate=3.8,
+            start_date="2026-01-01",
+            maturity_date="2027-01-01",
+            account_no=acc_no
+        )
+        assert ok, f"add_asset failed: {msg}"
+
+        # 2. 계좌 테이블에 '정기예금' 유형으로 자동 생성되었는지 확인
+        accs = get_all_accounts(portfolio_id=test_pid)
+        matching_accs = [a for a in accs if a['account_no'] == acc_no]
+        assert len(matching_accs) == 1
+        dep_acc = matching_accs[0]
+        assert dep_acc['account_type'] == '정기예금'
+        assert dep_acc['account_alias'] == '테스트 카카오뱅크 예금'
+
+        # 3. 자산 테이블 확인 및 account_no 확인
+        assets = get_all_assets(portfolio_id=test_pid)
+        matching_assets = [a for a in assets if a['account_no'] == acc_no]
+        assert len(matching_assets) == 1
+        dep_asset = matching_assets[0]
+        assert dep_asset['is_deposit'] is True
+        assert dep_asset['deposit_principal'] == principal
+
+        # 4. holdings 테이블 자동 생성 확인 (수량 1.0, 평단가 = 원금)
+        holdings = get_holdings_by_account(dep_acc['id'])
+        assert len(holdings) == 1
+        assert holdings[0]['asset_id'] == dep_asset['id']
+        assert holdings[0]['quantity'] == 1.0
+        assert holdings[0]['avg_price'] == principal
+
+        # 5. 삭제 시 연동된 예금 계좌 및 자산 정리 확인
+        del_ok, _ = delete_asset(dep_asset['id'])
+        assert del_ok
+        accs_after = get_all_accounts(portfolio_id=test_pid)
+        assert len([a for a in accs_after if a['account_no'] == acc_no]) == 0
+    finally:
+        delete_portfolio(test_pid)
