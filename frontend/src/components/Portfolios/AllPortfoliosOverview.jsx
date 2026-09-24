@@ -42,23 +42,20 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
     return list.filter(item => item.value > 0).sort((a, b) => b.value - a.value);
   }, [portfolios, includeCrypto, crypto, portfolioColors]);
 
-  // 자산군(Asset Class)별 비중 도넛 데이터
+  // 자산군(Asset Class)별 비중 도넛 데이터 (예수금/현금 제외, 순수 자산군)
   const assetClassDonutData = useMemo(() => {
     const classMap = {
       'us_equity': { label: '🗽 미국/해외 주식 ETF', value: 0, color: '#3B82F6' },
-      'kr_equity': { label: '🇰🇷 국내 주식 ETF', value: 0, color: '#8B5CF6' },
-      'gold_commodities': { label: '🥇 금 현물/원자재', value: 0, color: '#EAB308' },
+      'kr_equity': { label: '🇰🇷 국내 주식 ETF', value: 0, color: '#6366F1' },
+      'bonds': { label: '📜 채권 (국채 등)', value: 0, color: '#8B5CF6' },
+      'gold_commodities': { label: '🥇 대체투자 (금/원자재)', value: 0, color: '#EAB308' },
       'deposits': { label: '🏦 정기예금', value: 0, color: '#10B981' },
       'crypto': { label: '🪙 가상화폐', value: 0, color: '#F97316' },
-      'cash': { label: '💵 예수금/현금', value: 0, color: '#64748B' }
     };
-
-    let aggregatedSum = 0;
 
     (aggregatedAssets || []).forEach(item => {
       const evalAmt = Number(item.total_eval_amount) || 0;
       if (evalAmt <= 0) return;
-      aggregatedSum += evalAmt;
 
       const name = (item.name || '').toLowerCase();
       const ticker = (item.ticker || '').toUpperCase();
@@ -67,8 +64,10 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
 
       if (assetType === 'CRYPTO' || market === 'CRYPTO') {
         classMap['crypto'].value += evalAmt;
-      } else if (name.includes('금') || name.includes('gold') || ticker.includes('GOLD')) {
+      } else if (name.includes('금99') || name.includes('금 99') || name.includes('원자재') || name.includes('gold') || ticker === 'PDBC' || ticker === 'M04020000') {
         classMap['gold_commodities'].value += evalAmt;
+      } else if (name.includes('국채') || name.includes('채권') || name.includes('bond') || ticker === '0085P0' || ticker === '476760') {
+        classMap['bonds'].value += evalAmt;
       } else if (name.includes('예금') || name.includes('정기예금')) {
         classMap['deposits'].value += evalAmt;
       } else if (market === 'US') {
@@ -78,17 +77,10 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
       }
     });
 
-    // 전체 순자산과의 차이(예수금/현금)
-    const grandTotal = Number(grand.total_eval) || 0;
-    const remainingCash = Math.max(0, grandTotal - aggregatedSum);
-    if (remainingCash > 0) {
-      classMap['cash'].value += remainingCash;
-    }
-
     return Object.values(classMap)
       .filter(item => item.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [aggregatedAssets, grand.total_eval]);
+  }, [aggregatedAssets]);
 
   const loadOverview = async (isRefresh = false, cryptoToggle = includeCrypto) => {
     if (isRefresh) setRefreshing(true);

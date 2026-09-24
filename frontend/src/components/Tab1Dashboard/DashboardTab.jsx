@@ -46,48 +46,90 @@ export default function DashboardTab({
     return safeData.account_summaries || safeData.accounts || [];
   }, [safeData]);
 
-  // 종목별 비중 도넛 차트 데이터 가공
+  // 종목별 비중 도넛 차트 데이터 가공 (예수금/현금 제외, 순수 투자자산)
   const stockDonutData = useMemo(() => {
-    const list = (visibleStockAssets || [])
-      .filter((item) => (item.eval_amount || 0) > 0)
+    return (visibleStockAssets || [])
+      .filter((item) => (Number(item.eval_amount) || 0) > 0)
       .map((item) => ({
         label: item.name,
-        value: item.eval_amount,
+        value: Number(item.eval_amount),
         subLabel: item.is_deposit ? '예금' : '투자자산'
-      }));
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [visibleStockAssets]);
 
-    const cashVal = cash_assets?.total_cash_krw || 0;
-    if (cashVal > 0) {
-      list.push({
-        label: '예수금(현금)',
-        value: cashVal,
-        color: '#64748B'
-      });
+  // 종목 유형별 자산 분류 헬퍼 함수
+  const classifyAssetType = (item) => {
+    if (!item) return '주식';
+    if (item.is_deposit) return '예금';
+
+    const name = (item.name || '').toLowerCase();
+    const ticker = (item.ticker || '').toUpperCase();
+
+    // 1. 예금
+    if (name.includes('예금') || name.includes('정기예금')) {
+      return '예금';
     }
 
-    return list.sort((a, b) => b.value - a.value);
-  }, [visibleStockAssets, cash_assets]);
+    // 2. 대체투자 (원자재파생ETF, 금99.99 등)
+    if (
+      name.includes('금99') || 
+      name.includes('금 99') || 
+      name.includes('원자재') || 
+      name.includes('gold') || 
+      name.includes('commodity') ||
+      ticker === 'PDBC' ||
+      ticker === 'M04020000'
+    ) {
+      return '대체투자';
+    }
 
-  // 계좌별 비중 도넛 차트 데이터 가공
-  const accountDonutData = useMemo(() => {
-    return (accSummaries || [])
-      .map((acc) => {
-        const totalVal = acc.total_val || ((acc.stock_eval || 0) + (acc.deposit_krw || 0) + ((acc.deposit_usd || 0) * (usd_krw || 1380)));
-        return {
-          label: acc.account_alias || acc.account_name || acc.account_no || '계좌',
-          value: totalVal,
-          subLabel: acc.account_type
-        };
-      })
-      .filter((item) => item.value > 0)
+    // 3. 채권 (미국10년국채액티브, 미국30년국채액티브 등)
+    if (
+      name.includes('국채') || 
+      name.includes('채권') || 
+      name.includes('bond') ||
+      ticker === '0085P0' ||
+      ticker === '476760'
+    ) {
+      return '채권';
+    }
+
+    // 4. 주식 (미국나스닥100, 미국배당다우존스, 뱅가드세계주식, 차이나CSI300, 차이나H 등)
+    return '주식';
+  };
+
+  // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (예수금 제외)
+  const assetTypeDonutData = useMemo(() => {
+    const categories = {
+      '주식': { label: '📈 주식 (국내/해외/ETF)', value: 0, color: '#3B82F6' },
+      '채권': { label: '📜 채권 (국채 등)', value: 0, color: '#8B5CF6' },
+      '대체투자': { label: '🥇 대체투자 (금/원자재)', value: 0, color: '#F59E0B' },
+      '예금': { label: '🏦 예금', value: 0, color: '#10B981' },
+    };
+
+    (visibleStockAssets || []).forEach((item) => {
+      const evalAmt = Number(item.eval_amount) || 0;
+      if (evalAmt <= 0) return;
+
+      const typeKey = classifyAssetType(item);
+      if (categories[typeKey]) {
+        categories[typeKey].value += evalAmt;
+      } else {
+        categories['주식'].value += evalAmt;
+      }
+    });
+
+    return Object.values(categories)
+      .filter((cat) => cat.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [accSummaries, usd_krw]);
+  }, [visibleStockAssets]);
 
   if (!dashboardData) {
     return <div className="section-card">데이터를 불러오는 중입니다...</div>;
   }
 
-  const totalPortfolioEval = (kpi?.total_stock_eval || 0) + (cash_assets?.total_cash_krw || 0);
+  const totalStockEval = Number(kpi?.total_stock_eval) || 0;
   const isProfit = (kpi?.total_stock_profit || 0) >= 0;
 
   const toggleAccordion = (accId) => {
@@ -148,7 +190,7 @@ export default function DashboardTab({
         </div>
       </div>
 
-      {/* 2. Interactive Donut Charts Section (종목별 / 계좌별 비중) */}
+      {/* 2. Interactive Donut Charts Section (개별 종목별 / 종목 유형별 비중) */}
       <div className="section-card" style={{ marginBottom: '20px' }}>
         <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -171,7 +213,7 @@ export default function DashboardTab({
                 cursor: 'pointer'
               }}
             >
-              종목 & 계좌 듀얼
+              종목 & 유형 듀얼
             </button>
             <button
               className="btn btn-sm"
@@ -187,23 +229,23 @@ export default function DashboardTab({
                 cursor: 'pointer'
               }}
             >
-              종목별 비중
+              개별 종목별
             </button>
             <button
               className="btn btn-sm"
-              onClick={() => setChartView('accounts')}
+              onClick={() => setChartView('types')}
               style={{
                 padding: '4px 10px',
                 fontSize: '0.78rem',
                 fontWeight: 600,
-                background: chartView === 'accounts' ? 'var(--accent-primary)' : 'transparent',
-                color: chartView === 'accounts' ? '#FFF' : 'var(--text-secondary)',
+                background: chartView === 'types' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'types' ? '#FFF' : 'var(--text-secondary)',
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer'
               }}
             >
-              계좌별 비중
+              종목 유형별
             </button>
           </div>
         </div>
@@ -223,16 +265,16 @@ export default function DashboardTab({
               border: '1px solid var(--border-color)' 
             }}>
               <DonutChart
-                title="📈 종목별 자산 평가액 비중"
+                title="📈 개별 종목별 자산 평가액 비중"
                 data={stockDonutData}
-                centerLabel="총 자산 평가액"
-                centerValue={formatKRW(totalPortfolioEval)}
+                centerLabel="투자자산 총 평가액"
+                centerValue={formatKRW(totalStockEval)}
                 size={230}
               />
             </div>
           )}
 
-          {(chartView === 'both' || chartView === 'accounts') && (
+          {(chartView === 'both' || chartView === 'types') && (
             <div style={{ 
               background: 'var(--bg-surface)', 
               padding: '16px 20px', 
@@ -240,10 +282,10 @@ export default function DashboardTab({
               border: '1px solid var(--border-color)' 
             }}>
               <DonutChart
-                title="💳 계좌별 자산 평가액 비중"
-                data={accountDonutData}
-                centerLabel="계좌 총 평가액"
-                centerValue={formatKRW(totalPortfolioEval)}
+                title="🏛️ 종목 유형별 자산 평가액 비중 (주식/채권/대체투자/예금)"
+                data={assetTypeDonutData}
+                centerLabel="투자자산 총 평가액"
+                centerValue={formatKRW(totalStockEval)}
                 size={230}
               />
             </div>
