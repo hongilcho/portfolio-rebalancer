@@ -76,17 +76,12 @@ export default function DashboardTab({
       {/* 1. Top KPI Summary Cards */}
       <div className="kpi-grid">
         <div className="kpi-card">
-          <div className="kpi-title">💰 총 포트폴리오 평가금액 (현금 포함)</div>
-          <div className="kpi-value">{formatKRW(kpi?.total_portfolio_eval)}</div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-title">🛒 총 주식/자산 매입금액 (현금 제외)</div>
+          <div className="kpi-title">🛒 총 투자 매입금액 (원금)</div>
           <div className="kpi-value">{formatKRW(kpi?.total_stock_buy)}</div>
         </div>
 
         <div className="kpi-card">
-          <div className="kpi-title">📈 총 주식/자산 평가금액 (현금 제외)</div>
+          <div className="kpi-title">📈 총 투자 평가금액</div>
           <div className="kpi-value">{formatKRW(kpi?.total_stock_eval)}</div>
         </div>
 
@@ -108,7 +103,7 @@ export default function DashboardTab({
       {/* 2. Stock Assets Section */}
       <div className="section-card">
         <div className="section-title">
-          <span>📈 주식 및 금현물 자산 현황</span>
+          <span>📈 투자 자산 현황 (주식/ETF/금/예금)</span>
           <button 
             className="btn btn-secondary btn-sm"
             onClick={() => setIsEditModalOpen(true)}
@@ -141,7 +136,14 @@ export default function DashboardTab({
                   const isItemProfit = item.profit_krw >= 0;
                   return (
                     <tr key={item.asset_id}>
-                      <td style={{ fontWeight: 600 }}>{item.name}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        {item.name}
+                        {item.is_deposit && (
+                          <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
+                            🏦 예금
+                          </span>
+                        )}
+                      </td>
                       <td>{formatQuantity(item.quantity, item.unit)}</td>
                       <td style={{ color: isItemProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
                         {formatPercent(item.profit_pct)}
@@ -190,7 +192,14 @@ export default function DashboardTab({
               <tbody>
                 {visibleStockAssets?.map((item) => (
                   <tr key={item.asset_id}>
-                    <td style={{ fontWeight: 600 }}>{item.name}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      {item.name}
+                      {item.is_deposit && (
+                        <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
+                          🏦 예금
+                        </span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'center', fontWeight: 600 }}>{item.weight_pct.toFixed(1)}%</td>
                     <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{item.target_weight_pct.toFixed(1)}%</td>
                     <td>
@@ -213,7 +222,13 @@ export default function DashboardTab({
                 <div className="mobile-card-row">
                   <div className="mobile-card-title">
                     <span>{item.name}</span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: '6px', whiteSpace: 'nowrap' }}>({item.ticker})</span>
+                    {item.is_deposit ? (
+                      <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
+                        🏦 예금
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: '6px', whiteSpace: 'nowrap' }}>({item.ticker})</span>
+                    )}
                   </div>
                   <span className="mobile-card-value">{formatKRW(item.eval_amount)}</span>
                 </div>
@@ -498,7 +513,14 @@ export default function DashboardTab({
 
                               return (
                                 <tr key={h.asset_id}>
-                                  <td style={{ fontWeight: 700 }}>{h.asset_name}</td>
+                                  <td style={{ fontWeight: 700 }}>
+                                    {h.asset_name}
+                                    {h.is_deposit && (
+                                      <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
+                                        🏦 예금
+                                      </span>
+                                    )}
+                                  </td>
                                   <td>{h.ticker}</td>
                                   <td>{formatQuantity(h.quantity, h.unit)}</td>
                                   <td>{formatKRW(h.avg_price)}</td>
@@ -530,7 +552,13 @@ export default function DashboardTab({
                             <div className="mobile-card-row">
                               <div className="mobile-card-title">
                                 <span>{h.asset_name}</span>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginLeft: '6px', whiteSpace: 'nowrap' }}>({h.ticker})</span>
+                                {h.is_deposit ? (
+                                  <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
+                                    🏦 예금
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginLeft: '6px', whiteSpace: 'nowrap' }}>({h.ticker})</span>
+                                )}
                               </div>
                               <span className="mobile-card-value">{formatKRW(h.eval_amount)}</span>
                             </div>

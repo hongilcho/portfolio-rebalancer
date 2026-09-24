@@ -7,6 +7,7 @@ import urllib3
 import streamlit as st
 import math
 from data.nh_api import nh_api_client
+from typing import Tuple
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -179,6 +180,50 @@ def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
         return None, f"yfinance 오류: {e}"
     return None, "시세를 찾을 수 없음"
 
+def calculate_deposit_price(asset: dict) -> Tuple[float, int, float, float]:
+    """
+    정기예금의 일할 세후 누적이자 가산 현재가 계산
+    Returns:
+        current_price, accrued_days, gross_interest, net_interest
+    """
+    principal = float(asset.get('deposit_principal') or 0.0)
+    rate = float(asset.get('interest_rate') or 0.0)
+    tax_rate = float(asset.get('tax_rate') if asset.get('tax_rate') is not None else 15.4)
+    start_date_str = str(asset.get('start_date') or '').strip()
+    maturity_date_str = str(asset.get('maturity_date') or '').strip()
+
+    if principal <= 0:
+        return 0.0, 0, 0.0, 0.0
+    if not start_date_str:
+        return principal, 0, 0.0, 0.0
+
+    try:
+        start_date = datetime.strptime(start_date_str[:10], "%Y-%m-%d").date()
+    except Exception:
+        return principal, 0, 0.0, 0.0
+
+    today = datetime.now().date()
+
+    maturity_date = None
+    if maturity_date_str:
+        try:
+            maturity_date = datetime.strptime(maturity_date_str[:10], "%Y-%m-%d").date()
+        except Exception:
+            pass
+
+    if today < start_date:
+        accrued_days = 0
+    elif maturity_date and today > maturity_date:
+        accrued_days = max(0, (maturity_date - start_date).days)
+    else:
+        accrued_days = max(0, (today - start_date).days)
+
+    gross_interest = principal * (rate / 100.0) * (accrued_days / 365.0)
+    tax_amount = math.floor(gross_interest * (tax_rate / 100.0))
+    net_interest = gross_interest - tax_amount
+
+    return round(principal + net_interest, 0), accrued_days, gross_interest, net_interest
+
 def fetch_asset_prices(assets, usd_krw=None):
     """자산 목록 전체의 실시간 시세 및 원화 환산 가격 일괄 수집"""
     if usd_krw is None:
@@ -188,10 +233,17 @@ def fetch_asset_prices(assets, usd_krw=None):
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     for asset in assets:
+        is_deposit = bool(asset.get('is_deposit', False))
         market = asset['market']
         ticker = asset['ticker']
         
-        if not ticker or ticker.strip() == '없음' or ticker.strip() == '-':
+        if is_deposit:
+            price_krw, accrued_days, gross_int, net_int = calculate_deposit_price(asset)
+            raw_price = price_krw
+            price_usd = price_krw / usd_krw if usd_krw else 0.0
+            rate = float(asset.get('interest_rate') or 0.0)
+            status = f"정상 (예금 일할이자 연 {rate}%, {accrued_days}일 경과)"
+        elif not ticker or ticker.strip() == '없음' or ticker.strip() == '-':
             if '금' in asset['name'] or 'Gold' in asset['name']:
                 raw_price, source = get_krx_gold_price(usd_krw)
                 if raw_price is not None:
@@ -243,7 +295,15 @@ def fetch_asset_prices(assets, usd_krw=None):
             "price_krw": price_krw,
             "usd_krw": usd_krw,
             "status": status,
-            "updated_at": now_str
+            "updated_at": now_str,
+            "is_deposit": is_deposit,
+            "deposit_principal": float(asset.get('deposit_principal') or 0.0),
+            "interest_rate": float(asset.get('interest_rate') or 0.0),
+            "start_date": asset.get('start_date', ''),
+            "maturity_date": asset.get('maturity_date', ''),
+            "early_termination_rate": float(asset.get('early_termination_rate') or 0.0),
+            "tax_rate": float(asset.get('tax_rate') if asset.get('tax_rate') is not None else 15.4),
+            "lock_rebalance_sell": bool(asset.get('lock_rebalance_sell', True) if asset.get('lock_rebalance_sell') is not None else True)
         })
         
     return results, usd_krw

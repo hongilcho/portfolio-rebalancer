@@ -156,6 +156,14 @@ def init_db():
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS portfolio_id TEXT DEFAULT 'default' REFERENCES portfolios(id)")
     cursor.execute("UPDATE assets SET portfolio_id = 'default' WHERE portfolio_id IS NULL")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_deposit BOOLEAN DEFAULT FALSE")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS deposit_principal REAL DEFAULT 0.0")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS interest_rate REAL DEFAULT 0.0")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT ''")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS maturity_date TEXT DEFAULT ''")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS early_termination_rate REAL DEFAULT 0.0")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS tax_rate REAL DEFAULT 15.4")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS lock_rebalance_sell BOOLEAN DEFAULT TRUE")
 
     try:
         cursor.execute('''
@@ -453,11 +461,29 @@ def get_all_assets(portfolio_id: str = None):
         r['allowed_accounts'] = sanitize_account_names(raw_accs)
         r['is_risk_asset'] = bool(r.get('is_risk_asset', 1))
         r['is_active'] = bool(r.get('is_active', True) if r.get('is_active') is not None else True)
+        r['is_deposit'] = bool(r.get('is_deposit', False))
+        r['deposit_principal'] = float(r.get('deposit_principal') or 0.0)
+        r['interest_rate'] = float(r.get('interest_rate') or 0.0)
+        r['start_date'] = r.get('start_date') or ''
+        r['maturity_date'] = r.get('maturity_date') or ''
+        r['early_termination_rate'] = float(r.get('early_termination_rate') or 0.0)
+        r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
+        r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
         rows.append(r)
     conn.close()
     return rows
 
-def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes="", portfolio_id="default"):
+def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes="", portfolio_id="default",
+              is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
+              early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None):
+    if is_deposit:
+        is_risk_asset = False
+        market = 'KR'
+        if not ticker or ticker.strip() in ['', '없음', '-']:
+            ticker = f"DEP-{uuid.uuid4().hex[:6].upper()}"
+        if account_id:
+            allowed_accounts = [str(account_id)]
+
     if allowed_accounts is None:
         allowed_accounts = []
     clean_accs = sanitize_account_names(allowed_accounts)
@@ -468,9 +494,37 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
     try:
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
-            INSERT INTO assets (id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, is_active, notes, portfolio_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (new_id, name, ticker.strip().upper(), market, target_weight, allowed_json, 1 if is_risk_asset else 0, is_active, notes, target_pid))
+            INSERT INTO assets (
+                id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, is_active, notes, portfolio_id,
+                is_deposit, deposit_principal, interest_rate, start_date, maturity_date, early_termination_rate, tax_rate, lock_rebalance_sell
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            new_id, name, ticker.strip().upper(), market, target_weight, allowed_json,
+            1 if is_risk_asset else 0, is_active, notes, target_pid,
+            is_deposit, float(deposit_principal or 0.0), float(interest_rate or 0.0),
+            str(start_date or ''), str(maturity_date or ''), float(early_termination_rate or 0.0),
+            float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell
+        ))
+
+        # 예금인 경우 holdings 및 trade_history 자동 생성
+        target_account = account_id or (clean_accs[0] if clean_accs else None)
+        if is_deposit and target_account and float(deposit_principal or 0.0) > 0:
+            h_id = generate_id()
+            cursor.execute('''
+                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (account_id, asset_id)
+                DO UPDATE SET quantity = 1.0, avg_price = EXCLUDED.avg_price
+            ''', (h_id, str(target_account), new_id, 1.0, float(deposit_principal)))
+
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            t_id = generate_id()
+            cursor.execute('''
+                INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ''', (t_id, today_str, str(target_account), new_id, 'INIT', 1.0, float(deposit_principal)))
+
         conn.commit()
         return True, "성공적으로 추가되었습니다."
     except psycopg2.IntegrityError:
@@ -482,7 +536,17 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
     finally:
         conn.close()
 
-def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset=True, is_active=True, notes=""):
+def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset=True, is_active=True, notes="",
+                 is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
+                 early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None):
+    if is_deposit:
+        is_risk_asset = False
+        market = 'KR'
+        if not ticker or ticker.strip() in ['', '없음', '-']:
+            ticker = f"DEP-{str(asset_id)[:6].upper()}"
+        if account_id:
+            allowed_accounts = [str(account_id)]
+
     clean_accs = sanitize_account_names(allowed_accounts)
     conn = get_connection()
     cursor = conn.cursor()
@@ -490,9 +554,32 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
             UPDATE assets
-            SET name = %s, ticker = %s, market = %s, target_weight = %s, allowed_accounts = %s, is_risk_asset = %s, is_active = %s, notes = %s
+            SET name = %s, ticker = %s, market = %s, target_weight = %s, allowed_accounts = %s,
+                is_risk_asset = %s, is_active = %s, notes = %s,
+                is_deposit = %s, deposit_principal = %s, interest_rate = %s, start_date = %s,
+                maturity_date = %s, early_termination_rate = %s, tax_rate = %s, lock_rebalance_sell = %s
             WHERE id = %s
-        ''', (name, ticker.strip().upper(), market, target_weight, allowed_json, 1 if is_risk_asset else 0, is_active, notes, str(asset_id)))
+        ''', (
+            name, ticker.strip().upper(), market, target_weight, allowed_json,
+            1 if is_risk_asset else 0, is_active, notes,
+            is_deposit, float(deposit_principal or 0.0), float(interest_rate or 0.0),
+            str(start_date or ''), str(maturity_date or ''), float(early_termination_rate or 0.0),
+            float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell,
+            str(asset_id)
+        ))
+
+        # 예금인 경우 holdings 동기화
+        target_account = account_id or (clean_accs[0] if clean_accs else None)
+        if is_deposit and target_account and float(deposit_principal or 0.0) > 0:
+            cursor.execute("DELETE FROM holdings WHERE asset_id = %s AND account_id != %s", (str(asset_id), str(target_account)))
+            h_id = generate_id()
+            cursor.execute('''
+                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (account_id, asset_id)
+                DO UPDATE SET quantity = 1.0, avg_price = EXCLUDED.avg_price
+            ''', (h_id, str(target_account), str(asset_id), 1.0, float(deposit_principal)))
+
         conn.commit()
         return True, "성공적으로 수정되었습니다."
     except Exception as e:
@@ -538,7 +625,8 @@ def get_holdings_by_account(account_id):
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute('''
-        SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset
+        SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
+               a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell
         FROM holdings h
         JOIN assets a ON h.asset_id = a.id
         WHERE h.account_id = %s
@@ -552,7 +640,9 @@ def get_all_holdings():
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute('''
-        SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset, acc.account_alias, acc.account_type
+        SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
+               a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
+               acc.account_alias, acc.account_type
         FROM holdings h
         JOIN assets a ON h.asset_id = a.id
         JOIN accounts acc ON h.account_id = acc.id
@@ -659,8 +749,10 @@ def sync_account_with_api(account_id, api_data):
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ''', (new_t_id, today_str, str(account_id), aid, 'INIT', qty, avg_p))
                 
-        # 5. Delete holdings that are no longer in the account
-        to_delete_ids = existing_asset_ids - incoming_asset_ids
+        # 5. Delete holdings that are no longer in the account (protecting deposits)
+        cursor.execute("SELECT id FROM assets WHERE is_deposit = TRUE")
+        deposit_asset_ids = {row[0] for row in cursor.fetchall()}
+        to_delete_ids = (existing_asset_ids - incoming_asset_ids) - deposit_asset_ids
         for z_id in to_delete_ids:
             cursor.execute("DELETE FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), z_id))
             

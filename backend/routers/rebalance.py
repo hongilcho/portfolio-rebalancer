@@ -5,7 +5,7 @@ from backend.services import market_service
 from data.data_manager import (
     get_all_assets, get_all_accounts, get_holdings_by_account, apply_transfer_plan
 )
-from logic.rebalance_calculator import calculate_rebalancing_plan
+from logic.rebalance_calculator import calculate_rebalancing_plan, compute_realized_summary
 
 router = APIRouter(prefix="/api/rebalance", tags=["rebalance"])
 
@@ -73,7 +73,15 @@ def calculate_plan(req: CalculateRebalanceRequest):
             "trade_plan": [],
             "transfer_plan": [],
             "simulated_assets": [],
-            "scale_max": 1.0
+            "scale_max": 1.0,
+            "realized_summary": {
+                "has_sell": False,
+                "sell_count": 0,
+                "total_sell_amount": 0.0,
+                "total_cost_basis": 0.0,
+                "total_realized_profit": 0.0,
+                "total_realized_return_pct": 0.0
+            }
         }
         
     # Calculate simulation scale_max for visual drift bar
@@ -87,6 +95,8 @@ def calculate_plan(req: CalculateRebalanceRequest):
             
     scale_max = round(max_drift * 3.5, 1) if max_drift > 0 else 1.0
     
+    realized_summary = compute_realized_summary(t_plan)
+    
     return {
         "success": True,
         "message": msg,
@@ -94,7 +104,8 @@ def calculate_plan(req: CalculateRebalanceRequest):
         "transfer_plan": tr_plan,
         "simulated_assets": sim_assets,
         "total_sim": total_sim,
-        "scale_max": scale_max
+        "scale_max": scale_max,
+        "realized_summary": realized_summary
     }
 
 @router.post("/apply-transfers")

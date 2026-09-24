@@ -62,8 +62,9 @@ def get_dashboard_summary(portfolio_id: str = "default"):
             profit_krw = eval_val - buy_amt
             profit_pct = (profit_krw / buy_amt * 100) if buy_amt > 0 else 0.0
             
+            is_deposit = bool(h.get('is_deposit', False))
             is_gold = "금" in h.get('asset_name', '') or h.get('ticker') == 'M04020000'
-            unit_str = "g" if is_gold else "주"
+            unit_str = "건" if is_deposit else ("g" if is_gold else "주")
             
             holding_details.append({
                 "asset_id": h['asset_id'],
@@ -78,7 +79,14 @@ def get_dashboard_summary(portfolio_id: str = "default"):
                 "buy_amount": buy_amt,
                 "profit_krw": profit_krw,
                 "profit_pct": profit_pct,
-                "is_risk_asset": bool(h.get('is_risk_asset', True))
+                "is_risk_asset": bool(h.get('is_risk_asset', True)),
+                "is_deposit": is_deposit,
+                "deposit_principal": float(h.get('deposit_principal') or 0.0),
+                "interest_rate": float(h.get('interest_rate') or 0.0),
+                "start_date": h.get('start_date', ''),
+                "maturity_date": h.get('maturity_date', ''),
+                "tax_rate": float(h.get('tax_rate') if h.get('tax_rate') is not None else 15.4),
+                "lock_rebalance_sell": bool(h.get('lock_rebalance_sell', True) if h.get('lock_rebalance_sell') is not None else True)
             })
             
         total_acc_val = total_deposit + stock_eval
@@ -196,8 +204,9 @@ def get_dashboard_summary(portfolio_id: str = "default"):
         if abs(drift_pct) > max_drift_abs:
             max_drift_abs = abs(drift_pct)
             
+        is_deposit = bool(a.get('is_deposit', False))
         is_gold = "금" in data['name'] or data.get('ticker') == 'M04020000'
-        unit_str = "g" if is_gold else "주"
+        unit_str = "건" if is_deposit else ("g" if is_gold else "주")
         
         calc_avg_price = (data['buy_amt_krw'] / data['quantity']) if data['quantity'] > 0 else 0.0
         curr_price_val = float(price_map.get(aid, 0.0))
@@ -220,7 +229,14 @@ def get_dashboard_summary(portfolio_id: str = "default"):
             "profit_pct": profit_pct,
             "weight_pct": weight_pct,
             "target_weight_pct": target_w,
-            "drift_pct": drift_pct
+            "drift_pct": drift_pct,
+            "is_deposit": is_deposit,
+            "deposit_principal": float(a.get('deposit_principal') or 0.0),
+            "interest_rate": float(a.get('interest_rate') or 0.0),
+            "start_date": a.get('start_date', ''),
+            "maturity_date": a.get('maturity_date', ''),
+            "tax_rate": float(a.get('tax_rate') if a.get('tax_rate') is not None else 15.4),
+            "lock_rebalance_sell": bool(a.get('lock_rebalance_sell', True) if a.get('lock_rebalance_sell') is not None else True)
         })
         
     stock_summary_rows.sort(key=lambda x: x['weight_pct'], reverse=True)
