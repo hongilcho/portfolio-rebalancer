@@ -119,6 +119,9 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True)):
                 if qty <= 0:
                     continue
 
+                is_dep = bool(sa.get("is_deposit", False))
+                asset_type_val = "DEPOSIT" if is_dep else "STOCK"
+
                 key = f"{ticker}_{market}"
                 if key not in aggregated_assets_map:
                     aggregated_assets_map[key] = {
@@ -126,7 +129,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True)):
                         "ticker": ticker,
                         "name": name,
                         "market": market,
-                        "asset_type": "STOCK",
+                        "asset_type": asset_type_val,
+                        "is_deposit": is_dep,
                         "total_quantity": 0.0,
                         "total_buy_amount": 0.0,
                         "total_eval_amount": 0.0,

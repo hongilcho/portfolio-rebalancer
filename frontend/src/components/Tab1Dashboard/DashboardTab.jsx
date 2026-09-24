@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   TrendingUp, TrendingDown, DollarSign, Wallet, ShieldAlert, 
-  ChevronDown, ChevronUp, Edit2, RefreshCw, AlertCircle, CheckCircle2 
+  ChevronDown, ChevronUp, Edit2, RefreshCw, AlertCircle, CheckCircle2, PieChart 
 } from 'lucide-react';
 import { formatKRW, formatUSD, formatQuantity, formatPercent } from '../../utils/formatters';
 import DriftBar from '../common/DriftBar';
+import DonutChart from '../common/DonutChart';
 import EditHoldingsModal from './EditHoldingsModal';
 import { api } from '../../utils/api';
 
@@ -17,29 +18,126 @@ export default function DashboardTab({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [expandedAccs, setExpandedAccs] = useState({});
   const [syncingNamuh, setSyncingNamuh] = useState(false);
+  const [chartView, setChartView] = useState('both'); // 'both' | 'stocks' | 'accounts'
+
+  const safeData = dashboardData || {};
+  const {
+    kpi = {},
+    stock_assets = [],
+    cash_assets = {},
+    drift_scale_max,
+    usd_krw = 1380
+  } = safeData;
+
+  const activeAssetIds = useMemo(() => {
+    return new Set(
+      (assets || []).filter((a) => a.is_active !== false).map((a) => String(a.id))
+    );
+  }, [assets]);
+
+  const visibleStockAssets = useMemo(() => {
+    return (stock_assets || []).filter((item) => {
+      if (activeAssetIds.has(String(item.asset_id))) return true;
+      return (item.quantity || 0) > 0;
+    });
+  }, [stock_assets, activeAssetIds]);
+
+  const accSummaries = useMemo(() => {
+    return safeData.account_summaries || safeData.accounts || [];
+  }, [safeData]);
+
+  // 종목별 비중 도넛 차트 데이터 가공 (예수금/현금 제외, 순수 투자자산)
+  const stockDonutData = useMemo(() => {
+    return (visibleStockAssets || [])
+      .filter((item) => (Number(item.eval_amount) || 0) > 0)
+      .map((item) => ({
+        label: item.name,
+        value: Number(item.eval_amount),
+        subLabel: item.is_deposit ? '예금' : '투자자산'
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [visibleStockAssets]);
+
+  // 종목 유형별 자산 분류 헬퍼 함수
+  const classifyAssetType = (item) => {
+    if (!item) return '주식';
+    if (item.is_deposit) return '예금';
+
+    const name = (item.name || '').toLowerCase();
+    const ticker = (item.ticker || '').toUpperCase();
+
+    // 1. 예금
+    if (
+      item.is_deposit || 
+      item.asset_type === 'DEPOSIT' || 
+      ticker.startsWith('DEP') || 
+      name.includes('예금') || 
+      name.includes('적금') || 
+      name.includes('새마을') || 
+      name.includes('금고')
+    ) {
+      return '예금';
+    }
+
+    // 2. 대체투자 (원자재파생ETF, 금99.99 등)
+    if (
+      name.includes('금99') || 
+      name.includes('금 99') || 
+      name.includes('원자재') || 
+      name.includes('gold') || 
+      name.includes('commodity') ||
+      ticker === 'PDBC' ||
+      ticker === 'M04020000'
+    ) {
+      return '대체투자';
+    }
+
+    // 3. 채권 (미국10년국채액티브, 미국30년국채액티브 등)
+    if (
+      name.includes('국채') || 
+      name.includes('채권') || 
+      name.includes('bond') ||
+      ticker === '0085P0' ||
+      ticker === '476760'
+    ) {
+      return '채권';
+    }
+
+    // 4. 주식 (미국나스닥100, 미국배당다우존스, 뱅가드세계주식, 차이나CSI300, 차이나H 등)
+    return '주식';
+  };
+
+  // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (예수금 제외)
+  const assetTypeDonutData = useMemo(() => {
+    const categories = {
+      '주식': { label: '📈 주식', value: 0, color: '#3B82F6' },
+      '채권': { label: '📜 채권', value: 0, color: '#8B5CF6' },
+      '대체투자': { label: '🥇 대체투자', value: 0, color: '#EAB308' },
+      '예금': { label: '🏦 예금', value: 0, color: '#10B981' },
+    };
+
+    (visibleStockAssets || []).forEach((item) => {
+      const evalAmt = Number(item.eval_amount) || 0;
+      if (evalAmt <= 0) return;
+
+      const typeKey = classifyAssetType(item);
+      if (categories[typeKey]) {
+        categories[typeKey].value += evalAmt;
+      } else {
+        categories['주식'].value += evalAmt;
+      }
+    });
+
+    return Object.values(categories)
+      .filter((cat) => cat.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [visibleStockAssets]);
 
   if (!dashboardData) {
     return <div className="section-card">데이터를 불러오는 중입니다...</div>;
   }
 
-  const {
-    kpi,
-    stock_assets,
-    cash_assets,
-    drift_scale_max,
-    usd_krw
-  } = dashboardData;
-
-  const activeAssetIds = new Set(
-    (assets || []).filter((a) => a.is_active !== false).map((a) => String(a.id))
-  );
-  const visibleStockAssets = (stock_assets || []).filter((item) => {
-    if (activeAssetIds.has(String(item.asset_id))) return true;
-    return (item.quantity || 0) > 0;
-  });
-
-  const accSummaries = dashboardData.account_summaries || dashboardData.accounts || [];
-
+  const totalStockEval = Number(kpi?.total_stock_eval) || 0;
   const isProfit = (kpi?.total_stock_profit || 0) >= 0;
 
   const toggleAccordion = (accId) => {
@@ -100,7 +198,110 @@ export default function DashboardTab({
         </div>
       </div>
 
-      {/* 2. Stock Assets Section */}
+      {/* 2. Interactive Donut Charts Section (개별 종목별 / 종목 유형별 비중) */}
+      <div className="section-card" style={{ marginBottom: '20px' }}>
+        <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <PieChart size={18} color="var(--accent-primary)" />
+            포트폴리오 비중 분석 (도넛 차트)
+          </span>
+
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('both')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'both' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'both' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              종목 & 유형 듀얼
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('stocks')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'stocks' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'stocks' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              개별 종목별
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setChartView('types')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: chartView === 'types' ? 'var(--accent-primary)' : 'transparent',
+                color: chartView === 'types' ? '#FFF' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              종목 유형별
+            </button>
+          </div>
+        </div>
+
+        {/* Charts Container */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: chartView === 'both' ? 'repeat(auto-fit, minmax(360px, 1fr))' : '1fr', 
+          gap: '24px',
+          marginTop: '12px' 
+        }}>
+          {(chartView === 'both' || chartView === 'stocks') && (
+            <div style={{ 
+              background: 'var(--bg-surface)', 
+              padding: '16px 20px', 
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)' 
+            }}>
+              <DonutChart
+                title="📈 개별 종목별 자산 평가액 비중"
+                data={stockDonutData}
+                centerLabel="투자자산 총 평가액"
+                centerValue={formatKRW(totalStockEval)}
+                size={230}
+              />
+            </div>
+          )}
+
+          {(chartView === 'both' || chartView === 'types') && (
+            <div style={{ 
+              background: 'var(--bg-surface)', 
+              padding: '16px 20px', 
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)' 
+            }}>
+              <DonutChart
+                title="🏛️ 종목 유형별 자산 평가액 비중 (주식/채권/대체투자/예금)"
+                data={assetTypeDonutData}
+                centerLabel="투자자산 총 평가액"
+                centerValue={formatKRW(totalStockEval)}
+                size={230}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Stock Assets Section */}
       <div className="section-card">
         <div className="section-title">
           <span>📈 투자 자산 현황 (주식/ETF/금/예금)</span>
