@@ -5,11 +5,12 @@ from typing import List, Optional, Dict, Any
 
 from data.data_manager import (
     get_portfolios, get_portfolio, create_portfolio, update_portfolio, delete_portfolio,
-    get_all_accounts, get_all_assets, get_all_holdings
+    get_all_accounts, get_all_assets, get_all_holdings, get_overview_batch_data
 )
 from backend.services import market_service
 from backend.routers.dashboard import get_dashboard_summary
 from backend.routers.crypto import get_crypto_summary
+from logic.crypto_price_fetcher import get_crypto_prices
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
@@ -60,23 +61,28 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     동일 종목을 여러 포트폴리오에서 보유한 경우 가중평균 평단가 및 통합 수량을 산출하는 API
     (전체 DB 테이블 및 시세 조회를 병렬/배치로 단 1회 수행하여 극적인 응답 속도 보장)
     """
-    # 1. DB 데이터 및 가상화폐 시세를 ThreadPoolExecutor로 동시 병렬 조회 (N+1 제거)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        fut_ports = executor.submit(get_portfolios)
-        fut_accs = executor.submit(get_all_accounts)
-        fut_assets = executor.submit(get_all_assets)
-        fut_holdings = executor.submit(get_all_holdings)
-        fut_crypto = executor.submit(get_crypto_summary, portfolio_id="default", include_portfolio=False) if include_crypto else None
-
-        portfolios = fut_ports.result()
-        all_accounts = fut_accs.result()
-        all_assets = fut_assets.result()
-        all_holdings = fut_holdings.result()
-        c_res = fut_crypto.result() if fut_crypto else None
+    # 1. DB 전체 데이터를 단 1회의 PostgreSQL 네트워크 왕복으로 배치 조회
+    batch_data = get_overview_batch_data()
+    portfolios = batch_data.get("portfolios", [])
+    all_accounts = batch_data.get("accounts", [])
+    all_assets = batch_data.get("assets", [])
+    all_holdings = batch_data.get("holdings", [])
+    crypto_holdings = batch_data.get("crypto_holdings", [])
 
     # 2. 가격 데이터 가져오기 (인메모리 캐시 및 SWR 적용)
     _, price_map = market_service.get_prices(force_refresh=force_refresh)
     usd_krw = market_service.usd_krw
+
+    # 3. 가상화폐 요약 (사전 조회된 crypto_holdings 및 캐시 시세 사용 -> 0ms)
+    c_res = None
+    if include_crypto:
+        crypto_prices = get_crypto_prices(force_refresh=force_refresh)
+        c_res = get_crypto_summary(
+            portfolio_id="default",
+            include_portfolio=False,
+            db_holdings=crypto_holdings,
+            prices_map=crypto_prices
+        )
 
     # 3. 계좌 및 자산 포트폴리오 ID별 인메모리 그룹화
     accounts_by_pid: Dict[str, List[Dict[str, Any]]] = {}

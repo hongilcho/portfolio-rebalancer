@@ -6,7 +6,7 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from backend.config import SUPABASE_URL
 
 # 사용자 정의 6가지 표준 계좌 유형
@@ -1092,6 +1092,60 @@ def save_crypto_holding(symbol: str, quantity: float, avg_price: float, owner: s
         return False, str(e)
     finally:
         conn.close()
+
+def get_overview_batch_data() -> Dict[str, Any]:
+    """
+    전체 포트폴리오 요약에 필요한 모든 테이블(portfolios, accounts, assets, holdings, crypto_holdings)을
+    단 1회의 PostgreSQL 네트워크 왕복(single round-trip)으로 고속 조회
+    """
+    sql = """
+    SELECT json_build_object(
+        'portfolios', COALESCE((SELECT json_agg(p ORDER BY p.is_default DESC, p.created_at ASC) FROM portfolios p), '[]'::json),
+        'accounts', COALESCE((SELECT json_agg(acc ORDER BY acc.account_alias ASC) FROM accounts acc), '[]'::json),
+        'assets', COALESCE((SELECT json_agg(ast ORDER BY ast.name ASC) FROM assets ast), '[]'::json),
+        'holdings', COALESCE((SELECT json_agg(h) FROM (
+            SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
+                   a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
+                   acc.account_alias, acc.account_type
+            FROM holdings h
+            JOIN assets a ON h.asset_id = a.id
+            JOIN accounts acc ON h.account_id = acc.id
+        ) h), '[]'::json),
+        'crypto_holdings', COALESCE((SELECT json_agg(c) FROM crypto_holdings c), '[]'::json)
+    );
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        raw = row[0] if row else {}
+    finally:
+        conn.close()
+
+    # Asset 후처리 (JSON 문자열 파싱 및 데이터 타입 정제)
+    processed_assets = []
+    for r in raw.get('assets', []):
+        try:
+            raw_accs = json.loads(r['allowed_accounts']) if r.get('allowed_accounts') and isinstance(r['allowed_accounts'], str) else (r.get('allowed_accounts') or [])
+        except Exception:
+            raw_accs = []
+        r['allowed_accounts'] = sanitize_account_names(raw_accs)
+        r['account_no'] = r.get('account_no') or ''
+        r['is_risk_asset'] = bool(r.get('is_risk_asset', 1))
+        r['is_active'] = bool(r.get('is_active', True) if r.get('is_active') is not None else True)
+        r['is_deposit'] = bool(r.get('is_deposit', False))
+        r['deposit_principal'] = float(r.get('deposit_principal') or 0.0)
+        r['interest_rate'] = float(r.get('interest_rate') or 0.0)
+        r['start_date'] = r.get('start_date') or ''
+        r['maturity_date'] = r.get('maturity_date') or ''
+        r['early_termination_rate'] = float(r.get('early_termination_rate') or 0.0)
+        r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
+        r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
+        r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
+        processed_assets.append(r)
+    raw['assets'] = processed_assets
+    return raw
 
 if __name__ == "__main__":
     init_db()

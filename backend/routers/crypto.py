@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from data.data_manager import get_crypto_holdings, save_crypto_holding, get_portfolio
 from logic.crypto_price_fetcher import get_crypto_prices
 from backend.routers.dashboard import get_dashboard_summary
@@ -18,10 +18,17 @@ class CryptoHoldingsUpdateRequest(BaseModel):
     holdings: List[CryptoHoldingItem]
 
 @router.get("/summary")
-def get_crypto_summary(portfolio_id: Optional[str] = "default", include_portfolio: bool = False):
+def get_crypto_summary(
+    portfolio_id: Optional[str] = "default",
+    include_portfolio: bool = False,
+    db_holdings: Optional[List[Dict[str, Any]]] = None,
+    prices_map: Optional[Dict[str, Any]] = None
+):
     # 1. Fetch live prices & DB holdings
-    prices_map = get_crypto_prices()
-    db_holdings = get_crypto_holdings()
+    if prices_map is None:
+        prices_map = get_crypto_prices()
+    if db_holdings is None:
+        db_holdings = get_crypto_holdings()
     db_map = {(h.get('owner', '윤아'), h['symbol'].upper()): h for h in db_holdings}
 
     OWNERS = ["홍일", "윤아"]
