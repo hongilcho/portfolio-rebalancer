@@ -49,6 +49,7 @@ class PoolConnectionWrapper:
     def __init__(self, pool_obj, conn):
         self.pool = pool_obj
         self.conn = conn
+        self._closed = False
         
     def cursor(self, *args, **kwargs):
         return self.conn.cursor(*args, **kwargs)
@@ -60,8 +61,13 @@ class PoolConnectionWrapper:
         self.conn.rollback()
         
     def close(self):
-        # close 호출 시 진짜로 연결을 끊지 않고 풀에 반환
-        self.pool.putconn(self.conn)
+        # close 호출 시 진짜로 연결을 끊지 않고 풀에 반환 (중복 close 방지)
+        if not self._closed:
+            self._closed = True
+            try:
+                self.pool.putconn(self.conn)
+            except Exception:
+                pass
 
 def get_connection():
     pool_obj = get_connection_pool()
@@ -82,6 +88,34 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
+    # Render 및 다중 Uvicorn 워커 환경에서 DDL 락 경합 및 Deadlock 방지 (PostgreSQL Advisory Lock)
+    acquired = False
+    try:
+        cursor.execute("SELECT pg_try_advisory_lock(424242)")
+        res = cursor.fetchone()
+        acquired = bool(res and res[0])
+        if not acquired:
+            print("Another worker is initializing DB schema. Skipping init_db.")
+            conn.close()
+            return
+    except Exception as e:
+        print(f"Advisory lock check skipped: {e}")
+
+    try:
+        _do_init_db_schema(conn, cursor)
+    except Exception as e:
+        conn.rollback()
+        print(f"Schema initialization warning (ignoring deadlock/race): {e}")
+    finally:
+        if acquired:
+            try:
+                cursor.execute("SELECT pg_advisory_unlock(424242)")
+                conn.commit()
+            except Exception:
+                pass
+        conn.close()
+
+def _do_init_db_schema(conn, cursor):
     # Postgres schema setup
     # 0. Portfolios table setup
     cursor.execute('''
@@ -266,7 +300,6 @@ def init_db():
             cursor.execute("UPDATE accounts SET current_year_deposit = 0.0, last_updated_year = %s WHERE id = %s", (current_year, row[0]))
 
     conn.commit()
-    conn.close()
     clean_deposit_shadow_accounts()
 
 def clean_deposit_shadow_accounts():

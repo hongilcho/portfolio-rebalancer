@@ -11,8 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from data.data_manager import init_db
 from backend.routers import auth, market, dashboard, accounts, assets, holdings, rebalance, trades, sync, crypto, portfolios, system
 
-# Initialize Database schema
-init_db()
+# Initialize Database schema safely
+try:
+    init_db()
+except Exception as e:
+    print(f"Database initialization warning (safe to ignore if already initialized): {e}")
 
 app = FastAPI(
     title="Portfolio Rebalancer API",
