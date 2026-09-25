@@ -48,13 +48,13 @@ export default function SystemDiagnosticsModal({ isOpen, onClose }) {
     const report = `[배포 환경 성능 진단 리포트]
 - 일시: ${data.timestamp}
 - 환경: ${data.environment} (${data.platform || 'Linux/Render'})
-- 진단 총 소요 시간: ${data.total_benchmark_time_sec}s
+- 진단 총 소요 시간: ${data.total_benchmark_time_sec}s (각 외부 API 개별 핑 측정 합계)
 - 세부 통신 지연시간:
   * 🗄️ Database (${db.name || 'PostgreSQL'}): ${db.latency_ms !== null ? `${db.latency_ms}ms` : '실패'} (${db.status})
   * 💵 실시간 환율 (${ex.name || 'USD/KRW'}): ${ex.latency_ms !== null ? `${ex.latency_ms}ms` : '실패'} (수집처: ${ex.source}, 환율: ${ex.rate}원)
   * 🇰🇷 국내 주식 시세 (${kr.ticker}): ${kr.latency_ms !== null ? `${kr.latency_ms}ms` : '실패'} (수집처: ${kr.source})
   * 🇺🇸 미국 주식 시세 (${us.ticker}): ${us.latency_ms !== null ? `${us.latency_ms}ms` : '실패'} (수집처: ${us.source})
-  * ⚡ 인메모리 캐시: ${cache.is_active ? `유효 (캐시 나이: ${cache.age_seconds}s, 항목: ${cache.cached_items_count}개)` : '캐시 없음/만료'}`;
+  * ⚡ 인메모리 캐시: ${cache.is_active ? `최신 유효 (캐시 나이: ${cache.age_seconds}s, 항목: ${cache.cached_items_count}개)` : (cache.cached_items_count > 0 ? `SWR 보존 중 (캐시 나이: ${cache.age_seconds}s, ${cache.cached_items_count}개 보존, 0ms 응답)` : '캐시 없음')}`;
 
     navigator.clipboard.writeText(report).then(() => {
       setCopied(true);
@@ -189,11 +189,13 @@ export default function SystemDiagnosticsModal({ isOpen, onClose }) {
                   <Cpu size={15} style={{ color: '#06B6D4' }} />
                   인메모리 캐시 상태
                 </span>
-                <span style={{ fontSize: '12px', color: metrics.memory_cache?.is_active ? '#10B981' : '#F59E0B', fontWeight: 600 }}>
-                  {metrics.memory_cache?.is_active ? '유효 (Active)' : '캐시 없음/만료'}
+                <span style={{ fontSize: '12px', color: metrics.memory_cache?.is_active ? '#10B981' : (metrics.memory_cache?.cached_items_count > 0 ? '#3B82F6' : '#F59E0B'), fontWeight: 600 }}>
+                  {metrics.memory_cache?.is_active ? '최신 유효 (Active)' : (metrics.memory_cache?.cached_items_count > 0 ? 'SWR 보존 (0ms 응답)' : '캐시 없음')}
                 </span>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {metrics.memory_cache?.is_active ? `${metrics.memory_cache?.age_seconds}초 경과 (${metrics.memory_cache?.cached_items_count}개)` : '다음 조회 시 신규 갱신'}
+                  {metrics.memory_cache?.cached_items_count > 0 
+                    ? `${metrics.memory_cache?.age_seconds || 0}초 전 수집 (${metrics.memory_cache?.cached_items_count}개 보존)` 
+                    : '다음 조회 시 신규 갱신'}
                 </span>
               </div>
             </div>
