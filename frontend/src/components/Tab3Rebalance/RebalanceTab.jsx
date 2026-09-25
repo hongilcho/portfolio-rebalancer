@@ -148,7 +148,7 @@ export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default'
           disabled={calculating}
         >
           <Play size={18} />
-          {calculating ? '최적 매매 경로 계산 중...' : '🚀 리밸런싱 전략 계산하기'}
+          {calculating ? '실시간 시세 반영 및 최적 매매 경로 계산 중...' : '🚀 리밸런싱 전략 계산하기'}
         </button>
       </div>
 

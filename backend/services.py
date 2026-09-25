@@ -122,19 +122,12 @@ class MarketStateService:
     def get_prices(self, force_refresh: bool = False) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
         now = time.time()
         
-        # 1. 명시적 강제 새로고침인 경우 동기 수집
-        if force_refresh:
+        # 1. 강제 새로고침 요청이거나, 캐시가 없거나, 캐시 TTL(5분)이 만료된 경우 동기 최신화 수집 (1초대 소요)
+        if force_refresh or self.price_data is None or (now - self.last_price_fetch_time > self.cache_ttl_seconds):
             self._do_fetch_prices()
-        # 2. 인메모리 캐시가 없는 경우 DB 캐시 재확인 후 최후의 수단으로 동기 수집
-        elif self.price_data is None:
-            self._load_from_db_cache()
-            if self.price_data is None:
-                self._do_fetch_prices()
-        # 3. 캐시 TTL 초과 시 Stale-While-Revalidate (기존 캐시 즉시 0ms 반환 + 백그라운드 갱신)
-        elif now - self.last_price_fetch_time > self.cache_ttl_seconds:
-            if not self._is_fetching:
-                t = threading.Thread(target=self._do_fetch_prices, daemon=True)
-                t.start()
+            # 외부 수집 실패 등으로 여전히 캐시가 없으면 DB 영구 캐시 폴백 시도
+            if not self.price_data:
+                self._load_from_db_cache()
             
         price_map = {}
         if self.price_data:

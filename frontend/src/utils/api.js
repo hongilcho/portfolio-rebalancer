@@ -172,9 +172,9 @@ export const api = {
   }),
 
   // Crypto (Bitcoin & Ethereum)
-  getCryptoSummary: (portfolioId = 'default') => {
+  getCryptoSummary: (portfolioId = 'default', forceRefresh = false) => {
     const pid = portfolioId || 'default';
-    return request(`/api/crypto/summary?portfolio_id=${encodeURIComponent(pid)}`);
+    return request(`/api/crypto/summary?portfolio_id=${encodeURIComponent(pid)}&force_refresh=${forceRefresh}`);
   },
   updateCryptoHoldings: (holdings) => request('/api/crypto/holdings', {
     method: 'PUT',

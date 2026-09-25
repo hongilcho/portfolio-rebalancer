@@ -5,7 +5,7 @@
  * 보유 수량, 평가금액, 수익률 및 소유자간 지분율/코인별 배분 도넛 차트를 제공합니다.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Coins, RefreshCw, Edit3, 
   PieChart, Sparkles 
@@ -19,6 +19,8 @@ export default function CryptoTab({
   currentPortfolioId = 'default'
 }) {
   const [data, setData] = useState(null);
+  const dataRef = useRef(data);
+  dataRef.current = data;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -74,12 +76,12 @@ export default function CryptoTab({
   }, [data?.crypto_assets_combined]);
 
   const loadCryptoSummary = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
+    if (isRefresh && dataRef.current) setRefreshing(true);
     else setLoading(true);
     setError('');
 
     try {
-      const res = await api.getCryptoSummary(currentPortfolioId);
+      const res = await api.getCryptoSummary(currentPortfolioId, isRefresh);
       setData(res);
     } catch (err) {
       console.error('Failed to load crypto summary:', err);
@@ -91,7 +93,8 @@ export default function CryptoTab({
   }, [currentPortfolioId]);
 
   useEffect(() => {
-    loadCryptoSummary();
+    // 최초 진입 시에도 업비트 실시간 시세를 직접 수집(force_refresh=true)하여 즉시 반영
+    loadCryptoSummary(true);
   }, [loadCryptoSummary]);
 
   const handleSaveHoldings = async (holdings) => {

@@ -116,3 +116,33 @@ def test_get_krx_gold_price_nh_first(mocker):
     price, source = get_krx_gold_price()
     assert price == 135000.0
     assert source == "NH API"
+
+def test_fetch_kr_stocks_batch(mocker):
+    """국내 주식 콤마 단일 배치 수집 단위 테스트"""
+    from logic.price_fetcher import fetch_kr_stocks_batch
+    mock_res = mocker.MagicMock()
+    mock_res.status_code = 200
+    mock_res.json.return_value = {
+        'datas': [
+            {'itemCode': '0085P0', 'closePrice': '9,545'},
+            {'itemCode': '476760', 'closePrice': '8,780'}
+        ]
+    }
+    mocker.patch('logic.price_fetcher.requests.get', return_value=mock_res)
+    res = fetch_kr_stocks_batch(['0085P0', '476760'])
+    assert res.get('0085P0') == 9545.0
+    assert res.get('476760') == 8780.0
+
+def test_us_stock_suffix_cache(mocker):
+    """미국 주식 접미사 캐싱 검증"""
+    from logic.price_fetcher import _us_ticker_suffix_cache
+    _us_ticker_suffix_cache['TEST_TICKER'] = 'TEST_TICKER.O'
+
+    mock_res = mocker.MagicMock()
+    mock_res.status_code = 200
+    mock_res.json.return_value = {'closePrice': '25.0'}
+    mocker.patch('logic.price_fetcher.requests.get', return_value=mock_res)
+
+    price, source = get_us_stock_price('TEST_TICKER', usd_krw=1000.0)
+    assert price == 25000.0
+    assert source == "네이버 금융"

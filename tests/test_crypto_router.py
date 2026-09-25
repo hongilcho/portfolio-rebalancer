@@ -20,6 +20,14 @@ def test_crypto_prices_fetch():
     assert prices["BTC"]["symbol"] == "BTC"
     assert prices["ETH"]["symbol"] == "ETH"
 
+def test_crypto_prices_force_refresh():
+    """force_refresh=True 옵션 적용 시 정상 동작 검증"""
+    prices = get_crypto_prices(force_refresh=True)
+    assert "BTC" in prices
+    assert "ETH" in prices
+    assert prices["BTC"]["price"] > 0
+    assert prices["ETH"]["price"] > 0
+
 def test_crypto_summary_multi_owner_calculation():
     """소유자별 보유량 및 통합 비트코인/이더리움 합산 계산 검증"""
     # Mock holdings without touching real Supabase DB

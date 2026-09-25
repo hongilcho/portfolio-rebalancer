@@ -30,12 +30,13 @@ class CryptoHoldingsUpdateRequest(BaseModel):
 def get_crypto_summary(
     portfolio_id: Optional[str] = "default",
     include_portfolio: bool = False,
+    force_refresh: bool = False,
     db_holdings: Optional[List[Dict[str, Any]]] = None,
     prices_map: Optional[Dict[str, Any]] = None
 ):
     # 1. Fetch live prices & DB holdings
     if prices_map is None:
-        prices_map = get_crypto_prices()
+        prices_map = get_crypto_prices(force_refresh=force_refresh)
     if db_holdings is None:
         db_holdings = get_crypto_holdings()
     db_map = {(h.get('owner', '윤아'), h['symbol'].upper()): h for h in db_holdings}

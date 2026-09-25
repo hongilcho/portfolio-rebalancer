@@ -38,7 +38,8 @@ def calculate_plan(req: CalculateRebalanceRequest):
     if not assets or not accounts:
         raise HTTPException(status_code=400, detail="자산과 계좌를 먼저 등록해주세요.")
         
-    prices, price_map = market_service.get_prices()
+    # 리밸런싱 주문 수량 산출 전 항상 최신 실시간 시장 시세 강제 수집 (1초 소요)
+    prices, price_map = market_service.get_prices(force_refresh=True)
     
     total_krw_cash = sum(float(a['deposit_krw']) for a in accounts if a['account_type'] != 'CMA')
     

@@ -100,10 +100,16 @@ export default function App() {
   const dashboardDataRef = useRef(dashboardData);
   dashboardDataRef.current = dashboardData;
 
+  const [childRefreshKey, setChildRefreshKey] = useState(0);
+
   const loadAllData = useCallback(async (forceRefresh = false, targetPid = null) => {
     const pid = targetPid || currentPortfolioIdRef.current;
-    if (forceRefresh) setRefreshing(true);
-    else if (!dashboardDataRef.current) setLoading(true);
+    if (forceRefresh) {
+      setRefreshing(true);
+      setChildRefreshKey(k => k + 1);
+    } else if (!dashboardDataRef.current) {
+      setLoading(true);
+    }
     setError('');
 
     try {
@@ -183,6 +189,7 @@ export default function App() {
       {currentPortfolioId === 'all' ? (
         <main>
           <AllPortfoliosOverview 
+            key={childRefreshKey}
             onSelectPortfolio={(id) => {
               if (id === 'tab_crypto' || id === 'crypto') {
                 handleSelectPortfolio('crypto');
@@ -196,7 +203,7 @@ export default function App() {
       ) : currentPortfolioId === 'crypto' ? (
         /* Content View: When 'crypto' is selected -> Independent Crypto Dashboard */
         <main>
-          <CryptoTab />
+          <CryptoTab key={childRefreshKey} currentPortfolioId={currentPortfolioId} />
         </main>
       ) : (
         <>
@@ -231,7 +238,7 @@ export default function App() {
                   dashboardData={dashboardData}
                   assets={assets}
                   accounts={accounts}
-                  onRefresh={() => loadAllData(false, currentPortfolioId)}
+                  onRefresh={() => loadAllData(true, currentPortfolioId)}
                 />
               )}
 
@@ -245,7 +252,7 @@ export default function App() {
 
               {activeTab === 'tab3' && (
                 <RebalanceTab
-                  onRefresh={() => loadAllData(false, currentPortfolioId)}
+                  onRefresh={() => loadAllData(true, currentPortfolioId)}
                   currentPortfolioId={currentPortfolioId}
                 />
               )}

@@ -190,27 +190,21 @@ def get_crypto_prices(force_refresh: bool = False):
             _crypto_cache = db_cache
             _crypto_cache_time = now - min(age, 3600.0)
 
-    # 2. 명시적 새로고침 요청 시 동기 갱신
-    if force_refresh:
-        fresh = _fetch_crypto_from_external()
-        if fresh and (fresh["BTC"]["price"] > 0 or fresh["ETH"]["price"] > 0):
-            _crypto_cache = fresh
-            _crypto_cache_time = now
-            save_market_cache("crypto", fresh)
-        return _crypto_cache or fresh
+    # 2. 명시적 새로고침 요청이거나 캐시 TTL(60초) 만료 또는 캐시 부재 시 동기 최신화 수집
+    if force_refresh or _crypto_cache is None or (now - _crypto_cache_time > _crypto_cache_ttl):
+        try:
+            fresh = _fetch_crypto_from_external()
+            if fresh and (fresh["BTC"]["price"] > 0 or fresh["ETH"]["price"] > 0):
+                _crypto_cache = fresh
+                _crypto_cache_time = now
+                save_market_cache("crypto", fresh)
+                return _crypto_cache
+        except Exception as e:
+            print(f"Error fetching fresh crypto prices: {e}")
+        # 외부 수집 실패 시 기존 캐시 폴백 반환
+        if _crypto_cache is not None:
+            return _crypto_cache
 
-    # 3. 유효한 캐시가 있으면 즉시 반환
-    if _crypto_cache is not None:
-        # 캐시 TTL(60초) 만료 시 백그라운드 갱신 트리거 (Stale-While-Revalidate)
-        if now - _crypto_cache_time > _crypto_cache_ttl and not _crypto_fetching:
-            threading.Thread(target=_background_crypto_refresh, daemon=True).start()
-        return _crypto_cache
-
-    # 4. DB 캐시마저 없는 완전 최초 기동 시에만 동기 조회
-    fresh = _fetch_crypto_from_external()
-    if fresh:
-        _crypto_cache = fresh
-        _crypto_cache_time = now
-        save_market_cache("crypto", fresh)
-    return _crypto_cache
+    # 3. 아직 유효한 캐시(60초 이내)가 있으면 즉시 반환
+    return _crypto_cache or _fetch_crypto_from_external()
 
