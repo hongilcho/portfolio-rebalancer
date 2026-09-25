@@ -52,8 +52,10 @@ export const api = {
   },
   getExportCsvUrl: () => `${API_BASE_URL}/api/market/export-csv`,
 
-  // Dashboard Summary
+  // Dashboard Summary & High-Speed Unified Bundle
   getDashboardSummary: (portfolioId = 'default') => request(`/api/dashboard/summary?portfolio_id=${portfolioId}`),
+  getPortfolioBundle: (portfolioId = 'default', forceRefresh = false) => 
+    request(`/api/dashboard/bundle?portfolio_id=${portfolioId}&force_refresh=${forceRefresh}`),
 
   // Portfolios Management & Overview
   getPortfolios: () => request('/api/portfolios/'),

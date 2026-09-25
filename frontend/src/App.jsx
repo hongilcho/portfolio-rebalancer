@@ -96,25 +96,19 @@ export default function App() {
         return;
       }
 
-      // If viewing a specific portfolio, fetch all portfolio-specific data concurrently in ONE single batch
-      const [portsRes, pricesRes, dashRes, assetsRes, accountsRes] = await Promise.all([
-        api.getPortfolios(),
-        api.getPrices(forceRefresh, targetPid),
-        api.getDashboardSummary(targetPid),
-        api.getAssets(targetPid),
-        api.getAccounts(targetPid),
-      ]);
+      // If viewing a specific portfolio, fetch all portfolio-specific data in ONE single unified bundle request
+      const bundle = await api.getPortfolioBundle(targetPid, forceRefresh);
 
-      setPortfolios(portsRes.portfolios || []);
-      setPricesData(pricesRes);
-      setDashboardData(dashRes);
+      setPortfolios(bundle.portfolios || []);
+      setPricesData(bundle.prices_data);
+      setDashboardData(bundle.dashboard);
       try {
-        sessionStorage.setItem('portfolio_dashboard_cache_' + targetPid, JSON.stringify(dashRes));
+        sessionStorage.setItem('portfolio_dashboard_cache_' + targetPid, JSON.stringify(bundle.dashboard));
       } catch {}
-      setAssets(assetsRes.assets || []);
-      setAccounts(accountsRes.accounts || []);
-      setUsdKrw(dashRes.usd_krw || pricesRes.usd_krw || 1380.0);
-      setRateSource(dashRes.rate_source || pricesRes.rate_source || '');
+      setAssets(bundle.assets || []);
+      setAccounts(bundle.accounts || []);
+      setUsdKrw(bundle.usd_krw || 1380.0);
+      setRateSource(bundle.rate_source || '');
     } catch (err) {
       console.error('Failed to load portfolio data:', err);
       setError(err.message || '데이터를 불러오는 중 오류가 발생했습니다.');

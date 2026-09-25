@@ -3,10 +3,56 @@ import math
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any, List, Optional
 
-from data.data_manager import get_all_accounts, get_all_assets, get_all_holdings
+from data.data_manager import get_all_accounts, get_all_assets, get_all_holdings, get_overview_batch_data
 from backend.services import market_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
+
+@router.get("/bundle")
+def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = False):
+    """
+    단 1회의 HTTP 요청 및 단 1회의 DB 왕복으로 대시보드 렌더링에 필요한 모든 데이터를 한 번에 제공
+    (portfolios, dashboard summary, assets, accounts, prices, exchange rate)
+    """
+    batch_data = get_overview_batch_data()
+    portfolios = batch_data.get("portfolios", [])
+    all_accounts = batch_data.get("accounts", [])
+    all_assets = batch_data.get("assets", [])
+    all_holdings = batch_data.get("holdings", [])
+
+    p_accounts = [a for a in all_accounts if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
+    p_assets = [a for a in all_assets if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
+
+    prices, price_map = market_service.get_prices(force_refresh=force_refresh)
+    usd_krw = market_service.usd_krw
+    rate_source = market_service.rate_source
+
+    dash = get_dashboard_summary(
+        portfolio_id=portfolio_id,
+        accounts=p_accounts,
+        assets=p_assets,
+        all_holdings=all_holdings,
+        price_map=price_map,
+        usd_krw=usd_krw
+    )
+
+    p_asset_ids = {str(a["id"]) for a in p_assets}
+    p_prices = [p for p in prices if str(p["id"]) in p_asset_ids]
+
+    return {
+        "portfolios": portfolios,
+        "dashboard": dash,
+        "assets": p_assets,
+        "accounts": p_accounts,
+        "prices_data": {
+            "prices": p_prices,
+            "price_map": price_map,
+            "usd_krw": usd_krw,
+            "rate_source": rate_source
+        },
+        "usd_krw": usd_krw,
+        "rate_source": rate_source
+    }
 
 @router.get("/summary")
 def get_dashboard_summary(
@@ -20,20 +66,23 @@ def get_dashboard_summary(
     """
     포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
     - accounts, assets, all_holdings, price_map, usd_krw 전달 시 DB 재조회 없이 인메모리 고속 연산 수행
+    - 파라미터 미전달 시 단 1회의 PostgreSQL 배치 조회로 0.1초 내 연산 완료
     """
-    if accounts is None:
-        accounts = get_all_accounts(portfolio_id=portfolio_id)
-    if assets is None:
-        assets = get_all_assets(portfolio_id=portfolio_id)
+    if accounts is None or assets is None or all_holdings is None:
+        batch_data = get_overview_batch_data()
+        all_accounts = batch_data.get("accounts", [])
+        all_assets = batch_data.get("assets", [])
+        if all_holdings is None:
+            all_holdings = batch_data.get("holdings", [])
+        if accounts is None:
+            accounts = [a for a in all_accounts if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
+        if assets is None:
+            assets = [a for a in all_assets if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
     
     if price_map is None:
         _, price_map = market_service.get_prices()
     if usd_krw is None:
         usd_krw = market_service.usd_krw
-
-    # N+1 쿼리 방지: 전체 보유 종목을 단일 쿼리로 조회 후 메모리에서 계좌별 매핑
-    if all_holdings is None:
-        all_holdings = get_all_holdings()
 
     holdings_by_acc: Dict[str, List[Dict[str, Any]]] = {}
     for h in all_holdings:
