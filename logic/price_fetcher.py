@@ -523,6 +523,7 @@ def _fetch_single_asset_price(asset: dict, usd_krw: float, now_str: str, kr_batc
         "allowed_accounts": asset.get('allowed_accounts', []),
         "price_native": raw_price if raw_price else 0.0,
         "price_krw": price_krw,
+        "price_usd": round(price_usd, 2) if price_usd else 0.0,
         "usd_krw": usd_krw,
         "status": status,
         "updated_at": now_str,

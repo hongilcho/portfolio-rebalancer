@@ -35,16 +35,26 @@ export function numToKrMixed(num) {
 /**
  * 통화 단위 포맷터
  */
-export function formatKRW(val) {
+export function formatKRW(val, showSign = false) {
   if (val === null || val === undefined || isNaN(val)) return '0 원';
   const num = Math.round(Number(val));
-  return `${num.toLocaleString('ko-KR')} 원`;
+  const isNeg = num < 0;
+  const absNum = Math.abs(num);
+  const formatted = `${absNum.toLocaleString('ko-KR')} 원`;
+  if (isNeg) return `-${formatted}`;
+  if (showSign && num > 0) return `+${formatted}`;
+  return formatted;
 }
 
-export function formatUSD(val) {
+export function formatUSD(val, showSign = false) {
   if (val === null || val === undefined || isNaN(val)) return '$0.00';
   const num = Number(val);
-  return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const isNeg = num < 0;
+  const absNum = Math.abs(num);
+  const formatted = `$${absNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (isNeg) return `-${formatted}`;
+  if (showSign && num > 0) return `+${formatted}`;
+  return formatted;
 }
 
 export function formatQuantity(val, unit = '주') {

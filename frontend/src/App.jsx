@@ -55,6 +55,16 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
+  // Currency Display Mode State ('KRW' | 'USD') - MTS Style
+  const [currencyMode, setCurrencyMode] = useState(() => {
+    return localStorage.getItem('portfolio_currency_mode') || 'KRW';
+  });
+
+  const handleCurrencyModeChange = (mode) => {
+    setCurrencyMode(mode);
+    localStorage.setItem('portfolio_currency_mode', mode);
+  };
+
   // Portfolios State
   const [portfolios, setPortfolios] = useState([]);
   const [currentPortfolioId, setCurrentPortfolioId] = useState(() => {
@@ -164,7 +174,7 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Header with Theme & Portfolio Selector */}
+      {/* Header with Theme & Portfolio Selector & Currency Toggle */}
       <Header
         usdKrw={usdKrw}
         rateSource={rateSource}
@@ -176,6 +186,8 @@ export default function App() {
         currentPortfolioId={currentPortfolioId}
         onSelectPortfolio={handleSelectPortfolio}
         onOpenManagePortfolios={() => setIsManagePortfoliosOpen(true)}
+        currencyMode={currencyMode}
+        onCurrencyModeChange={handleCurrencyModeChange}
       />
 
       {/* Error Alert */}
@@ -190,6 +202,7 @@ export default function App() {
         <main>
           <AllPortfoliosOverview 
             key={childRefreshKey}
+            currencyMode={currencyMode}
             onSelectPortfolio={(id) => {
               if (id === 'tab_crypto' || id === 'crypto') {
                 handleSelectPortfolio('crypto');
@@ -238,6 +251,7 @@ export default function App() {
                   dashboardData={dashboardData}
                   assets={assets}
                   accounts={accounts}
+                  currencyMode={currencyMode}
                   onRefresh={() => loadAllData(true, currentPortfolioId)}
                 />
               )}

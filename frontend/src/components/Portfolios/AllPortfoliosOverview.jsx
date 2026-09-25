@@ -20,7 +20,7 @@ import {
   Layers, ArrowRight, CheckSquare, Square, PieChart
 } from 'lucide-react';
 import { api } from '../../utils/api';
-import { formatKRW, formatPercent } from '../../utils/formatters';
+import { formatKRW, formatUSD, formatPercent } from '../../utils/formatters';
 import DonutChart from '../common/DonutChart';
 
 let _overviewCache = null;
@@ -29,7 +29,7 @@ try {
   if (saved) _overviewCache = JSON.parse(saved);
 } catch {}
 
-export default function AllPortfoliosOverview({ onSelectPortfolio }) {
+export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode = 'KRW' }) {
   const [data, setData] = useState(() => _overviewCache);
   const [loading, setLoading] = useState(() => !_overviewCache);
   const [refreshing, setRefreshing] = useState(false);
@@ -218,35 +218,89 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
           </span>
         </div>
 
-        <div className="kpi-grid" style={{ marginTop: '16px', marginBottom: '16px' }}>
-          <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-            <div className="kpi-title">💎 통합 총 평가금액 (전체 순자산)</div>
-            <div className="kpi-value" style={{ color: 'var(--accent-primary)', fontSize: '1.5rem' }}>
-              {formatKRW(grand.total_eval)}
-            </div>
-          </div>
+        {currencyMode === 'USD' ? (
+          <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+            <div className="dual-currency-kpi-grid">
+              {/* 1) 🇺🇸 가문 외화 자산 종합 (USD) */}
+              <div className="dual-kpi-card usd-card">
+                <div className="dual-kpi-header">
+                  <div className="dual-kpi-title">
+                    <span className="badge badge-accent">🇺🇸 가문 외화 자산 종합 (USD)</span>
+                    <span className="dual-kpi-subtitle">미국 상장 ETF/주식 & 외화 예수금 통합</span>
+                  </div>
+                  <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-primary)', fontSize: '0.74rem' }}>
+                    외화 순자산 {formatUSD(grand?.usd_summary?.total_eval_usd)}
+                  </span>
+                </div>
+                <div className="dual-kpi-main">
+                  <div className="dual-kpi-main-label">외화 총 평가금액</div>
+                  <div className="dual-kpi-main-value" style={{ color: 'var(--accent-primary)' }}>
+                    {formatUSD(grand?.usd_summary?.stock_eval_usd)}
+                  </div>
+                  <div className="dual-kpi-sub-row">
+                    <span className="dual-kpi-sub-label">외화 평가손익:</span>
+                    <span className={`dual-kpi-sub-value ${(grand?.usd_summary?.stock_profit_usd || 0) >= 0 ? 'text-profit' : 'text-loss'}`}>
+                      {formatUSD(grand?.usd_summary?.stock_profit_usd, true)} ({formatPercent(grand?.usd_summary?.stock_return_usd)})
+                    </span>
+                  </div>
+                </div>
+                <div className="dual-kpi-footer">
+                  <div className="dual-kpi-footer-item">
+                    <span>외화 투자원금</span>
+                    <strong>{formatUSD(grand?.usd_summary?.stock_buy_usd)}</strong>
+                  </div>
+                  <div className="dual-kpi-footer-divider" />
+                  <div className="dual-kpi-footer-item">
+                    <span>외화 예수금</span>
+                    <strong style={{ color: 'var(--accent-primary)' }}>{formatUSD(grand?.usd_summary?.cash_usd)}</strong>
+                  </div>
+                </div>
+              </div>
 
-          <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-            <div className="kpi-title">🛒 통합 총 매입금액 (원금 합계)</div>
-            <div className="kpi-value" style={{ fontSize: '1.5rem' }}>
-              {formatKRW(grand.total_buy)}
+              {/* 2) 🇰🇷 가문 원화 자산 종합 (KRW) */}
+              <div className="dual-kpi-card krw-card">
+                <div className="dual-kpi-header">
+                  <div className="dual-kpi-title">
+                    <span className="badge badge-safe">🇰🇷 가문 원화 자산 종합 (KRW)</span>
+                    <span className="dual-kpi-subtitle">국내 증시·채권·금·예금·가상화폐 & 원화 예수금</span>
+                  </div>
+                  <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-safe)', fontSize: '0.74rem' }}>
+                    원화 순자산 {formatKRW(grand?.krw_summary?.total_eval_krw)}
+                  </span>
+                </div>
+                <div className="dual-kpi-main">
+                  <div className="dual-kpi-main-label">원화 총 평가금액</div>
+                  <div className="dual-kpi-main-value" style={{ color: 'var(--color-safe)' }}>
+                    {formatKRW(grand?.krw_summary?.stock_eval_krw)}
+                  </div>
+                  <div className="dual-kpi-sub-row">
+                    <span className="dual-kpi-sub-label">원화 평가손익:</span>
+                    <span className={`dual-kpi-sub-value ${(grand?.krw_summary?.stock_profit_krw || 0) >= 0 ? 'text-profit' : 'text-loss'}`}>
+                      {formatKRW(grand?.krw_summary?.stock_profit_krw, true)} ({formatPercent(grand?.krw_summary?.stock_return_krw)})
+                    </span>
+                  </div>
+                </div>
+                <div className="dual-kpi-footer">
+                  <div className="dual-kpi-footer-item">
+                    <span>원화 투자원금</span>
+                    <strong>{formatKRW(grand?.krw_summary?.stock_buy_krw)}</strong>
+                  </div>
+                  <div className="dual-kpi-footer-divider" />
+                  <div className="dual-kpi-footer-item">
+                    <span>원화 예수금</span>
+                    <strong style={{ color: 'var(--color-safe)' }}>{formatKRW(grand?.krw_summary?.cash_krw)}</strong>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-            <div className="kpi-title">📈 통합 총 평가손익 (수익률)</div>
-            <div className="kpi-value" style={{ color: isGrandProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontSize: '1.5rem' }}>
-              {isGrandProfit ? '+' : ''}{formatKRW(grand.total_profit)}
-              <span style={{ fontSize: '0.95rem', marginLeft: '6px', fontWeight: 600 }}>
-                ({formatPercent(grand.total_profit_pct)})
-              </span>
-            </div>
-          </div>
-
-          <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-            <div className="kpi-title">⚖️ 자산 배분 비중 현황</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.8rem', fontWeight: 700 }}>
+            {/* Asset Distribution Bar */}
+            <div style={{ background: 'var(--bg-surface)', padding: '12px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>⚖️ 자산 배분 비중 현황</span>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>통합 전체 환산 순자산: {formatKRW(grand.total_eval)}</span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
                 {portfolios.map((p, idx) => (
                   <span key={p.id} style={{ color: portfolioColors[idx % portfolioColors.length] }}>
                     💼 {p.name} {p.weight_pct?.toFixed(1)}%
@@ -258,7 +312,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
                   </span>
                 )}
               </div>
-              <div style={{ height: '10px', background: 'rgba(255,255,255,0.08)', borderRadius: '5px', overflow: 'hidden', display: 'flex' }}>
+              <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
                 {portfolios.map((p, idx) => (
                   <div 
                     key={p.id}
@@ -275,7 +329,66 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
               </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="kpi-grid" style={{ marginTop: '16px', marginBottom: '16px' }}>
+            <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
+              <div className="kpi-title">💎 통합 총 평가금액 (전체 순자산)</div>
+              <div className="kpi-value" style={{ color: 'var(--accent-primary)', fontSize: '1.5rem' }}>
+                {formatKRW(grand.total_eval)}
+              </div>
+            </div>
+
+            <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
+              <div className="kpi-title">🛒 통합 총 매입금액 (원금 합계)</div>
+              <div className="kpi-value" style={{ fontSize: '1.5rem' }}>
+                {formatKRW(grand.total_buy)}
+              </div>
+            </div>
+
+            <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
+              <div className="kpi-title">📈 통합 총 평가손익 (수익률)</div>
+              <div className="kpi-value" style={{ color: isGrandProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontSize: '1.5rem' }}>
+                {isGrandProfit ? '+' : ''}{formatKRW(grand.total_profit)}
+                <span style={{ fontSize: '0.95rem', marginLeft: '6px', fontWeight: 600 }}>
+                  ({formatPercent(grand.total_profit_pct)})
+                </span>
+              </div>
+            </div>
+
+            <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
+              <div className="kpi-title">⚖️ 자산 배분 비중 현황</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.8rem', fontWeight: 700 }}>
+                  {portfolios.map((p, idx) => (
+                    <span key={p.id} style={{ color: portfolioColors[idx % portfolioColors.length] }}>
+                      💼 {p.name} {p.weight_pct?.toFixed(1)}%
+                    </span>
+                  ))}
+                  {includeCrypto && crypto && (
+                    <span style={{ color: '#F59E0B' }}>
+                      🪙 가상화폐 {crypto.weight_pct?.toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+                <div style={{ height: '10px', background: 'rgba(255,255,255,0.08)', borderRadius: '5px', overflow: 'hidden', display: 'flex' }}>
+                  {portfolios.map((p, idx) => (
+                    <div 
+                      key={p.id}
+                      style={{ width: `${p.weight_pct || 0}%`, background: portfolioColors[idx % portfolioColors.length] }} 
+                      title={`${p.name}: ${p.weight_pct?.toFixed(1)}%`} 
+                    />
+                  ))}
+                  {includeCrypto && crypto && (
+                    <div 
+                      style={{ width: `${crypto.weight_pct || 0}%`, background: '#F59E0B' }} 
+                      title={`가상화폐: ${crypto.weight_pct?.toFixed(1)}%`} 
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. Interactive Donut Charts Section (포트폴리오별 / 자산군별 비중) */}
@@ -526,8 +639,8 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
                 <th>통합 보유수량</th>
                 <th>통합 평단가 (가중평균)</th>
                 <th>실시간 현재가</th>
-                <th>총 평가금액(원)</th>
-                <th>평가 손익(원)</th>
+                <th>총 평가금액{currencyMode === 'USD' ? '' : '(원)'}</th>
+                <th>평가 손익{currencyMode === 'USD' ? '' : '(원)'}</th>
                 <th>수익률(%)</th>
                 <th>전체 자산 비중(%)</th>
                 <th>포트폴리오별 보유 분산</th>
@@ -542,7 +655,9 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
                 </tr>
               ) : (
                 aggregatedAssets.map((item) => {
-                  const isProfit = (item.total_profit || 0) >= 0;
+                  const isUs = item.market === 'US';
+                  const isUsdMode = currencyMode === 'USD' && isUs;
+                  const isProfit = isUsdMode ? ((item.total_profit_usd || 0) >= 0) : ((item.total_profit || 0) >= 0);
                   const isCryptoItem = item.asset_type === 'CRYPTO';
 
                   return (
@@ -572,16 +687,16 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
                           ? `${Number(item.total_quantity).toFixed(8).replace(/\.?0+$/, '')} ${item.ticker}` 
                           : `${Number(item.total_quantity).toLocaleString()}주`}
                       </td>
-                      <td>{formatKRW(item.weighted_avg_price)}</td>
-                      <td>{formatKRW(item.current_price)}</td>
+                      <td>{isUsdMode ? formatUSD(item.weighted_avg_price_usd) : formatKRW(item.weighted_avg_price)}</td>
+                      <td>{isUsdMode ? formatUSD(item.current_price_usd) : formatKRW(item.current_price)}</td>
                       <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
-                        {formatKRW(item.total_eval_amount)}
+                        {isUsdMode ? formatUSD(item.total_eval_amount_usd) : formatKRW(item.total_eval_amount)}
                       </td>
                       <td style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                        {isProfit ? '+' : ''}{formatKRW(item.total_profit)}
+                        {isUsdMode ? formatUSD(item.total_profit_usd, true) : `${isProfit ? '+' : ''}${formatKRW(item.total_profit)}`}
                       </td>
                       <td style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                        {formatPercent(item.total_profit_pct)}
+                        {formatPercent(isUsdMode ? item.total_profit_pct_usd : item.total_profit_pct)}
                       </td>
                       <td style={{ fontWeight: 700 }}>
                         {item.weight_in_grand_total_pct?.toFixed(2)}%
@@ -598,7 +713,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
                                 fontSize: '0.74rem',
                                 color: 'var(--text-secondary)'
                               }}
-                              title={`평단가: ${formatKRW(d.avg_price)}, 평가액: ${formatKRW(d.eval_amount)}`}
+                              title={isUsdMode ? `평단가: ${formatUSD(d.avg_price_usd)}, 평가액: ${formatUSD(d.eval_amount_usd)}` : `평단가: ${formatKRW(d.avg_price)}, 평가액: ${formatKRW(d.eval_amount)}`}
                             >
                               <strong>{d.portfolio_name}</strong>: {isCryptoItem ? `${d.quantity} ${item.ticker}` : `${d.quantity}주`}
                             </span>

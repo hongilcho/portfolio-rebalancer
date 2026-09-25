@@ -180,6 +180,13 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
 
                 is_dep = bool(sa.get("is_deposit", False))
                 asset_type_val = "DEPOSIT" if is_dep else "STOCK"
+                is_us = (market == "US")
+                eval_amt_usd = float(sa.get("eval_amount_usd", 0.0))
+                buy_amt_usd = float(sa.get("buy_amount_usd", 0.0))
+                curr_price_usd = float(sa.get("current_price_usd", 0.0))
+                avg_price_usd = float(sa.get("avg_price_usd", 0.0))
+                profit_usd = float(sa.get("profit_usd", 0.0))
+                profit_pct_usd = float(sa.get("profit_pct_usd", 0.0))
 
                 key = f"{ticker}_{market}"
                 if key not in aggregated_assets_map:
@@ -188,12 +195,16 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                         "ticker": ticker,
                         "name": name,
                         "market": market,
+                        "is_us": is_us,
                         "asset_type": asset_type_val,
                         "is_deposit": is_dep,
                         "total_quantity": 0.0,
                         "total_buy_amount": 0.0,
                         "total_eval_amount": 0.0,
+                        "total_buy_amount_usd": 0.0,
+                        "total_eval_amount_usd": 0.0,
                         "current_price": curr_price,
+                        "current_price_usd": curr_price_usd,
                         "distribution": []
                     }
 
@@ -201,8 +212,12 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                 entry["total_quantity"] += qty
                 entry["total_buy_amount"] += buy_amt
                 entry["total_eval_amount"] += eval_amt
+                entry["total_buy_amount_usd"] += buy_amt_usd
+                entry["total_eval_amount_usd"] += eval_amt_usd
                 if curr_price > 0:
                     entry["current_price"] = curr_price
+                if curr_price_usd > 0:
+                    entry["current_price_usd"] = curr_price_usd
 
                 entry["distribution"].append({
                     "portfolio_id": pid,
@@ -211,7 +226,11 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                     "avg_price": avg_price,
                     "eval_amount": eval_amt,
                     "profit_krw": profit_krw,
-                    "profit_pct": profit_pct
+                    "profit_pct": profit_pct,
+                    "avg_price_usd": avg_price_usd,
+                    "eval_amount_usd": eval_amt_usd,
+                    "profit_usd": profit_usd,
+                    "profit_pct_usd": profit_pct_usd
                 })
 
         except Exception as e:
@@ -230,6 +249,19 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
         item["weighted_avg_price"] = weighted_avg
         item["total_profit"] = profit
         item["total_profit_pct"] = profit_pct
+
+        is_us_asset = item.get("is_us", False)
+        tot_buy_usd = item.get("total_buy_amount_usd", 0.0)
+        tot_eval_usd = item.get("total_eval_amount_usd", 0.0)
+        weighted_avg_usd = (tot_buy_usd / tot_qty) if (tot_qty > 0 and is_us_asset) else 0.0
+        profit_usd = (tot_eval_usd - tot_buy_usd) if is_us_asset else 0.0
+        profit_pct_usd = (profit_usd / tot_buy_usd * 100) if (tot_buy_usd > 0 and is_us_asset) else 0.0
+
+        item["weighted_avg_price_usd"] = round(weighted_avg_usd, 2)
+        item["total_eval_amount_usd"] = round(tot_eval_usd, 2)
+        item["total_buy_amount_usd"] = round(tot_buy_usd, 2)
+        item["total_profit_usd"] = round(profit_usd, 2)
+        item["total_profit_pct_usd"] = round(profit_pct_usd, 2)
         aggregated_assets_list.append(item)
 
     # Crypto summary handling
@@ -309,6 +341,44 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     # Sort aggregated assets by eval amount descending
     aggregated_assets_list.sort(key=lambda x: x["total_eval_amount"], reverse=True)
 
+    # Dual currency grand total aggregations
+    us_agg = [a for a in aggregated_assets_list if a.get("market") == "US"]
+    grand_stock_eval_usd = sum(a.get("total_eval_amount_usd", 0.0) for a in us_agg)
+    grand_stock_buy_usd = sum(a.get("total_buy_amount_usd", 0.0) for a in us_agg)
+    grand_stock_profit_usd = grand_stock_eval_usd - grand_stock_buy_usd
+    grand_stock_return_usd = (grand_stock_profit_usd / grand_stock_buy_usd * 100) if grand_stock_buy_usd > 0 else 0.0
+    
+    total_usd_cash = sum(
+        sum(float(acc.get("deposit_usd") or 0.0) for acc in accounts_by_pid.get(p["id"], []))
+        for p in portfolios
+    )
+
+    grand_usd_summary = {
+        "stock_eval_usd": round(grand_stock_eval_usd, 2),
+        "stock_buy_usd": round(grand_stock_buy_usd, 2),
+        "stock_profit_usd": round(grand_stock_profit_usd, 2),
+        "stock_return_usd": round(grand_stock_return_usd, 2),
+        "cash_usd": round(total_usd_cash, 2),
+        "total_eval_usd": round(grand_stock_eval_usd + total_usd_cash, 2),
+        "total_buy_usd": round(grand_stock_buy_usd + total_usd_cash, 2)
+    }
+
+    kr_agg = [a for a in aggregated_assets_list if a.get("market") != "US"]
+    grand_stock_eval_krw = sum(a.get("total_eval_amount", 0.0) for a in kr_agg)
+    grand_stock_buy_krw = sum(a.get("total_buy_amount", 0.0) for a in kr_agg)
+    grand_stock_profit_krw = grand_stock_eval_krw - grand_stock_buy_krw
+    grand_stock_return_krw = (grand_stock_profit_krw / grand_stock_buy_krw * 100) if grand_stock_buy_krw > 0 else 0.0
+
+    grand_krw_summary = {
+        "stock_eval_krw": round(grand_stock_eval_krw, 0),
+        "stock_buy_krw": round(grand_stock_buy_krw, 0),
+        "stock_profit_krw": round(grand_stock_profit_krw, 0),
+        "stock_return_krw": round(grand_stock_return_krw, 2),
+        "cash_krw": round(total_cash_krw, 0),
+        "total_eval_krw": round(grand_stock_eval_krw + total_cash_krw, 0),
+        "total_buy_krw": round(grand_stock_buy_krw + total_cash_krw, 0)
+    }
+
     return {
         "grand_total": {
             "total_buy": grand_total_buy,
@@ -317,7 +387,9 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
             "total_profit_pct": grand_total_profit_pct,
             "total_cash_krw": total_cash_krw,
             "portfolios_total_eval": total_portfolios_eval,
-            "crypto_total_eval": crypto_total_eval if include_crypto else 0.0
+            "crypto_total_eval": crypto_total_eval if include_crypto else 0.0,
+            "usd_summary": grand_usd_summary,
+            "krw_summary": grand_krw_summary
         },
         "portfolios": portfolio_summaries,
         "crypto": crypto_data,

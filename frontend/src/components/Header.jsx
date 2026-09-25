@@ -31,7 +31,9 @@ export default function Header({
   portfolios = [],
   currentPortfolioId = 'default',
   onSelectPortfolio,
-  onOpenManagePortfolios
+  onOpenManagePortfolios,
+  currencyMode = 'KRW',
+  onCurrencyModeChange
 }) {
   const [isEditRateOpen, setIsEditRateOpen] = useState(false);
   const [customRate, setCustomRate] = useState(usdKrw || 1380);
@@ -140,6 +142,26 @@ export default function Header({
         </div>
 
         <div className="header-controls">
+          {/* Currency Display Mode Toggle (KRW / USD) - MTS Style */}
+          <div className="theme-selector" title="통화 표시 단위 전환 (MTS 스타일)">
+            <button
+              type="button"
+              className={`theme-btn ${currencyMode === 'KRW' ? 'active' : ''}`}
+              onClick={() => onCurrencyModeChange && onCurrencyModeChange('KRW')}
+              title="원화(₩) 기준 전체 합산 및 환산 표시"
+            >
+              <span>🇰🇷 원화(₩)</span>
+            </button>
+            <button
+              type="button"
+              className={`theme-btn ${currencyMode === 'USD' ? 'active' : ''}`}
+              onClick={() => onCurrencyModeChange && onCurrencyModeChange('USD')}
+              title="미국자산 순수 달러($) 표시 및 통화 분리 종합 집계"
+            >
+              <span>🇺🇸 달러($)</span>
+            </button>
+          </div>
+
           {/* Theme Selector */}
           <div className="theme-selector">
             <button
