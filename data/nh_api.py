@@ -21,6 +21,18 @@ class NamuhAPIClient:
         self.token_expiry = 0
         self.token_cooldown = 0
         self._lock = threading.Lock()
+        self._call_lock = threading.Lock()
+        self._last_call_time = 0.0
+        self._min_call_interval = 0.25  # NH API 429(거래건수 초과) 방지용 250ms 페이싱
+
+    def _throttle(self):
+        """NH API 호출 간 최소 대기 시간을 보장하여 초당 거래건수 초과(429) 원천 차단"""
+        with self._call_lock:
+            now = time.time()
+            elapsed = now - self._last_call_time
+            if elapsed < self._min_call_interval:
+                time.sleep(self._min_call_interval - elapsed)
+            self._last_call_time = time.time()
 
     def get_access_token(self):
         """
@@ -74,6 +86,7 @@ class NamuhAPIClient:
         }
         
         try:
+            self._throttle()
             if market == "KR":
                 url = f"{self.base_url}/krstock/quote/v1/currentPrice"
                 body = {
@@ -130,6 +143,7 @@ class NamuhAPIClient:
         }
         
         try:
+            self._throttle()
             res = requests.post(url, headers=headers, json=body, timeout=5, verify=False)
             if res.status_code != 200:
                 print(f"Namuh API Gold Price Fetch Error for {ticker}: {res.text}")

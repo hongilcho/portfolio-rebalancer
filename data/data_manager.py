@@ -6,7 +6,7 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from backend.config import SUPABASE_URL
 
 # 사용자 정의 6가지 표준 계좌 유형
@@ -290,6 +290,15 @@ def _do_init_db_schema(conn, cursor):
             ('crypto_yoona_btc', '윤아', 'BTC', '비트코인', 0.0, 0.0),
             ('crypto_yoona_eth', '윤아', 'ETH', '이더리움', 0.0, 0.0)
         ON CONFLICT (owner, symbol) DO NOTHING;
+    ''')
+
+    # 시장 시세 및 환율 영구 캐시 테이블 (서버 재부팅 및 Render 슬립 해제 시 0초 콜드스타트 보장)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS market_cache (
+            key TEXT PRIMARY KEY,
+            data JSONB NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
     ''')
     
     # 누적 납입금액 초기화
@@ -1180,6 +1189,52 @@ def get_overview_batch_data() -> Dict[str, Any]:
     raw['assets'] = processed_assets
     return raw
 
+def save_market_cache(key: str, data: Any) -> bool:
+    """
+    지속성 시장 데이터/시세/환율 캐시 저장 (JSONB 포맷)
+    PostgreSQL의 market_cache 테이블에 저장하여 서버 재시작 및 배포 후에도 즉시 복구 가능하게 함.
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO market_cache (key, data, updated_at)
+            VALUES (%s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (key) DO UPDATE
+            SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP
+        """, (key, json.dumps(data)))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error saving market cache for {key}: {e}")
+        return False
+
+def get_market_cache(key: str) -> Tuple[Optional[Any], float]:
+    """
+    지속성 시장 데이터/시세/환율 캐시 조회
+    Returns:
+        (data, age_in_seconds): 캐시 데이터와 생성 후 경과 시간(초). 없으면 (None, 999999.0)
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT data, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at)) as age_seconds
+            FROM market_cache WHERE key = %s
+        """, (key,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            raw_data = row[0]
+            parsed = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+            age = float(row[1]) if row[1] is not None else 0.0
+            return parsed, age
+    except Exception as e:
+        print(f"Error getting market cache for {key}: {e}")
+    return None, 999999.0
+
 if __name__ == "__main__":
     init_db()
     print("PostgreSQL Database sanitized and initialized!")
+

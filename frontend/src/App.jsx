@@ -44,7 +44,15 @@ export default function App() {
   const [isManagePortfoliosOpen, setIsManagePortfoliosOpen] = useState(false);
 
   // Global Data
-  const [dashboardData, setDashboardData] = useState(null);
+  const [dashboardData, setDashboardData] = useState(() => {
+    try {
+      const pid = localStorage.getItem('active_portfolio_id') || 'default';
+      const saved = sessionStorage.getItem('portfolio_dashboard_cache_' + pid);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [assets, setAssets] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [pricesData, setPricesData] = useState(null);
@@ -60,11 +68,16 @@ export default function App() {
   const handleSelectPortfolio = (pid) => {
     setCurrentPortfolioId(pid);
     localStorage.setItem('active_portfolio_id', pid);
+    // 복원 가능한 세션 캐시가 있는 경우 즉시 반영
+    try {
+      const saved = sessionStorage.getItem('portfolio_dashboard_cache_' + pid);
+      if (saved) setDashboardData(JSON.parse(saved));
+    } catch {}
   };
 
   const loadAllData = async (forceRefresh = false, targetPid = currentPortfolioId) => {
     if (forceRefresh) setRefreshing(true);
-    else setLoading(true);
+    else if (!dashboardData) setLoading(true);
     setError('');
 
     try {
@@ -95,6 +108,9 @@ export default function App() {
       setPortfolios(portsRes.portfolios || []);
       setPricesData(pricesRes);
       setDashboardData(dashRes);
+      try {
+        sessionStorage.setItem('portfolio_dashboard_cache_' + targetPid, JSON.stringify(dashRes));
+      } catch {}
       setAssets(assetsRes.assets || []);
       setAccounts(accountsRes.accounts || []);
       setUsdKrw(dashRes.usd_krw || pricesRes.usd_krw || 1380.0);
