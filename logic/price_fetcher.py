@@ -12,16 +12,8 @@ from typing import Tuple
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_exchange_rate_usd_krw():
-    """USD/KRW 실시간 환율 수집 (Namuh API -> 네이버 공식 환율 JSON API -> yfinance 폴백)"""
-    # 1. Namuh API 시도
-    try:
-        rate = nh_api_client.fetch_exchange_rate("USD")
-        if rate is not None and rate > 0:
-            return round(rate, 2), "Namuh API"
-    except Exception:
-        pass
-
-    # 2. 네이버 금융 공식 환율 JSON API (초고속 0.05초)
+    """USD/KRW 실시간 환율 수집 (네이버 금융 공식 환율 JSON API 최우선 -> Namuh API -> yfinance 폴백)"""
+    # 1. 네이버 금융 공식 환율 JSON API (초고속 0.05초)
     try:
         url_nv = "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW"
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -34,6 +26,14 @@ def get_exchange_rate_usd_krw():
                 clean_num = float(str(val).replace(',', '').strip())
                 if clean_num > 500:
                     return round(clean_num, 2), "네이버 금융"
+    except Exception:
+        pass
+
+    # 2. Namuh API 폴백
+    try:
+        rate = nh_api_client.fetch_exchange_rate("USD")
+        if rate is not None and rate > 0:
+            return round(rate, 2), "Namuh API"
     except Exception:
         pass
 
@@ -53,16 +53,8 @@ def get_exchange_rate_usd_krw():
     return 1380.0, "기본값(기본 1380원)"
 
 def get_kr_stock_price(ticker_code):
-    """국내 주식/ETF 실시간 시세 수집 (Namuh API 최우선 -> 네이버 금융 JSON API -> yfinance 폴백)"""
-    # 1. Namuh API 시도
-    try:
-        price = nh_api_client.fetch_current_price(ticker_code, market="KR")
-        if price is not None and price > 0:
-            return price, "NH API"
-    except Exception:
-        pass
-
-    # 2. 네이버 금융 공식 실시간 JSON API (초고속 0.05초 응답, HTML 스크래핑 파싱 실패 방지)
+    """국내 주식/ETF 실시간 시세 수집 (네이버 금융 공식 실시간 JSON API 최우선 -> Namuh API -> yfinance 폴백)"""
+    # 1. 네이버 금융 공식 실시간 JSON API (초고속 0.05초 응답, HTML 스크래핑 파싱 실패 방지)
     try:
         url_polling = f"https://polling.finance.naver.com/api/realtime/domestic/stock/{ticker_code}"
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -79,6 +71,7 @@ def get_kr_stock_price(ticker_code):
     except Exception:
         pass
 
+    # 네이버 모바일 증권 API 보조
     try:
         url_m = f"https://m.stock.naver.com/api/stock/{ticker_code}/basic"
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -90,6 +83,14 @@ def get_kr_stock_price(ticker_code):
                 clean_p = float(str(raw_val).replace(',', '').strip())
                 if clean_p > 0:
                     return clean_p, "네이버 금융"
+    except Exception:
+        pass
+
+    # 2. Namuh API 폴백
+    try:
+        price = nh_api_client.fetch_current_price(ticker_code, market="KR")
+        if price is not None and price > 0:
+            return price, "NH API"
     except Exception:
         pass
 
@@ -109,7 +110,7 @@ def get_kr_stock_price(ticker_code):
     return None, "시세를 찾을 수 없음"
 
 def get_krx_gold_price(usd_krw: float = 1380.0):
-    """KRX 금현물 실시간 시세 수집 (Namuh API -> 네이버 공식 금 시세 API -> 글로벌 금선물 GC=F 폴백)"""
+    """KRX 금현물 실시간 시세 수집 (Namuh API 최우선 -> 네이버 공식 금 시세 API -> 글로벌 금선물 GC=F 폴백)"""
     # 1. Namuh API 시도
     try:
         price = nh_api_client.fetch_gold_price("M04020000")
@@ -166,20 +167,23 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
     return 201620.0, "기본값"
 
 def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
-    """미국 주식/ETF 실시간 시세 수집 (Namuh API -> 네이버 해외증권 API -> yfinance 폴백)"""
+    """미국 주식/ETF 실시간 시세 수집 (네이버 해외증권 API 최우선 -> Namuh API -> yfinance 폴백)"""
     rate = float(usd_krw if usd_krw and usd_krw > 0 else 1380.0)
     
-    # 1. Namuh API 시도 (달러 시세 수취 후 실시간 환율 곱하여 원화 환산)
-    try:
-        usd_price = nh_api_client.fetch_current_price(ticker_symbol, market="US")
-        if usd_price is not None and usd_price > 0:
-            return round(usd_price * rate, 2), "NH API"
-    except Exception:
-        pass
-
-    # 2. 네이버 글로벌 증권 공식 API (초고속 0.05초 응답)
+    # 1. 네이버 글로벌 증권 공식 API 최우선 (초고속 0.05초 응답)
     # VT, PDBC.O, SLYV.K 등 거래소 접미사 자동 시도
-    for sym_candidate in [ticker_symbol, f"{ticker_symbol}.O", f"{ticker_symbol}.K", f"{ticker_symbol}.N"]:
+    candidates = [ticker_symbol]
+    if '.' in ticker_symbol:
+        base_sym = ticker_symbol.split('.')[0]
+        candidates.extend([base_sym, f"{base_sym}.O", f"{base_sym}.K", f"{base_sym}.N"])
+    else:
+        candidates.extend([f"{ticker_symbol}.O", f"{ticker_symbol}.K", f"{ticker_symbol}.N"])
+
+    seen = set()
+    for sym_candidate in candidates:
+        if sym_candidate in seen:
+            continue
+        seen.add(sym_candidate)
         try:
             url_nv = f"https://api.stock.naver.com/stock/{sym_candidate}/basic"
             headers = {'User-Agent': 'Mozilla/5.0'}
@@ -193,6 +197,14 @@ def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
                         return round(usd_val * rate, 2), "네이버 금융"
         except Exception:
             pass
+
+    # 2. Namuh API 폴백 (달러 시세 수취 후 실시간 환율 곱하여 원화 환산)
+    try:
+        usd_price = nh_api_client.fetch_current_price(ticker_symbol, market="US")
+        if usd_price is not None and usd_price > 0:
+            return round(usd_price * rate, 2), "NH API"
+    except Exception:
+        pass
 
     # 3. yfinance 폴백 (fast_info 우선)
     try:
@@ -338,8 +350,8 @@ def fetch_asset_prices(assets, usd_krw=None):
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # NH API의 초당 호출 제한(429) 회피 및 Render 저사양 CPU 효율을 위해 동시 워커를 3개로 최적화
-    max_workers = min(3, len(assets))
+    # 네이버 금융 고속 JSON API 최우선 활용 및 신속한 병렬 수집을 위해 동시 워커를 5개로 최적화
+    max_workers = min(5, len(assets))
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(lambda a: _fetch_single_asset_price(a, usd_krw, now_str), assets))
         
