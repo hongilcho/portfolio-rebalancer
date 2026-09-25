@@ -19,6 +19,21 @@ export default function DashboardTab({
   const [expandedAccs, setExpandedAccs] = useState({});
   const [syncingNamuh, setSyncingNamuh] = useState(false);
   const [chartView, setChartView] = useState('both'); // 'both' | 'stocks' | 'accounts'
+  const [includeDeposits, setIncludeDeposits] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('dashboard_include_deposits');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleIncludeDeposits = (val) => {
+    setIncludeDeposits(val);
+    try {
+      sessionStorage.setItem('dashboard_include_deposits', JSON.stringify(val));
+    } catch {}
+  };
 
   const safeData = dashboardData || {};
   const {
@@ -42,22 +57,44 @@ export default function DashboardTab({
     });
   }, [stock_assets, activeAssetIds]);
 
+  // 예금 포함/제외 필터가 적용된 자산 목록
+  const displayStockAssets = useMemo(() => {
+    if (includeDeposits) return visibleStockAssets;
+    return (visibleStockAssets || []).filter((item) => !item.is_deposit);
+  }, [visibleStockAssets, includeDeposits]);
+
+  // 예금 포함/제외에 따른 동적 KPI 재계산
+  const displayKpi = useMemo(() => {
+    if (includeDeposits) return kpi;
+    const totalBuy = displayStockAssets.reduce((sum, item) => sum + (Number(item.buy_amount) || 0), 0);
+    const totalEval = displayStockAssets.reduce((sum, item) => sum + (Number(item.eval_amount) || 0), 0);
+    const totalProfit = totalEval - totalBuy;
+    const totalReturn = totalBuy > 0 ? (totalProfit / totalBuy * 100) : 0;
+    return {
+      ...kpi,
+      total_stock_buy: totalBuy,
+      total_stock_eval: totalEval,
+      total_stock_profit: totalProfit,
+      total_stock_return: totalReturn
+    };
+  }, [kpi, displayStockAssets, includeDeposits]);
+
   const accSummaries = useMemo(() => {
     return dashboardData?.account_summaries || dashboardData?.accounts || [];
   }, [dashboardData?.account_summaries, dashboardData?.accounts]);
 
   // '비중 및 괴리율' 표 전용 데이터 (예금형 자산 및 비중 제외 자산은 아예 삭제/제외)
   const weightDriftAssets = useMemo(() => {
-    return (visibleStockAssets || []).filter((item) => {
+    return (displayStockAssets || []).filter((item) => {
       if (item.is_deposit) return false;
       if (item.include_in_rebalance === false) return false;
       return true;
     });
-  }, [visibleStockAssets]);
+  }, [displayStockAssets]);
 
-  // 종목별 비중 도넛 차트 데이터 가공 (예금 포함, 예수금 제외)
+  // 종목별 비중 도넛 차트 데이터 가공 (선택에 따라 예금 포함 또는 제외)
   const stockDonutData = useMemo(() => {
-    return (visibleStockAssets || [])
+    return (displayStockAssets || [])
       .filter((item) => (Number(item.eval_amount) || 0) > 0)
       .map((item) => ({
         label: item.name,
@@ -65,7 +102,7 @@ export default function DashboardTab({
         subLabel: item.is_deposit ? '예금' : '투자자산'
       }))
       .sort((a, b) => b.value - a.value);
-  }, [visibleStockAssets]);
+  }, [displayStockAssets]);
 
   // 종목 유형별 자산 분류 헬퍼 함수
   const classifyAssetType = (item) => {
@@ -116,7 +153,7 @@ export default function DashboardTab({
     return '주식';
   };
 
-  // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (예금 포함, 예수금 제외)
+  // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (선택에 따라 예금 포함 또는 제외)
   const assetTypeDonutData = useMemo(() => {
     const categories = {
       '주식': { label: '📈 주식', value: 0, color: '#3B82F6' },
@@ -125,7 +162,7 @@ export default function DashboardTab({
       '예금': { label: '🏦 예금', value: 0, color: '#10B981' },
     };
 
-    (visibleStockAssets || []).forEach((item) => {
+    (displayStockAssets || []).forEach((item) => {
       const evalAmt = Number(item.eval_amount) || 0;
       if (evalAmt <= 0) return;
 
@@ -140,14 +177,38 @@ export default function DashboardTab({
     return Object.values(categories)
       .filter((cat) => cat.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [visibleStockAssets]);
+  }, [displayStockAssets]);
+
+  // 계좌별 자산 현황 (예금 제외 모드 시 정기예금 계좌 및 각 계좌의 예금 자산 제외)
+  const displayAccSummaries = useMemo(() => {
+    if (includeDeposits) return accSummaries;
+    return (accSummaries || [])
+      .filter((acc) => acc.account_type !== '정기예금')
+      .map((acc) => {
+        const nonDepositHoldings = (acc.holdings || []).filter((h) => !h.is_deposit);
+        const stockEval = nonDepositHoldings.reduce((sum, h) => sum + (Number(h.eval_amount) || 0), 0);
+        const stockBuy = nonDepositHoldings.reduce((sum, h) => sum + (Number(h.avg_price) * Number(h.quantity) || 0), 0);
+        const profitKrw = stockEval - stockBuy;
+        const profitPct = stockBuy > 0 ? (profitKrw / stockBuy * 100) : 0;
+        const totalVal = stockEval + (Number(acc.deposit_krw) || 0) + ((Number(acc.deposit_usd) || 0) * (usd_krw || 1380));
+        return {
+          ...acc,
+          holdings: nonDepositHoldings,
+          stock_eval: stockEval,
+          stock_buy_total: stockBuy,
+          profit_krw: profitKrw,
+          profit_pct: profitPct,
+          total_val: totalVal
+        };
+      });
+  }, [accSummaries, includeDeposits, usd_krw]);
 
   if (!dashboardData) {
     return <div className="section-card">데이터를 불러오는 중입니다...</div>;
   }
 
-  const totalStockEval = Number(kpi?.total_stock_eval) || 0;
-  const isProfit = (kpi?.total_stock_profit || 0) >= 0;
+  const totalStockEval = Number(displayKpi?.total_stock_eval) || 0;
+  const isProfit = (displayKpi?.total_stock_profit || 0) >= 0;
 
   const toggleAccordion = (accId) => {
     setExpandedAccs((prev) => ({
@@ -180,29 +241,114 @@ export default function DashboardTab({
 
   return (
     <div>
+      {/* 0. Top Filter & View Toggle Bar (예금 포함/제외 토글 스위치) */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '12px',
+        marginBottom: '20px',
+        padding: '12px 18px',
+        background: 'var(--bg-card)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border-color)',
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.96rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            {includeDeposits ? '📊 포트폴리오 종합 현황' : '🎯 순수 투자자산 현황'}
+          </span>
+          <span className="badge" style={{
+            fontSize: '0.75rem',
+            padding: '3px 8px',
+            background: includeDeposits ? 'rgba(16, 185, 129, 0.12)' : 'rgba(99, 102, 241, 0.15)',
+            color: includeDeposits ? '#10B981' : 'var(--accent-primary)',
+            border: `1px solid ${includeDeposits ? 'rgba(16, 185, 129, 0.25)' : 'rgba(99, 102, 241, 0.25)'}`
+          }}>
+            {includeDeposits ? '🏦 예금 합산 표시 중' : '📈 예금 제외 (주식·채권·대체투자 전용)'}
+          </span>
+        </div>
+
+        {/* Interactive Toggle Switch */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => handleToggleIncludeDeposits(!includeDeposits)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleToggleIncludeDeposits(!includeDeposits);
+            }
+          }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '10px',
+            cursor: 'pointer',
+            userSelect: 'none',
+            background: 'var(--bg-surface)',
+            padding: '6px 14px',
+            borderRadius: 'var(--radius-full)',
+            border: '1px solid var(--border-color)',
+            transition: 'all 0.2s ease'
+          }}
+          title={includeDeposits ? '클릭하여 예금 제외 (주식/채권/대체투자만 보기)' : '클릭하여 예금 포함하여 보기'}
+        >
+          <span style={{
+            fontSize: '0.84rem',
+            fontWeight: 600,
+            color: 'var(--text-primary)'
+          }}>
+            {includeDeposits ? '🏦 예금 포함' : '🚫 예금 제외'}
+          </span>
+
+          <div style={{
+            position: 'relative',
+            width: '42px',
+            height: '22px',
+            borderRadius: '11px',
+            background: includeDeposits ? 'var(--accent-primary)' : 'var(--text-muted)',
+            padding: '2px',
+            transition: 'background 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            flexShrink: 0
+          }}>
+            <div style={{
+              width: '18px',
+              height: '18px',
+              borderRadius: '50%',
+              background: '#FFFFFF',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+              transform: includeDeposits ? 'translateX(20px)' : 'translateX(0px)',
+              transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+            }} />
+          </div>
+        </div>
+      </div>
+
       {/* 1. Top KPI Summary Cards */}
       <div className="kpi-grid">
         <div className="kpi-card">
-          <div className="kpi-title">🛒 총 투자 매입금액 (원금)</div>
-          <div className="kpi-value">{formatKRW(kpi?.total_stock_buy)}</div>
+          <div className="kpi-title">🛒 총 투자 매입금액 {includeDeposits ? '(원금)' : '(예금 제외)'}</div>
+          <div className="kpi-value">{formatKRW(displayKpi?.total_stock_buy)}</div>
         </div>
 
         <div className="kpi-card">
-          <div className="kpi-title">📈 총 투자 평가금액</div>
-          <div className="kpi-value">{formatKRW(kpi?.total_stock_eval)}</div>
+          <div className="kpi-title">📈 총 투자 평가금액 {includeDeposits ? '' : '(예금 제외)'}</div>
+          <div className="kpi-value">{formatKRW(displayKpi?.total_stock_eval)}</div>
         </div>
 
         <div className="kpi-card">
-          <div className="kpi-title">총 평가 손익</div>
+          <div className="kpi-title">총 평가 손익 {includeDeposits ? '' : '(예금 제외)'}</div>
           <div className="kpi-value" style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
-            {isProfit ? '+' : ''}{formatKRW(kpi?.total_stock_profit)}
+            {isProfit ? '+' : ''}{formatKRW(displayKpi?.total_stock_profit)}
           </div>
         </div>
 
         <div className="kpi-card">
-          <div className="kpi-title">총 수익률</div>
+          <div className="kpi-title">총 수익률 {includeDeposits ? '' : '(예금 제외)'}</div>
           <div className="kpi-value" style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
-            {formatPercent(kpi?.total_stock_return)}
+            {formatPercent(displayKpi?.total_stock_return)}
           </div>
         </div>
       </div>
@@ -282,9 +428,9 @@ export default function DashboardTab({
               border: '1px solid var(--border-color)' 
             }}>
               <DonutChart
-                title="📈 개별 종목별 자산 평가액 비중"
+                title={includeDeposits ? "📈 개별 종목별 자산 평가액 비중" : "📈 개별 종목별 자산 평가액 비중 (예금 제외)"}
                 data={stockDonutData}
-                centerLabel="투자자산 총 평가액"
+                centerLabel={includeDeposits ? "투자자산 총 평가액" : "투자자산 총 평가액 (예금 제외)"}
                 centerValue={formatKRW(totalStockEval)}
                 size={230}
               />
@@ -299,9 +445,9 @@ export default function DashboardTab({
               border: '1px solid var(--border-color)' 
             }}>
               <DonutChart
-                title="🏛️ 종목 유형별 자산 평가액 비중 (주식/채권/대체투자/예금)"
+                title={includeDeposits ? "🏛️ 종목 유형별 자산 평가액 비중 (주식/채권/대체투자/예금)" : "🏛️ 종목 유형별 자산 평가액 비중 (주식/채권/대체투자)"}
                 data={assetTypeDonutData}
-                centerLabel="투자자산 총 평가액"
+                centerLabel={includeDeposits ? "투자자산 총 평가액" : "투자자산 총 평가액 (예금 제외)"}
                 centerValue={formatKRW(totalStockEval)}
                 size={230}
               />
@@ -313,7 +459,7 @@ export default function DashboardTab({
       {/* 3. Stock Assets Section */}
       <div className="section-card">
         <div className="section-title">
-          <span>📈 투자 자산 현황 (주식/ETF/금/예금)</span>
+          <span>📈 투자 자산 현황 {includeDeposits ? '(주식/ETF/금/예금)' : '(주식/ETF/금 · 예금 제외)'}</span>
           <button 
             className="btn btn-secondary btn-sm"
             onClick={() => setIsEditModalOpen(true)}
@@ -342,7 +488,7 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody>
-                {visibleStockAssets?.map((item) => {
+                {displayStockAssets?.map((item) => {
                   const isItemProfit = item.profit_krw >= 0;
                   return (
                     <tr key={item.asset_id}>
@@ -374,15 +520,15 @@ export default function DashboardTab({
                 })}
                 {/* Total Row */}
                 <tr className="total-row">
-                  <td>총합계</td>
+                  <td>{includeDeposits ? '총합계' : '총합계 (예금 제외)'}</td>
                   <td>-</td>
                   <td style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                    {formatPercent(kpi?.total_stock_return)}
+                    {formatPercent(displayKpi?.total_stock_return)}
                   </td>
                   <td style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                    {isProfit ? '+' : ''}{formatKRW(kpi?.total_stock_profit)}
+                    {isProfit ? '+' : ''}{formatKRW(displayKpi?.total_stock_profit)}
                   </td>
-                  <td>{formatKRW(kpi?.total_stock_eval)}</td>
+                  <td>{formatKRW(displayKpi?.total_stock_eval)}</td>
                   <td>-</td>
                   <td>-</td>
                 </tr>
@@ -426,7 +572,7 @@ export default function DashboardTab({
 
         {/* 📱 MOBILE RESPONSIVE CARDS (Screen <= 768px) */}
         <div className="mobile-view">
-          {visibleStockAssets?.map((item) => {
+          {displayStockAssets?.map((item) => {
             const isItemProfit = item.profit_krw >= 0;
             const incRebal = item.include_in_rebalance !== false;
             return (
@@ -559,10 +705,29 @@ export default function DashboardTab({
           </button>
         </div>
 
-        {accSummaries.length === 0 ? (
-          <p style={{ color: 'var(--text-secondary)', padding: '12px 0' }}>등록된 계좌가 없습니다.</p>
+        {!includeDeposits && (
+          <div style={{
+            marginBottom: '14px',
+            padding: '8px 12px',
+            background: 'rgba(99, 102, 241, 0.08)',
+            border: '1px solid rgba(99, 102, 241, 0.2)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.82rem',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            <span>💡 <strong>예금 제외 모드:</strong> 정기예금 전용 계좌 및 각 계좌 내 예금 보유분이 제외된 순수 투자자산 기준입니다.</span>
+          </div>
+        )}
+
+        {displayAccSummaries.length === 0 ? (
+          <p style={{ color: 'var(--text-secondary)', padding: '12px 0' }}>
+            {includeDeposits ? '등록된 계좌가 없습니다.' : '등록된 투자 계좌가 없습니다. (예금 제외 모드)'}
+          </p>
         ) : (
-          accSummaries.map((acc) => {
+          displayAccSummaries.map((acc) => {
             const isExpanded = expandedAccs[acc.id] !== false; // default true
             const isIrp = acc.account_type === 'IRP';
             const isIrpOverRisk = isIrp && acc.risk_pct > 70.0;
