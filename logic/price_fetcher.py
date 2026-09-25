@@ -12,7 +12,7 @@ from typing import Tuple
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_exchange_rate_usd_krw():
-    """USD/KRW 실시간 환율 수집 (Namuh API 최우선, yfinance/Naver fallback)"""
+    """USD/KRW 실시간 환율 수집 (Namuh API -> 네이버 공식 환율 JSON API -> yfinance 폴백)"""
     # 1. Namuh API 시도
     try:
         rate = nh_api_client.fetch_exchange_rate("USD")
@@ -21,7 +21,23 @@ def get_exchange_rate_usd_krw():
     except Exception:
         pass
 
-    # 2. yfinance fallback
+    # 2. 네이버 금융 공식 환율 JSON API (초고속 0.05초)
+    try:
+        url_nv = "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url_nv, headers=headers, timeout=2)
+        if res.status_code == 200:
+            data = res.json()
+            info = data.get('exchangeInfo', {})
+            val = info.get('calcPrice') or info.get('closePrice')
+            if val:
+                clean_num = float(str(val).replace(',', '').strip())
+                if clean_num > 500:
+                    return round(clean_num, 2), "네이버 금융"
+    except Exception:
+        pass
+
+    # 3. yfinance fallback
     try:
         ticker = yf.Ticker("KRW=X")
         fast_rate = getattr(ticker.fast_info, 'last_price', None)
@@ -33,28 +49,11 @@ def get_exchange_rate_usd_krw():
             return round(rate, 2), "yfinance"
     except Exception:
         pass
-    
-    # 3. Naver Finance fallback
-    try:
-        url = "https://finance.naver.com/marketindex/exchangeDetail.naver?marketindexCd=FX_USDKRW"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=3)
-        match = re.search(r'today.*?<span class="blind">([0-9,.]+)\s*</span>', res.text, re.DOTALL)
-        if match:
-            clean_str = match.group(1).replace(',', '')
-            return round(float(clean_str), 2), "네이버 금융"
-            
-        match_simple = re.search(r'class="value">([0-9,.]+)<', res.text)
-        if match_simple:
-            clean_str = match_simple.group(1).replace(',', '')
-            return round(float(clean_str), 2), "네이버 금융"
-    except Exception:
-        pass
         
     return 1380.0, "기본값(기본 1380원)"
 
 def get_kr_stock_price(ticker_code):
-    """국내 주식/ETF 실시간 시세 수집 (Namuh API 최우선 -> 네이버 금융 -> yfinance 폴백)"""
+    """국내 주식/ETF 실시간 시세 수집 (Namuh API 최우선 -> 네이버 금융 JSON API -> yfinance 폴백)"""
     # 1. Namuh API 시도
     try:
         price = nh_api_client.fetch_current_price(ticker_code, market="KR")
@@ -63,25 +62,37 @@ def get_kr_stock_price(ticker_code):
     except Exception:
         pass
 
-    # 2. 네이버 금융 폴백 (XPath & Regex - 초고속 HTML 파싱)
+    # 2. 네이버 금융 공식 실시간 JSON API (초고속 0.05초 응답, HTML 스크래핑 파싱 실패 방지)
     try:
-        url = f'https://finance.naver.com/item/main.naver?code={ticker_code}'
+        url_polling = f"https://polling.finance.naver.com/api/realtime/domestic/stock/{ticker_code}"
         headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=3)
-        tree = html.fromstring(res.content)
-        blind_elem = tree.xpath('//p[contains(@class, "no_today")]//span[@class="blind"]')
-        if blind_elem:
-            val_str = blind_elem[0].text_content().replace(',', '').strip()
-            if val_str.isdigit():
-                return float(val_str), "네이버 금융"
-        
-        match = re.search(r'<dd>현재가\s+([0-9,]+)', res.text)
-        if match:
-            price = float(match.group(1).replace(',', ''))
-            return price, "네이버 금융"
+        res = requests.get(url_polling, headers=headers, timeout=2)
+        if res.status_code == 200:
+            d = res.json()
+            datas = d.get('datas', [])
+            if datas:
+                raw_val = datas[0].get('closePrice') or datas[0].get('nowPrice')
+                if raw_val:
+                    clean_p = float(str(raw_val).replace(',', '').strip())
+                    if clean_p > 0:
+                        return clean_p, "네이버 금융"
     except Exception:
-        pass 
-        
+        pass
+
+    try:
+        url_m = f"https://m.stock.naver.com/api/stock/{ticker_code}/basic"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url_m, headers=headers, timeout=2)
+        if res.status_code == 200:
+            d = res.json()
+            raw_val = d.get('closePrice') or d.get('nowPrice')
+            if raw_val:
+                clean_p = float(str(raw_val).replace(',', '').strip())
+                if clean_p > 0:
+                    return clean_p, "네이버 금융"
+    except Exception:
+        pass
+
     # 3. yfinance 폴백 (fast_info 우선)
     try:
         for suffix in [".KS", ".KQ"]:
@@ -155,7 +166,7 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
     return 201620.0, "기본값"
 
 def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
-    """미국 주식/ETF 실시간 시세 수집 (Namuh API 달러 현재가 수취 -> 실시간 환율 usd_krw 곱하여 원화 환산)"""
+    """미국 주식/ETF 실시간 시세 수집 (Namuh API -> 네이버 해외증권 API -> yfinance 폴백)"""
     rate = float(usd_krw if usd_krw and usd_krw > 0 else 1380.0)
     
     # 1. Namuh API 시도 (달러 시세 수취 후 실시간 환율 곱하여 원화 환산)
@@ -166,7 +177,24 @@ def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
     except Exception:
         pass
 
-    # 2. yfinance 폴백 (fast_info 우선)
+    # 2. 네이버 글로벌 증권 공식 API (초고속 0.05초 응답)
+    # VT, PDBC.O, SLYV.K 등 거래소 접미사 자동 시도
+    for sym_candidate in [ticker_symbol, f"{ticker_symbol}.O", f"{ticker_symbol}.K", f"{ticker_symbol}.N"]:
+        try:
+            url_nv = f"https://api.stock.naver.com/stock/{sym_candidate}/basic"
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            res = requests.get(url_nv, headers=headers, timeout=2)
+            if res.status_code == 200:
+                d = res.json()
+                raw_val = d.get('closePrice') or d.get('nowPrice')
+                if raw_val:
+                    usd_val = float(str(raw_val).replace(',', '').strip())
+                    if usd_val > 0:
+                        return round(usd_val * rate, 2), "네이버 금융"
+        except Exception:
+            pass
+
+    # 3. yfinance 폴백 (fast_info 우선)
     try:
         ticker = yf.Ticker(ticker_symbol)
         fast_price = getattr(ticker.fast_info, 'last_price', None)
