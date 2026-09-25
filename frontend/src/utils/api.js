@@ -159,4 +159,7 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify({ holdings }),
   }),
+
+  // System Diagnostics & Benchmark
+  getSystemBenchmark: () => request('/api/system/benchmark'),
 };

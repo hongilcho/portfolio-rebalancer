@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Edit3, Trash2 } from 'lucide-react';
+import { Plus, Edit3, Trash2, Activity } from 'lucide-react';
 import { api } from '../../utils/api';
 import { formatKRW, formatUSD } from '../../utils/formatters';
 import KoreanNumberInput from '../common/KoreanNumberInput';
+import SystemDiagnosticsModal from './SystemDiagnosticsModal';
 
 export default function SettingsTab({ 
   pricesData, 
@@ -11,6 +12,7 @@ export default function SettingsTab({
   onSaved,
   currentPortfolioId = 'default'
 }) {
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   // Account Form State
   const [isAddAccOpen, setIsAddAccOpen] = useState(false);
   const [editAccTarget, setEditAccTarget] = useState(null);
@@ -279,8 +281,16 @@ export default function SettingsTab({
     <div>
       {/* 1. Live Market Prices Grid */}
       <div className="section-card">
-        <div className="section-title">
+        <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>📊 실시간 시세 현황 & 자산별 상태 모니터링</span>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setIsDiagnosticsOpen(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
+          >
+            <Activity size={15} style={{ color: 'var(--accent-primary)' }} />
+            <span>서버 속도 및 통신 진단</span>
+          </button>
         </div>
 
         <div className="table-container">
@@ -1176,6 +1186,12 @@ export default function SettingsTab({
           </div>
         </div>
       )}
+
+      {/* System Diagnostics Modal */}
+      <SystemDiagnosticsModal
+        isOpen={isDiagnosticsOpen}
+        onClose={() => setIsDiagnosticsOpen(false)}
+      />
     </div>
   );
 }
