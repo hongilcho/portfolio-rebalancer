@@ -1,3 +1,9 @@
+/**
+ * 포트폴리오 관리 팝업 모달 (ManagePortfoliosModal.jsx)
+ * ====================================================
+ * 새로운 포트폴리오 생성, 기존 포트폴리오의 이름/설명 수정 및 삭제(CRUD)를 수행하는 팝업 대화상자입니다.
+ */
+
 import React, { useState } from 'react';
 import { X, Plus, Edit3, Trash2, Briefcase, AlertCircle } from 'lucide-react';
 import { api } from '../../utils/api';

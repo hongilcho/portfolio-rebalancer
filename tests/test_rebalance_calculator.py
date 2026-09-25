@@ -1,7 +1,15 @@
+"""
+리밸런싱 계산 엔진 단위 테스트 (test_rebalance_calculator.py)
+=============================================================
+빈 자산 리밸런싱 예외 처리, 기본 자산 배분 비중 달성을 위한 매매 계획 산출,
+IRP 계좌의 위험자산 70% 한도 규제 준수 여부를 검증합니다.
+"""
+
 import pytest
 from logic.rebalance_calculator import calculate_rebalancing_plan
 
 def test_calculate_rebalancing_plan_empty():
+    """빈 자산/계좌 목록 입력 시 리밸런싱 실패 및 안전한 에러 메시지 반환 검증"""
     plan, transfers, sim_assets, success, msg = calculate_rebalancing_plan(
         assets=[],
         portfolio_assets={},

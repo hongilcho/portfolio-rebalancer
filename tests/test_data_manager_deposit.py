@@ -1,9 +1,16 @@
+"""
+매매 체결 시 예수금 증감 단위 테스트 (test_data_manager_deposit.py)
+=====================================================================
+매수(BUY) 시 예수금 차감, 매도(SELL) 시 예수금 가산 동작의 정합성을 검증합니다.
+"""
+
 import pytest
 from unittest.mock import patch, MagicMock
 from data.data_manager import execute_trade
 
 @patch('data.data_manager.get_connection')
 def test_execute_trade_deposit_update(mock_get_connection):
+    """매수 시 예수금 차감 및 매도 시 예수금 입금 계산 정합성 검증"""
     # Mocking DB connection and cursor
     mock_conn = MagicMock()
     mock_cursor = MagicMock()

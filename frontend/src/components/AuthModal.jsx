@@ -1,3 +1,11 @@
+/**
+ * 애플리케이션 진입 보안 인증 모달 (AuthModal.jsx)
+ * ==================================================
+ * 백엔드 비밀번호를 검증하여 일치 시 세션 인증(localStorage)을 저장하고 메인 화면으로 진입시킵니다.
+ * 
+ * @param {Function} props.onAuthenticated - 인증 성공 시 호출되는 콜백
+ */
+
 import React, { useState } from 'react';
 import { Lock, ArrowRight } from 'lucide-react';
 import { api } from '../utils/api';

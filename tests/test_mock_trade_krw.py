@@ -1,8 +1,15 @@
+"""
+모의 매매 및 원화 결제 단위 테스트 (test_mock_trade_krw.py)
+===========================================================
+운영 DB에 영향을 주지 않는 독립된 인메모리 SQLite 환경에서
+미국 주식 원화 결제, 매수/매도 후 예수금 및 평단가 변동을 시뮬레이션합니다.
+"""
+
 import sqlite3
 import pytest
 
 def create_mock_db():
-    """운영 DB를 일절 건드리지 않는 순수 인메모리 Mock DB 생성"""
+    """운영 DB를 일절 건드리지 않는 순수 인메모리 Mock DB 생성 및 스키마 초기화"""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()

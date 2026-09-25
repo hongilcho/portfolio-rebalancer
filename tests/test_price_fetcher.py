@@ -1,7 +1,15 @@
+"""
+시장 시세 수집기 및 다중 폴백 단위 테스트 (test_price_fetcher.py)
+================================================================
+네이버 금융 공식 JSON API(1차) ➔ NH투자증권 Open API(2차) ➔ yfinance(3차)
+다중 폴백 체인이 정상적으로 동작하는지 모의(Mock) 환경에서 검증합니다.
+"""
+
 import pytest
 from logic.price_fetcher import get_kr_stock_price, get_us_stock_price, get_krx_gold_price, get_exchange_rate_usd_krw
 
 def test_get_us_stock_price_naver(mocker):
+    """미국 주식 시세 네이버 금융 최우선 수집 및 원화 환산 검증"""
     # Mock Naver API to succeed (1st priority)
     mock_res = mocker.MagicMock()
     mock_res.status_code = 200

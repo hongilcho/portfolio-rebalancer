@@ -1,3 +1,10 @@
+"""
+멀티 포트폴리오 격리 및 종합 요약 단위 테스트 (test_multi_portfolio.py)
+========================================================================
+포트폴리오 생성/수정/삭제 CRUD, 기본 포트폴리오 삭제 방지 보호,
+포트폴리오 간 계좌/자산 데이터 격리 및 전체 자산 종합 요약을 검증합니다.
+"""
+
 import pytest
 from data.data_manager import (
     init_db, get_portfolios, get_portfolio, create_portfolio, update_portfolio, delete_portfolio,
@@ -10,6 +17,7 @@ def setup_db():
     init_db()
 
 def test_portfolio_crud():
+    """포트폴리오 CRUD 및 기본 포트폴리오 삭제 방지 보호 검증"""
     # 1. Check default portfolio exists
     portfolios = get_portfolios()
     assert len(portfolios) >= 1

@@ -1,3 +1,13 @@
+/**
+ * 목표 비중 대비 괴리율(Drift) 양방향 바 컴포넌트 (DriftBar.jsx)
+ * ==============================================================
+ * 중앙의 0% 기준선을 중심으로 목표 비중 초과(+)는 우측 초록색/빨간색 바로,
+ * 미달(-)은 좌측 파란색 바로 시각화하여 한눈에 리밸런싱 필요 여부를 판단하게 돕습니다.
+ * 
+ * @param {number} props.drift - 괴리율 (%) (현재 비중 - 목표 비중)
+ * @param {number} props.scaleMax - 바의 최대 표시 범위 (%)
+ */
+
 import React from 'react';
 
 export default function DriftBar({ drift, scaleMax = 1.0 }) {

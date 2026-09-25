@@ -1,3 +1,15 @@
+/**
+ * 고성능 순수 SVG 도넛 차트 컴포넌트 (DonutChart.jsx)
+ * ====================================================
+ * 외부 차트 라이브러리(Chart.js, Recharts 등) 의존성 없이
+ * 순수 SVG path 연산과 호(Arc) 기하 계산으로 렌더링되는 가볍고 반응형인 도넛 차트입니다.
+ * 
+ * 주요 기능:
+ * - 호버/터치 시 툴팁 및 슬라이스 확대(Highlight) 인터랙션
+ * - 중앙 총 평가금액 및 라벨 표시
+ * - 범례(Legend) 및 퍼센트 비중 자동 계산
+ */
+
 import React, { useState, useMemo } from 'react';
 import { formatKRW } from '../../utils/formatters';
 

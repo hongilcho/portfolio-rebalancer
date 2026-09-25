@@ -1,3 +1,9 @@
+/**
+ * 가상자산 보유량 및 평단가 수정 모달 (EditCryptoModal.jsx)
+ * ========================================================
+ * 소유자별(홍일, 윤아) 비트코인 및 이더리움의 보유 수량, 매입 평단가 및 비고 메모를 편집합니다.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { X, Save, Coins } from 'lucide-react';
 import { formatKRW } from '../../utils/formatters';

@@ -1,3 +1,10 @@
+"""
+매매 기록 및 거래 실행 API 라우터 (Trades Router)
+=================================================
+리밸런싱 매매 체결 결과의 일괄 기록(Batch Execution),
+과거 거래 내역의 다차원 필터링 조회 및 거래 취소(삭제/롤백)를 지원합니다.
+"""
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
@@ -6,6 +13,7 @@ from data.data_manager import execute_trade, get_trade_history, delete_trade
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
 class TradeBatchItem(BaseModel):
+    """일괄 체결 개별 거래 아이템 스키마"""
     account_id: str
     asset_id: str
     trade_type: str # 'BUY' or 'SELL'
@@ -13,10 +21,12 @@ class TradeBatchItem(BaseModel):
     price: float
 
 class BatchTradeRequest(BaseModel):
+    """일괄 매매 기록 실행 요청 스키마"""
     trade_date: str # YYYY-MM-DD
     trades: List[TradeBatchItem]
 
 class DeleteTradesRequest(BaseModel):
+    """매매 기록 일괄 삭제 요청 스키마"""
     trade_ids: List[str]
 
 @router.get("/")

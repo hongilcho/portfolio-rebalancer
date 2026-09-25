@@ -1,7 +1,14 @@
+"""
+pytest 공통 테스트 픽스처(Fixtures) 모듈
+========================================
+리밸런싱 계산 및 API 테스트를 위한 모의(Mock) 계좌, 자산, 보유종목 픽스처를 제공합니다.
+"""
+
 import pytest
 
 @pytest.fixture
 def mock_accounts():
+    """모의 계좌 목록 (일반계좌, 연금계좌) 픽스처"""
     return [
         {
             "id": "acc_1",

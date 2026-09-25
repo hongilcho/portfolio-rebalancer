@@ -1,9 +1,17 @@
+"""
+정기예금 세후 이자 및 리밸런싱 확정손익 단위 테스트 (test_deposit_and_realized_profit.py)
+======================================================================================
+정기예금의 일할 이자소득세 계산, 만기 후 이자 산정 중단,
+리밸런싱 매도 계획에 따른 예상 확정 손익 집계 및 예금 매도 잠금 기능을 검증합니다.
+"""
+
 import pytest
 from datetime import datetime, timedelta
 from logic.price_fetcher import calculate_deposit_price
 from logic.rebalance_calculator import calculate_rebalancing_plan, compute_realized_summary
 
 def test_calculate_deposit_price_basic():
+    """정기예금 일할 세후 누적이자(15.4% 소득세 원천징수) 산정 정합성 검증"""
     # 1,000만원, 연 4%, 180일 경과, 15.4% 과세
     today = datetime.now().date()
     start = today - timedelta(days=180)

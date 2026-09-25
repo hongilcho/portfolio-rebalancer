@@ -1,3 +1,9 @@
+/**
+ * 계좌별 예수금 및 보유 종목 수량/평단가 직접 편집 모달 (EditHoldingsModal.jsx)
+ * ==============================================================================
+ * 대시보드에서 계좌를 선택하여 원화/외화 예수금과 각 종목의 보유 수량 및 매입 평단가를 수동 입력/수정합니다.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { formatKRW } from '../../utils/formatters';

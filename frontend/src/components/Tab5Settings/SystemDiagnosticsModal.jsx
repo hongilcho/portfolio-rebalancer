@@ -1,3 +1,10 @@
+/**
+ * 시스템 성능 및 통신 지연시간 벤치마크 모달 (SystemDiagnosticsModal.jsx)
+ * =========================================================================
+ * Supabase DB, 네이버 환율 API, 국내/미국 주식 시세 API의 실시간 핑(ms)과
+ * 서버 인메모리 캐시 상태, OS/Python 환경을 진단하고 클립보드 복사 리포트를 생성합니다.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { Activity, RefreshCw, Copy, Check, X, Database, DollarSign, TrendingUp, Cpu } from 'lucide-react';
 import { api } from '../../utils/api';

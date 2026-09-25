@@ -1,3 +1,10 @@
+"""
+가상자산(암호화폐) 관리 API 라우터 (Crypto Router)
+==================================================
+비트코인(BTC), 이더리움(ETH) 등 소유자(홍일, 윤아)별 가상자산 보유량 관리,
+실시간 업비트 시세 반영 평가금액 및 손익 집계 API를 제공합니다.
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -8,6 +15,7 @@ from backend.routers.dashboard import get_dashboard_summary
 router = APIRouter(prefix="/api/crypto", tags=["crypto"])
 
 class CryptoHoldingItem(BaseModel):
+    """가상자산 보유 종목 스키마"""
     owner: Optional[str] = "홍일"
     symbol: str
     quantity: float
@@ -15,6 +23,7 @@ class CryptoHoldingItem(BaseModel):
     notes: Optional[str] = ""
 
 class CryptoHoldingsUpdateRequest(BaseModel):
+    """가상자산 보유량 일괄 수정 요청 스키마"""
     holdings: List[CryptoHoldingItem]
 
 @router.get("/summary")

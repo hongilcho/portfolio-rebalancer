@@ -1,9 +1,17 @@
+"""
+현금 이체 지시서 반영 단위 테스트 (test_apply_transfer_plan.py)
+================================================================
+리밸런싱 결과 도출된 이체 지시서(DEPOSIT, WITHDRAW)가 DB 계좌 예수금에
+원자적(Atomic)으로 정확히 가감되는지 모의 DB 환경에서 검증합니다.
+"""
+
 import pytest
 from unittest.mock import patch, MagicMock
 from data.data_manager import apply_transfer_plan
 
 @patch('data.data_manager.get_connection')
 def test_apply_transfer_plan(mock_get_connection):
+    """이체 지시서의 입금/출금 금액이 각 계좌 예수금에 정확히 반영되는지 검증"""
     # Mocking DB connection and cursor
     mock_conn = MagicMock()
     mock_cursor = MagicMock()

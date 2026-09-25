@@ -1,3 +1,21 @@
+/**
+ * 공통 네비게이션 헤더 컴포넌트 (Header.jsx)
+ * ============================================
+ * 상단 바에서 실시간 환율 조회/수정, 새로고침, 테마(Dark/Light/Sepia) 전환,
+ * 포트폴리오 드롭다운 선택, 포트폴리오 관리 모달 및 CSV 백업 다운로드를 제공합니다.
+ * 
+ * @param {number} props.usdKrw - 현재 적용 중인 USD/KRW 환율
+ * @param {string} props.rateSource - 환율 수집 출처
+ * @param {Function} props.onRefresh - 데이터 새로고침 트리거
+ * @param {boolean} props.refreshing - 새로고침 진행 중 여부
+ * @param {string} props.currentTheme - 현재 테마 문자열
+ * @param {Function} props.onThemeChange - 테마 변경 콜백
+ * @param {Array} props.portfolios - 포트폴리오 목록
+ * @param {string} props.currentPortfolioId - 현재 선택된 포트폴리오 ID
+ * @param {Function} props.onSelectPortfolio - 포트폴리오 선택 콜백
+ * @param {Function} props.onOpenManagePortfolios - 포트폴리오 관리 모달 열기 콜백
+ */
+
 import React, { useState } from 'react';
 import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee, Briefcase, Settings, Coins } from 'lucide-react';
 import { api } from '../utils/api';

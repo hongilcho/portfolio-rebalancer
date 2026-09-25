@@ -1,3 +1,10 @@
+"""
+투자 자산 관리 API 라우터 (Assets Router)
+========================================
+포트폴리오 내 투자 자산(주식, ETF, 금현물, 정기예금)의 등록, 수정, 삭제,
+활성화 토글 및 목표 비중(Target Weight) 일괄 업데이트 기능을 제공합니다.
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
@@ -7,6 +14,7 @@ from data.data_manager import get_all_assets, add_asset, update_asset, delete_as
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 
 class CreateAssetRequest(BaseModel):
+    """새 자산 등록 요청 스키마 (일반 주식/ETF 및 정기예금 필드 포함)"""
     name: str
     ticker: Optional[str] = ""
     market: str = "KR"

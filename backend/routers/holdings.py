@@ -1,3 +1,10 @@
+"""
+계좌별 보유 자산 및 잔고 관리 API 라우터 (Holdings Router)
+=========================================================
+각 계좌에 속한 개별 종목의 보유 수량, 평균 매입단가(KRW),
+원화/외화 예수금의 조회 및 저장 기능을 제공합니다.
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
@@ -9,11 +16,13 @@ from data.data_manager import (
 router = APIRouter(prefix="/api/holdings", tags=["holdings"])
 
 class HoldingInputItem(BaseModel):
+    """보유 종목 입력 스키마"""
     asset_id: str
     quantity: float
     avg_price: float
 
 class SaveAccountHoldingsRequest(BaseModel):
+    """계좌별 예수금 및 보유 종목 저장 요청 스키마"""
     account_id: str
     deposit_krw: float
     deposit_usd: float

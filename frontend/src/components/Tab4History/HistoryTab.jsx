@@ -1,3 +1,10 @@
+/**
+ * 탭 4. 매매 기록 관리 컴포넌트 (HistoryTab.jsx)
+ * ===============================================
+ * 수동 매매 내역(매수/매도)의 일괄 입력 및 체결 기록을 수행하고,
+ * 과거 거래 내역의 다차원 필터링 조회 및 일괄 삭제(평단가 자동 롤백)를 지원합니다.
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { api } from '../../utils/api';

@@ -1,3 +1,10 @@
+"""
+시장 시세, 환율 및 데이터 내보내기 API 라우터 (Market Router)
+============================================================
+실시간 USD/KRW 환율 조회 및 수동 덮어쓰기(Override), 자산별 실시간 시세 조회,
+전체 데이터베이스 테이블(계좌, 자산, 보유종목, 거래내역)의 CSV ZIP 압축 백업 기능을 제공합니다.
+"""
+
 from fastapi import APIRouter, Response
 from typing import Optional
 from pydantic import BaseModel
@@ -11,6 +18,7 @@ from data.data_manager import get_all_accounts, get_all_assets, get_all_holdings
 router = APIRouter(prefix="/api/market", tags=["market"])
 
 class RateOverrideRequest(BaseModel):
+    """환율 수동 설정 요청 모델"""
     usd_krw: float
 
 @router.get("/exchange-rate")

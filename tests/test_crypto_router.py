@@ -1,9 +1,17 @@
+"""
+가상자산 라우터 및 시세 수집 단위 테스트 (test_crypto_router.py)
+===============================================================
+비트코인(BTC), 이더리움(ETH)의 실시간 원화 시세 수집 및
+복수 소유자(홍일, 윤아)의 보유량/평가액 집계 로직을 검증합니다.
+"""
+
 import pytest
 from unittest.mock import patch
 from logic.crypto_price_fetcher import get_crypto_prices
 from backend.routers.crypto import get_crypto_summary, update_crypto_holdings, CryptoHoldingsUpdateRequest, CryptoHoldingItem
 
 def test_crypto_prices_fetch():
+    """업비트/빗썸/yfinance를 통한 가상자산 시세 조회 결과 규격 검증"""
     prices = get_crypto_prices()
     assert "BTC" in prices
     assert "ETH" in prices
@@ -13,6 +21,7 @@ def test_crypto_prices_fetch():
     assert prices["ETH"]["symbol"] == "ETH"
 
 def test_crypto_summary_multi_owner_calculation():
+    """소유자별 보유량 및 통합 비트코인/이더리움 합산 계산 검증"""
     # Mock holdings without touching real Supabase DB
     mock_holdings = [
         {"id": "crypto_hongil_btc", "owner": "홍일", "symbol": "BTC", "name": "비트코인", "quantity": 0.2, "avg_price": 90000000.0, "notes": "홍일 BTC"},

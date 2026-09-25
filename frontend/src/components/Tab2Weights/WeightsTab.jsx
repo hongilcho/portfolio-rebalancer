@@ -1,3 +1,10 @@
+/**
+ * 탭 2. 목표 비중 설정 컴포넌트 (WeightsTab.jsx)
+ * ===============================================
+ * 포트폴리오 내 각 자산의 목표 비중(%)을 설정하고, 허용 거래 계좌를 매핑합니다.
+ * 전체 리밸런싱 대상 자산의 비중 합계(100%) 유효성을 실시간으로 검증합니다.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { Save } from 'lucide-react';
 import { api } from '../../utils/api';

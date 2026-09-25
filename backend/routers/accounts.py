@@ -1,3 +1,10 @@
+"""
+계좌 관리 API 라우터 (Accounts Router)
+=====================================
+증권/은행 계좌 마스터의 CRUD, 우선순위(Priority) 일괄 변경,
+납입한도 소진(Limit Exhausted) 토글 기능을 제공합니다.
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict
@@ -9,9 +16,11 @@ from data.data_manager import (
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 class ToggleLimitExhaustedRequest(BaseModel):
+    """납입한도 소진 여부 변경 요청 스키마"""
     is_exhausted: bool
 
 class CreateAccountRequest(BaseModel):
+    """새 계좌 등록 요청 스키마"""
     account_no: str
     account_alias: str
     account_type: str

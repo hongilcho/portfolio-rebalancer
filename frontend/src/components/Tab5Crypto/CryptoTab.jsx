@@ -1,3 +1,10 @@
+/**
+ * 탭 5-1. 가상자산(암호화폐) 대시보드 컴포넌트 (CryptoTab.jsx)
+ * ==============================================================
+ * 업비트 실시간 시세를 기반으로 소유자(홍일, 윤아)별 비트코인(BTC), 이더리움(ETH)의
+ * 보유 수량, 평가금액, 수익률 및 소유자간 지분율/코인별 배분 도넛 차트를 제공합니다.
+ */
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Coins, RefreshCw, Edit3, 

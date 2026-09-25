@@ -1,3 +1,10 @@
+/**
+ * 탭 5. 계좌 및 자산 마스터 관리 컴포넌트 (SettingsTab.jsx)
+ * =========================================================
+ * 포트폴리오에 속한 증권 계좌 및 투자 자산(주식/ETF/금/예금)의 등록/수정/삭제와
+ * 시스템 통신 진단 벤치마크 모달(SystemDiagnosticsModal) 연동을 지원합니다.
+ */
+
 import React, { useState } from 'react';
 import { Plus, Edit3, Trash2, Activity } from 'lucide-react';
 import { api } from '../../utils/api';
