@@ -1,3 +1,11 @@
+"""
+백엔드 환경설정 및 비밀값(Secrets) 로더 모듈
+============================================
+.env 파일, 시스템 환경변수, 또는 .streamlit/secrets.toml 파일로부터
+데이터베이스 연결 URL(SUPABASE_URL), 관리자 비밀번호(APP_PASSWORD),
+NH투자증권 Open API 키(NAMUH_APP_KEY, NAMUH_APP_SECRET)를 안전하게 로드합니다.
+"""
+
 import os
 import toml
 

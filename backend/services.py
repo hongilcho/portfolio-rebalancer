@@ -1,3 +1,19 @@
+"""
+시장 상태 및 시세 캐싱 서비스 모듈 (Market State Service)
+=========================================================
+실시간 환율(USD/KRW) 및 자산별 실시간 시세 데이터를 관리하는 싱글톤(Singleton) 서비스입니다.
+
+주요 특징:
+1. 싱글톤 패턴(Singleton): 애플리케이션 전역에서 단일 인스턴스로 시세 상태 공유.
+2. 2단계 캐시 및 0초 콜드스타트(Zero Cold-Start):
+   - PostgreSQL `market_prices_cache` 테이블을 통해 서버 재부팅 직후에도 직전 유효 시세를 0.05초 만에 복원.
+3. Stale-While-Revalidate (SWR):
+   - 인메모리 캐시 TTL(5분) 경과 시, 사용자는 대기 없이 직전 캐시를 즉시 수신하고
+     백그라운드 데몬 스레드에서 외부 API 호출을 수행하여 캐시를 갱신.
+4. 동시성 락(`_fetch_lock`):
+   - 여러 요청이 동시에 인입되어도 외부 API 중복 호출을 방지.
+"""
+
 import os
 import sys
 import time
@@ -12,6 +28,9 @@ from data.data_manager import get_all_assets, get_market_cache, save_market_cach
 from logic.price_fetcher import get_exchange_rate_usd_krw, fetch_asset_prices
 
 class MarketStateService:
+    """
+    시장 시세 및 환율 상태를 인메모리와 DB에 2단계로 캐싱하고 동기화하는 서비스 클래스
+    """
     _instance = None
     _lock = threading.Lock()
 
@@ -30,6 +49,7 @@ class MarketStateService:
 
     @classmethod
     def get_instance(cls):
+        """싱글톤 인스턴스를 반환합니다. (스레드 안전)"""
         with cls._lock:
             if cls._instance is None:
                 cls._instance = cls()

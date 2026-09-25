@@ -1,3 +1,19 @@
+/**
+ * 전체 자산 종합 요약 컴포넌트 (AllPortfoliosOverview.jsx)
+ * ========================================================
+ * 등록된 모든 금융 포트폴리오와 가상자산(암호화폐)을 통합하여
+ * 총 순자산(Grand Total), 포트폴리오별 비중, 통합 종목별 보유 현황을 보여줍니다.
+ * 
+ * 주요 기능:
+ * - 전체 종합 순자산, 총 투자원금, 총 평가손익 및 수익률 KPI
+ * - 가상자산(비트코인/이더리움) 포함/제외 동적 토글
+ * - 포트폴리오별 배분 및 대분류 자산군별 듀얼 도넛 차트
+ * - 복수 포트폴리오 통합 종목 현황(가중평균 매입단가 및 포트폴리오 태그 표시)
+ * - 개별 포트폴리오 바로가기 네비게이션
+ * 
+ * @param {Function} props.onSelectPortfolio - 특정 포트폴리오 선택 시 해당 화면으로 전환하는 콜백
+ */
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Sparkles, RefreshCw, TrendingUp, 

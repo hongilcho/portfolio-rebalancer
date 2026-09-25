@@ -1,3 +1,15 @@
+"""
+다중 포트폴리오 관리 및 종합 요약 API 라우터 (Portfolios Router)
+================================================================
+복수의 금융 포트폴리오 생성/수정/삭제 및 전체 자산 종합 요약(Overview Summary)을 제공합니다.
+
+주요 특징:
+1. 포트폴리오 CRUD: 멀티 포트폴리오의 독립된 자산/계좌 배분 환경 제공
+2. 전체 자산 종합 요약(/api/portfolios/overview/summary):
+   - 모든 개별 포트폴리오(금융자산) + 가상자산(BTC/ETH)을 포괄하는 전체 순자산(NAV) 산출
+   - 여러 포트폴리오에서 동일 종목을 중복 보유할 경우, 가중평균 평단가(Weighted Average Price) 자동 계산
+"""
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -14,10 +26,12 @@ from logic.crypto_price_fetcher import get_crypto_prices
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
 class CreatePortfolioRequest(BaseModel):
+    """새 포트폴리오 생성 요청 모델"""
     name: str
     description: Optional[str] = ""
 
 class UpdatePortfolioRequest(BaseModel):
+    """포트폴리오 수정 요청 모델"""
     name: str
     description: Optional[str] = ""
 

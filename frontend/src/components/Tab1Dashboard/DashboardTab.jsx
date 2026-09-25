@@ -1,3 +1,22 @@
+/**
+ * 탭 1. 포트폴리오 현황 컴포넌트 (DashboardTab.jsx)
+ * ===================================================
+ * 현재 선택된 포트폴리오의 총 순자산(NAV), 평가손익, 자산군별 비중,
+ * 계좌별 예수금/보유현황, 목표 비중 대비 괴리율(DriftBar)을 시각화합니다.
+ * 
+ * 주요 기능:
+ * - 상단 KPI 카드: 총 평가금액, 총 투자원금, 평가손익 및 수익률
+ * - 예금 포함/비포함 토글: 정기예금을 제외한 순수 투자자산 기준 비중/차트 전환
+ * - 자산 배분 도넛 차트: 종목별 및 계좌별 자산 비중 비교
+ * - 목표 비중 대비 괴리율 시각화(DriftBar)
+ * - 계좌별 상세 잔고 아코디언 및 보유 수량 편집 모달 연동
+ * 
+ * @param {object} props.dashboardData - 백엔드에서 수신한 대시보드 종합 데이터
+ * @param {Array} props.assets - 등록된 자산 마스터 목록
+ * @param {Array} props.accounts - 등록된 계좌 마스터 목록
+ * @param {Function} props.onRefresh - 데이터 새로고침 트리거 콜백
+ */
+
 import React, { useState, useMemo } from 'react';
 import { 
   ShieldAlert, 

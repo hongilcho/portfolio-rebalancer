@@ -1,5 +1,23 @@
+/**
+ * 포트폴리오 리밸런서 프론트엔드 REST API 클라이언트 모듈
+ * ========================================================
+ * 백엔드 FastAPI 서버와 HTTP 통신을 수행하는 중앙 집중식 API 인터페이스입니다.
+ * 
+ * 주요 기능:
+ * - getPortfolioBundle: 대시보드 렌더링에 필요한 모든 데이터를 1회의 요청으로 일괄 수신
+ * - calculateRebalance: 리밸런싱 시뮬레이션 계산 요청
+ * - applyTransfers: 리밸런싱 이체 지시서 실제 계좌 반영
+ * - getPortfoliosOverview: 전체 포트폴리오 및 가상자산 통합 요약 수신
+ */
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+/**
+ * 공통 fetch 래퍼 함수 (JSON 직렬화 및 에러 핸들링)
+ * @param {string} endpoint - API 경로
+ * @param {RequestInit} [options] - fetch 옵션
+ * @returns {Promise<any>} JSON 파싱된 응답 데이터
+ */
 async function request(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
   const defaultHeaders = {

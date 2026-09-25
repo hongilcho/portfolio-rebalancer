@@ -1,3 +1,20 @@
+"""
+데이터베이스 영속성 및 트랜잭션 관리 모듈 (Data Manager)
+=========================================================
+Supabase PostgreSQL 데이터베이스와 연동하여 포트폴리오, 계좌, 자산, 보유종목,
+거래내역, 가상자산 포트폴리오 및 시세 캐시의 CRUD 및 트랜잭션을 관리합니다.
+
+핵심 아키텍처 및 안전성 원칙:
+1. 커넥션 풀링(ThreadedConnectionPool):
+   - 최소 1개 ~ 최대 20개의 스레드 안전 커넥션을 풀링하여 동시성 처리 성능 극대화.
+2. PoolConnectionWrapper 및 Context Manager:
+   - `with get_connection() as conn:` 구문을 지원하여 예외 발생 시 자동 롤백 및 풀 반납 보장.
+3. PostgreSQL Advisory Lock(424242):
+   - 분산/다중 워커 기동 시 스키마 초기화(`init_db`) 간 DDL 경합 및 Deadlock 방지.
+4. 멀티 포트폴리오 격리:
+   - 모든 계좌, 자산, 보유종목 쿼리에 `portfolio_id` 필터를 적용하여 완벽한 데이터 격리 보장.
+"""
+
 import os
 import json
 import uuid
@@ -35,6 +52,9 @@ _connection_pool = None
 _pool_lock = threading.Lock()
 
 def get_connection_pool():
+    """
+    PostgreSQL ThreadedConnectionPool 단일 인스턴스를 반환합니다. (스레드 안전)
+    """
     global _connection_pool
     if _connection_pool is None:
         with _pool_lock:
@@ -46,6 +66,12 @@ def get_connection_pool():
     return _connection_pool
 
 class PoolConnectionWrapper:
+    """
+    psycopg2 커넥션을 감싸는 래퍼 클래스
+    
+    Python Context Manager 프로토콜(__enter__, __exit__)을 지원하며,
+    close() 호출 시 물리적 연결을 끊지 않고 풀(pool)로 안전하게 반납합니다.
+    """
     def __init__(self, pool_obj, conn):
         self.pool = pool_obj
         self.conn = conn
@@ -80,22 +106,35 @@ class PoolConnectionWrapper:
             except Exception:
                 pass
 
-def get_connection():
+def get_connection() -> PoolConnectionWrapper:
+    """
+    커넥션 풀로부터 활성 PostgreSQL 연결을 대여하여 PoolConnectionWrapper로 반환합니다.
+    with 구문과 함께 사용하는 것을 권장합니다.
+    """
     pool_obj = get_connection_pool()
     conn = pool_obj.getconn()
     return PoolConnectionWrapper(pool_obj, conn)
 
-def sanitize_account_names(acc_list):
+def sanitize_account_names(acc_list: list) -> list:
+    """계좌 이름 목록에서 공백을 제거하고 중복을 배제하여 정렬된 리스트로 반환합니다."""
     clean_set = set()
     for acc in acc_list:
         if acc is not None and str(acc).strip():
             clean_set.add(str(acc).strip())
     return sorted(list(clean_set))
 
-def generate_id():
+def generate_id() -> str:
+    """UUID4 32자리 16진수 고유 식별자 문자열을 생성합니다."""
     return uuid.uuid4().hex
 
 def init_db():
+    """
+    PostgreSQL 데이터베이스 테이블 스키마 및 인덱스를 초기화하고 필요한 마이그레이션을 적용합니다.
+    
+    Render 등의 분산/멀티 프로세스 배포 환경에서 여러 Uvicorn 워커가 동시에
+    DDL을 실행하여 발생할 수 있는 교착 상태(Deadlock)를 방지하기 위해
+    PostgreSQL Advisory Lock(424242)을 사용하여 단 1개의 워커만 스키마 초기화를 수행하도록 보장합니다.
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -1065,9 +1104,17 @@ def delete_trade(trade_id):
     finally:
         conn.close()
 
-def apply_transfer_plan(transfer_plan):
+def apply_transfer_plan(transfer_plan: list) -> Tuple[bool, str]:
     """
-    이체 지시서(transfer_plan)에 명시된 금액을 각 계좌의 예수금에 즉시 반영합니다.
+    리밸런싱 이체 지시서(transfer_plan)에 명시된 금액을 각 계좌의 예수금(deposit_krw)에 즉시 반영합니다.
+    
+    원자적(Atomic) 트랜잭션으로 처리되어, 도중 하나라도 오류가 발생할 경우 자동 롤백됩니다.
+
+    Args:
+        transfer_plan (list): 계좌 ID(account_id), 이체유형(type: DEPOSIT/WITHDRAW), 금액(amount) 목록
+
+    Returns:
+        Tuple[bool, str]: (성공 여부, 결과 또는 오류 메시지)
     """
     if not transfer_plan:
         return True, "반영할 이체 내역이 없습니다."

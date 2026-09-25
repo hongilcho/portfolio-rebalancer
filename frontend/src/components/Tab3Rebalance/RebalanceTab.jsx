@@ -1,3 +1,22 @@
+/**
+ * 탭 3. 리밸런싱 전략 컴포넌트 (RebalanceTab.jsx)
+ * ===============================================
+ * 사용자가 시나리오(신규 자금 투입, 허용 괴리율 기준, 정기 리밸런싱)를 선택하여
+ * 리밸런싱 알고리즘을 시뮬레이션하고, 도출된 매매 계획 및 현금 이체 지시서를 확인/실행합니다.
+ * 
+ * 주요 기능:
+ * - 3가지 시나리오 폼 제어:
+ *   1. NEW_CASH: 신규 자금(원화) 입력 후 매수 중심 리밸런싱
+ *   2. DRIFT: 허용 괴리율(%) 임계치 설정 기반 자동 판정
+ *   3. PERIODIC: 정기 비중 재조정
+ * - 매매 실행 계획(Trade Plan) 테이블 및 예상 확정 손익 집계
+ * - 계좌 간 자금 이동 지시서(Transfer Plan) 및 예수금 원클릭 즉시 반영
+ * - 리밸런싱 후 예상 자산 비중 드리프트 바 시뮬레이션
+ * 
+ * @param {Function} props.onRefresh - 데이터 새로고침 콜백
+ * @param {string} props.currentPortfolioId - 현재 작업 중인 포트폴리오 ID
+ */
+
 import React, { useState } from 'react';
 import { Play, ArrowRightLeft, DollarSign, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '../../utils/api';

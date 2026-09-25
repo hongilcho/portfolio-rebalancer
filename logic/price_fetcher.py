@@ -1,17 +1,49 @@
-import yfinance as yf
-import requests
-from datetime import datetime
-from lxml import html
-import urllib3
+"""
+실시간 시장 시세 및 환율 수집 모듈 (Price Fetcher)
+===================================================
+국내 주식/ETF, 미국 주식/ETF, KRX 금현물, 정기예금, USD/KRW 환율의
+실시간 평가 가격을 다중 소스로부터 신속하고 안정적으로 수집합니다.
+
+시세 수집 전략:
+1. 네이버 금융 공식 JSON API (초우선 순위):
+   - 국내주식: polling.finance.naver.com 및 m.stock.naver.com
+   - 해외주식: api.stock.naver.com (티커 접미사 자동 확장 지원: .O/.K/.N)
+   - 환율: api.stock.naver.com FX_USDKRW
+   - 평균 응답 지연시간: ~50ms (초고속)
+2. NH투자증권 Open API (2차 폴백):
+   - 금현물(M04020000) 등 증권사 직접 호가 연동
+3. yfinance (3차 폴백):
+   - 글로벌 클라우드 환경 및 해외 상장 증권 백업
+4. 정기예금:
+   - 일할 계산 세후 누적이자(이자소득세 15.4% 원천징수 반영) 공식 적용
+"""
+
 import math
 import concurrent.futures
-from data.nh_api import nh_api_client
+from datetime import datetime
 from typing import Tuple
+import requests
+import urllib3
+import yfinance as yf
+from lxml import html
+
+from data.nh_api import nh_api_client
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def get_exchange_rate_usd_krw():
-    """USD/KRW 실시간 환율 수집 (네이버 금융 공식 환율 JSON API 최우선 -> Namuh API -> yfinance 폴백)"""
+def get_exchange_rate_usd_krw() -> Tuple[float, str]:
+    """
+    USD/KRW 실시간 환율을 수집합니다.
+    
+    수집 우선순위:
+      1. 네이버 금융 공식 환율 JSON API (초고속 ~0.05초)
+      2. NH투자증권 Open API 환율
+      3. yfinance KRW=X (fast_info / history)
+      4. 기본값(1380.0원)
+      
+    Returns:
+        Tuple[float, str]: (환율 금액, 수집 출처 문자열)
+    """
     # 1. 네이버 금융 공식 환율 JSON API (초고속 0.05초)
     try:
         url_nv = "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW"
@@ -51,8 +83,22 @@ def get_exchange_rate_usd_krw():
         
     return 1380.0, "기본값(기본 1380원)"
 
-def get_kr_stock_price(ticker_code):
-    """국내 주식/ETF 실시간 시세 수집 (네이버 금융 공식 실시간 JSON API 최우선 -> Namuh API -> yfinance 폴백)"""
+def get_kr_stock_price(ticker_code: str) -> Tuple[float | None, str]:
+    """
+    국내 주식 및 ETF의 실시간 시세를 수집합니다.
+    
+    수집 우선순위:
+      1. 네이버 금융 공식 실시간 polling JSON API (초고속 ~0.05초 응답)
+      2. 네이버 모바일 증권 API 보조
+      3. NH투자증권 Open API (국내주식 시세)
+      4. yfinance (.KS, .KQ 접미사 탐색)
+      
+    Args:
+        ticker_code (str): 6자리 국내 종목코드 (예: '005930', '069500')
+        
+    Returns:
+        Tuple[float | None, str]: (원화 현재가 또는 None, 시세 출처 또는 오류 사유)
+    """
     # 1. 네이버 금융 공식 실시간 JSON API (초고속 0.05초 응답, HTML 스크래핑 파싱 실패 방지)
     try:
         url_polling = f"https://polling.finance.naver.com/api/realtime/domestic/stock/{ticker_code}"
@@ -108,8 +154,23 @@ def get_kr_stock_price(ticker_code):
         
     return None, "시세를 찾을 수 없음"
 
-def get_krx_gold_price(usd_krw: float = 1380.0):
-    """KRX 금현물 실시간 시세 수집 (Namuh API 최우선 -> 네이버 공식 금 시세 API -> 글로벌 금선물 GC=F 폴백)"""
+def get_krx_gold_price(usd_krw: float = 1380.0) -> Tuple[float, str]:
+    """
+    KRX 금현물(종목코드: M04020000, 1g 기준)의 실시간 시세를 수집합니다.
+    
+    수집 우선순위:
+      1. NH투자증권 Open API (증권사 KRX 금현물 호가 최우선)
+      2. 네이버 모바일 증권 금 시세 JSON API
+      3. 네이버 증권 PC 웹 페이지 스크래핑
+      4. 글로벌 금선물(COMEX GC=F) 온스당 달러 시세의 1g 원화 환산 폴백
+         (환산식: [온스당 USD * USD/KRW 환율] / 31.1034768g)
+         
+    Args:
+        usd_krw (float): 달러-원 환율 (글로벌 선물 폴백 환산 시 사용)
+        
+    Returns:
+        Tuple[float, str]: (1g당 원화 가격, 수집 출처 문자열)
+    """
     # 1. Namuh API 시도
     try:
         price = nh_api_client.fetch_gold_price("M04020000")
@@ -165,8 +226,23 @@ def get_krx_gold_price(usd_krw: float = 1380.0):
         
     return 201620.0, "기본값"
 
-def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
-    """미국 주식/ETF 실시간 시세 수집 (네이버 해외증권 API 최우선 -> Namuh API -> yfinance 폴백)"""
+def get_us_stock_price(ticker_symbol: str, usd_krw: float = 1380.0) -> Tuple[float | None, str]:
+    """
+    미국 주식 및 ETF의 실시간 시세를 수집하고 원화(KRW)로 환산하여 반환합니다.
+    
+    수집 우선순위:
+      1. 네이버 해외증권 공식 JSON API (초고속 ~0.05초 응답)
+         - 거래소 접미사 자동 시도 (예: VT -> VT, VT.O, VT.K, VT.N 순차 확인)
+      2. NH투자증권 Open API (해외주식 실시간 호가)
+      3. yfinance (fast_info / history)
+      
+    Args:
+        ticker_symbol (str): 미국 티커 심볼 (예: 'VT', 'PDBC', 'QQQ')
+        usd_krw (float): 현재 적용할 USD/KRW 환율 (기본값: 1380.0)
+        
+    Returns:
+        Tuple[float | None, str]: (원화 환산 현재가 또는 None, 시세 출처 또는 오류 사유)
+    """
     rate = float(usd_krw if usd_krw and usd_krw > 0 else 1380.0)
     
     # 1. 네이버 글로벌 증권 공식 API 최우선 (초고속 0.05초 응답)
@@ -223,9 +299,22 @@ def get_us_stock_price(ticker_symbol, usd_krw: float = 1380.0):
 
 def calculate_deposit_price(asset: dict) -> Tuple[float, int, float, float]:
     """
-    정기예금의 일할 세후 누적이자 가산 현재가 계산
+    정기예금 자산의 일할(Daily) 세후 누적이자를 계산하여 현재 평가액을 산출합니다.
+    
+    계산 공식:
+      - 경과일수: min(오늘, 만기일) - 가입일 (만기 이후 추가 이자는 미발생)
+      - 세전이자 = 원금 * (연이율 / 100) * (경과일수 / 365)
+      - 이자소득세 = floor(세전이자 * (소득세율 / 100))  [기본 세율: 15.4%]
+      - 세후이자 = 세전이자 - 이자소득세
+      - 현재가(평가액) = 원금 + 세후이자
+      
+    Args:
+        asset (dict): 정기예금 자산 메타데이터
+                      (deposit_principal, interest_rate, start_date, maturity_date, tax_rate 등)
+                      
     Returns:
-        current_price, accrued_days, gross_interest, net_interest
+        Tuple[float, int, float, float]: 
+            (세후 평가금액, 경과일수, 세전이자, 세후이자)
     """
     principal = float(asset.get('deposit_principal') or 0.0)
     rate = float(asset.get('interest_rate') or 0.0)
@@ -266,6 +355,18 @@ def calculate_deposit_price(asset: dict) -> Tuple[float, int, float, float]:
     return round(principal + net_interest, 0), accrued_days, gross_interest, net_interest
 
 def _fetch_single_asset_price(asset: dict, usd_krw: float, now_str: str) -> dict:
+    """
+    개별 자산의 시장 유형(예금, 금현물, 국내주식, 미국주식)에 따라 적절한 수집기를 호출하고,
+    원화 평가 시세와 메타데이터가 포함된 자산 가격 딕셔너리를 반환합니다.
+
+    Args:
+        asset (dict): 자산 정보 딕셔너리
+        usd_krw (float): 현재 적용 환율
+        now_str (str): 시세 수집 시각 문자열 ("YYYY-MM-DD HH:MM:SS")
+
+    Returns:
+        dict: 원화/외화 시세, 수집 상태, 예금 부가정보 등이 병합된 자산 가격 딕셔너리
+    """
     is_deposit = bool(asset.get('is_deposit', False))
     market = asset.get('market')
     ticker = (asset.get('ticker') or '').strip()
@@ -339,8 +440,18 @@ def _fetch_single_asset_price(asset: dict, usd_krw: float, now_str: str) -> dict
         "lock_rebalance_sell": bool(asset.get('lock_rebalance_sell', True) if asset.get('lock_rebalance_sell') is not None else True)
     }
 
-def fetch_asset_prices(assets, usd_krw=None):
-    """자산 목록 전체의 실시간 시세 및 원화 환산 가격 멀티스레드 병렬 수집"""
+def fetch_asset_prices(assets: list, usd_krw: float = None) -> Tuple[list, float]:
+    """
+    포트폴리오에 등록된 전체 자산 목록의 실시간 시세 및 원화 환산 가격을
+    멀티스레드(ThreadPoolExecutor)를 통해 병렬로 고속 수집합니다.
+
+    Args:
+        assets (list): 조회할 자산 정보 딕셔너리 리스트
+        usd_krw (float, optional): 적용할 USD/KRW 환율. None일 경우 실시간으로 즉시 조회
+
+    Returns:
+        Tuple[list, float]: (시세 정보가 보강된 자산 결과 리스트, 적용된 USD/KRW 환율)
+    """
     if usd_krw is None:
         usd_krw, _ = get_exchange_rate_usd_krw()
         

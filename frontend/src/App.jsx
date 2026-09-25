@@ -1,3 +1,22 @@
+/**
+ * 포트폴리오 리밸런서 메인 루트 컴포넌트 (App.jsx)
+ * =================================================
+ * 전역 상태 관리, 테마 전환, 포트폴리오 선택, 세션 스토리지 캐시 복원,
+ * 단일 번들 데이터 로딩 및 탭 네비게이션을 총괄하는 최상위 컴포넌트입니다.
+ * 
+ * 주요 기능:
+ * 1. 단일 번들 로딩(loadAllData):
+ *    - 포트폴리오 전환 또는 새로고침 시 1회의 API 호출로 전체 현황 일괄 수신
+ * 2. 0초 반응성 세션 캐시:
+ *    - 브라우저 sessionStorage를 활용하여 포트폴리오 전환 즉시 이전 대시보드를 렌더링
+ * 3. 5대 핵심 탭 네비게이션:
+ *    - 1. 포트폴리오 현황 (DashboardTab)
+ *    - 2. 목표 비중 설정 (WeightsTab)
+ *    - 3. 리밸런싱 전략 (RebalanceTab)
+ *    - 4. 매매 기록 (HistoryTab)
+ *    - 5. 계좌 마스터 관리 (SettingsTab)
+ */
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   BarChart3, Target, Scale, History, Settings, RefreshCw 

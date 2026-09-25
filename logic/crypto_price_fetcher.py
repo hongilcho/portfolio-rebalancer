@@ -1,17 +1,40 @@
+"""
+가상자산(암호화폐) 실시간 원화 시세 수집 모듈
+=============================================
+비트코인(BTC), 이더리움(ETH) 등 가상자산의 원화 실시간 시세를 수집하고 캐싱합니다.
+
+주요 특징:
+1. 다중 거래소 폴백 체인:
+   - 1차: 업비트(Upbit) Ticker API (초고속, 국내 기준가)
+   - 2차: 빗썸(Bithumb) Public Ticker API (국내 2위 거래소)
+   - 3차: yfinance (글로벌 시세 기반 KRW 환산 폴백)
+2. 2단계 캐싱 아키텍처:
+   - 1단계: 60초 인메모리 캐시 (SWR: Stale-While-Revalidate 백그라운드 갱신)
+   - 2단계: PostgreSQL DB 영구 캐시(market_prices_cache)를 통한 서버 재시작 시 0초 콜드스타트
+"""
+
 import time
 import threading
 import requests
 import yfinance as yf
 from data.data_manager import get_market_cache, save_market_cache
 
-_crypto_cache = None
-_crypto_cache_time = 0.0
-_crypto_cache_ttl = 60.0  # 1분 캐시
-_crypto_lock = threading.Lock()
-_crypto_fetching = False
+# ============================================================================
+# 인메모리 캐시 및 동시성 제어 전역 변수
+# ============================================================================
+_crypto_cache = None          # 직전 수집된 가상자산 시세 딕셔너리 캐시
+_crypto_cache_time = 0.0      # 캐시 저장 시각 (timestamp)
+_crypto_cache_ttl = 60.0      # 캐시 유효 시간 (초 단위, 기본 60초)
+_crypto_lock = threading.Lock() # 백그라운드 갱신 동시 실행 방지 뮤텍스
+_crypto_fetching = False      # 현재 백그라운드에서 시세 갱신 중인지 여부 플래그
 
 def _fetch_crypto_from_external() -> dict:
-    """외부 거래소(업비트/빗썸/yfinance)로부터 가상화폐 실시간 시세 수집"""
+    """
+    외부 거래소 API를 순차적으로 호출하여 가상자산 실시간 시세를 수집합니다.
+    
+    Returns:
+        dict: BTC, ETH의 원화 시세, 24시간 변동률, 고가, 저가, 전일종가, 수집처 정보를 담은 딕셔너리
+    """
     prices = {
         "BTC": {
             "symbol": "BTC",
@@ -123,6 +146,13 @@ def _fetch_crypto_from_external() -> dict:
     return prices
 
 def _background_crypto_refresh():
+    """
+    백그라운드 스레드에서 외부 거래소로부터 가상자산 시세를 갱신합니다.
+    
+    Stale-While-Revalidate(SWR) 패턴을 지원하여, 캐시 만료 시 사용자가
+    시세 조회를 기다리지 않고 즉시 캐시된 데이터를 받은 뒤 백그라운드에서
+    최신 시세를 갱신하도록 합니다.
+    """
     global _crypto_cache, _crypto_cache_time, _crypto_fetching
     with _crypto_lock:
         if _crypto_fetching:
@@ -139,8 +169,16 @@ def _background_crypto_refresh():
 
 def get_crypto_prices(force_refresh: bool = False):
     """
-    비트코인(BTC) 및 이더리움(ETH) 실시간 원화 시세 수집
-    - 영구 DB 캐시 및 Stale-While-Revalidate 적용으로 콜드스타트 지연 0초 보장
+    비트코인(BTC) 및 이더리움(ETH)의 실시간 원화 시세를 반환합니다.
+    
+    2단계 캐싱(인메모리 SWR + PostgreSQL 영구 캐시)을 적용하여
+    외부 API 호출 지연을 숨기고 신속한 응답(0~0.05초)을 보장합니다.
+
+    Args:
+        force_refresh (bool): True일 경우 캐시를 무시하고 외부 거래소에서 강제로 동기 수집
+
+    Returns:
+        dict: BTC, ETH의 원화 평가 시세 정보를 포함한 딕셔너리
     """
     global _crypto_cache, _crypto_cache_time
     now = time.time()

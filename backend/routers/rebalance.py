@@ -1,3 +1,9 @@
+"""
+포트폴리오 리밸런싱 API 라우터 (Rebalance Router)
+==================================================
+리밸런싱 시뮬레이션 계산 실행 및 산출된 현금 이체 지시서의 실제 계좌 반영을 담당합니다.
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
@@ -10,16 +16,21 @@ from logic.rebalance_calculator import calculate_rebalancing_plan, compute_reali
 router = APIRouter(prefix="/api/rebalance", tags=["rebalance"])
 
 class CalculateRebalanceRequest(BaseModel):
-    scenario: str = "NEW_CASH" # "NEW_CASH" or "DRIFT"
-    new_cash_krw: float = 0.0
-    drift_threshold: float = 5.0
-    portfolio_id: Optional[str] = "default"
+    """리밸런싱 계산 요청 스키마"""
+    scenario: str = "NEW_CASH"        # 리밸런싱 시나리오 ("NEW_CASH", "DRIFT", "PERIODIC")
+    new_cash_krw: float = 0.0         # 신규 투입 현금 (원화)
+    drift_threshold: float = 5.0      # 허용 괴리율 (%)
+    portfolio_id: Optional[str] = "default" # 대상 포트폴리오 ID
 
 class ApplyTransfersRequest(BaseModel):
+    """현금 이체 지시서 반영 요청 스키마"""
     transfer_plan: List[Dict[str, Any]]
 
 @router.post("/calculate")
 def calculate_plan(req: CalculateRebalanceRequest):
+    """
+    지정된 포트폴리오와 시나리오에 따라 최적의 매매 및 계좌 간 현금 이체 계획을 계산합니다.
+    """
     pid = req.portfolio_id or "default"
     assets = get_all_assets(portfolio_id=pid)
     accounts = get_all_accounts(portfolio_id=pid)

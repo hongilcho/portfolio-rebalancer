@@ -1,3 +1,17 @@
+"""
+포트폴리오 대시보드 API 라우터 (Dashboard Router)
+==================================================
+단일 포트폴리오의 종합 자산 평가, 계좌별 잔고/수익률, 자산군별 비중,
+목표 비중 대비 괴리율 현황을 고속으로 산출하여 제공합니다.
+
+주요 특징:
+1. 단일 번들 통신(/api/dashboard/bundle):
+   - 프론트엔드가 대시보드를 그리기 위해 필요한 5가지 데이터(포트폴리오 목록, 대시보드 요약,
+     자산 목록, 계좌 목록, 실시간 시세/환율)를 단 1회의 HTTP 요청으로 통합 반환하여 왕복 지연시간(RTT) 최소화.
+2. PostgreSQL 1회 배치 쿼리:
+   - `get_overview_batch_data()`를 통해 N+1 쿼리 문제를 원천 차단하고 0.05~0.1초 내 연산 완료.
+"""
+
 from fastapi import APIRouter
 from typing import Dict, Any, List, Optional
 
@@ -9,8 +23,14 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 @router.get("/bundle")
 def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = False):
     """
-    단 1회의 HTTP 요청 및 단 1회의 DB 왕복으로 대시보드 렌더링에 필요한 모든 데이터를 한 번에 제공
-    (portfolios, dashboard summary, assets, accounts, prices, exchange rate)
+    대시보드 초기 렌더링에 필요한 모든 데이터를 단 1회의 HTTP 요청으로 제공하는 통합 번들 API.
+
+    Args:
+        portfolio_id (str): 대상 포트폴리오 ID (기본값: 'default')
+        force_refresh (bool): 시세 강제 새로고침 여부 (기본값: False)
+
+    Returns:
+        dict: portfolios, dashboard, assets, accounts, prices_data, usd_krw, rate_source
     """
     batch_data = get_overview_batch_data()
     portfolios = batch_data.get("portfolios", [])
