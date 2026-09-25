@@ -1,7 +1,7 @@
 import os
 import math
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from data.data_manager import get_all_accounts, get_all_assets, get_all_holdings
 from backend.services import market_service
@@ -9,18 +9,32 @@ from backend.services import market_service
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 @router.get("/summary")
-def get_dashboard_summary(portfolio_id: str = "default"):
+def get_dashboard_summary(
+    portfolio_id: str = "default",
+    accounts: Optional[List[Dict[str, Any]]] = None,
+    assets: Optional[List[Dict[str, Any]]] = None,
+    all_holdings: Optional[List[Dict[str, Any]]] = None,
+    price_map: Optional[Dict[str, float]] = None,
+    usd_krw: Optional[float] = None
+):
     """
     포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
+    - accounts, assets, all_holdings, price_map, usd_krw 전달 시 DB 재조회 없이 인메모리 고속 연산 수행
     """
-    accounts = get_all_accounts(portfolio_id=portfolio_id)
-    assets = get_all_assets(portfolio_id=portfolio_id)
+    if accounts is None:
+        accounts = get_all_accounts(portfolio_id=portfolio_id)
+    if assets is None:
+        assets = get_all_assets(portfolio_id=portfolio_id)
     
-    _, price_map = market_service.get_prices()
-    usd_krw = market_service.usd_krw
+    if price_map is None:
+        _, price_map = market_service.get_prices()
+    if usd_krw is None:
+        usd_krw = market_service.usd_krw
 
     # N+1 쿼리 방지: 전체 보유 종목을 단일 쿼리로 조회 후 메모리에서 계좌별 매핑
-    all_holdings = get_all_holdings()
+    if all_holdings is None:
+        all_holdings = get_all_holdings()
+
     holdings_by_acc: Dict[str, List[Dict[str, Any]]] = {}
     for h in all_holdings:
         holdings_by_acc.setdefault(str(h['account_id']), []).append(h)

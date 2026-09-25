@@ -68,7 +68,8 @@ export const api = {
   deletePortfolio: (id) => request(`/api/portfolios/${id}`, {
     method: 'DELETE',
   }),
-  getPortfoliosOverview: (includeCrypto = true) => request(`/api/portfolios/overview/summary?include_crypto=${includeCrypto}`),
+  getPortfoliosOverview: (includeCrypto = true, forceRefresh = false) => 
+    request(`/api/portfolios/overview/summary?include_crypto=${includeCrypto}&force_refresh=${forceRefresh}`),
 
   // Accounts
   getAccounts: (portfolioId) => request(`/api/accounts/${portfolioId ? `?portfolio_id=${portfolioId}` : ''}`),

@@ -7,9 +7,11 @@ import { api } from '../../utils/api';
 import { formatKRW, formatPercent } from '../../utils/formatters';
 import DonutChart from '../common/DonutChart';
 
+let _overviewCache = null;
+
 export default function AllPortfoliosOverview({ onSelectPortfolio }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(() => _overviewCache);
+  const [loading, setLoading] = useState(() => !_overviewCache);
   const [refreshing, setRefreshing] = useState(false);
   const [includeCrypto, setIncludeCrypto] = useState(true);
   const [error, setError] = useState('');
@@ -94,7 +96,8 @@ export default function AllPortfoliosOverview({ onSelectPortfolio }) {
     setError('');
 
     try {
-      const res = await api.getPortfoliosOverview(cryptoToggle);
+      const res = await api.getPortfoliosOverview(cryptoToggle, isRefresh);
+      _overviewCache = res;
       setData(res);
     } catch (err) {
       console.error('Failed to load portfolios overview:', err);

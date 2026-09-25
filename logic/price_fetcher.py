@@ -338,8 +338,8 @@ def fetch_asset_prices(assets, usd_krw=None):
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # I/O 바운드 작업이므로 ThreadPoolExecutor를 통한 10개 스레드 동시 병렬 요청
-    max_workers = min(12, len(assets))
+    # NH API의 초당 호출 제한(429) 회피 및 Render 저사양 CPU 효율을 위해 동시 워커를 5개로 안정화
+    max_workers = min(5, len(assets))
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(lambda a: _fetch_single_asset_price(a, usd_krw, now_str), assets))
         

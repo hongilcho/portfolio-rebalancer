@@ -1,10 +1,13 @@
+import concurrent.futures
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 
 from data.data_manager import (
-    get_portfolios, get_portfolio, create_portfolio, update_portfolio, delete_portfolio
+    get_portfolios, get_portfolio, create_portfolio, update_portfolio, delete_portfolio,
+    get_all_accounts, get_all_assets, get_all_holdings
 )
+from backend.services import market_service
 from backend.routers.dashboard import get_dashboard_summary
 from backend.routers.crypto import get_crypto_summary
 
@@ -51,13 +54,41 @@ def remove_portfolio(portfolio_id: str):
     return {"success": True, "message": msg}
 
 @router.get("/overview/summary")
-def get_all_portfolios_overview(include_crypto: bool = Query(True)):
+def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refresh: bool = Query(False)):
     """
     모든 포트폴리오를 통합 종합 집계하고,
     동일 종목을 여러 포트폴리오에서 보유한 경우 가중평균 평단가 및 통합 수량을 산출하는 API
+    (전체 DB 테이블 및 시세 조회를 병렬/배치로 단 1회 수행하여 극적인 응답 속도 보장)
     """
-    portfolios = get_portfolios()
-    
+    # 1. DB 데이터 및 가상화폐 시세를 ThreadPoolExecutor로 동시 병렬 조회 (N+1 제거)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        fut_ports = executor.submit(get_portfolios)
+        fut_accs = executor.submit(get_all_accounts)
+        fut_assets = executor.submit(get_all_assets)
+        fut_holdings = executor.submit(get_all_holdings)
+        fut_crypto = executor.submit(get_crypto_summary, portfolio_id="default", include_portfolio=False) if include_crypto else None
+
+        portfolios = fut_ports.result()
+        all_accounts = fut_accs.result()
+        all_assets = fut_assets.result()
+        all_holdings = fut_holdings.result()
+        c_res = fut_crypto.result() if fut_crypto else None
+
+    # 2. 가격 데이터 가져오기 (인메모리 캐시 및 SWR 적용)
+    _, price_map = market_service.get_prices(force_refresh=force_refresh)
+    usd_krw = market_service.usd_krw
+
+    # 3. 계좌 및 자산 포트폴리오 ID별 인메모리 그룹화
+    accounts_by_pid: Dict[str, List[Dict[str, Any]]] = {}
+    for a in all_accounts:
+        pid_val = str(a.get("portfolio_id") or "default")
+        accounts_by_pid.setdefault(pid_val, []).append(a)
+
+    assets_by_pid: Dict[str, List[Dict[str, Any]]] = {}
+    for a in all_assets:
+        pid_val = str(a.get("portfolio_id") or "default")
+        assets_by_pid.setdefault(pid_val, []).append(a)
+
     portfolio_summaries = []
     total_portfolios_buy = 0.0
     total_portfolios_eval = 0.0
@@ -72,7 +103,16 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True)):
         pdesc = p.get("description", "")
         
         try:
-            dash = get_dashboard_summary(portfolio_id=pid)
+            p_accounts = accounts_by_pid.get(pid, [])
+            p_assets = assets_by_pid.get(pid, [])
+            dash = get_dashboard_summary(
+                portfolio_id=pid,
+                accounts=p_accounts,
+                assets=p_assets,
+                all_holdings=all_holdings,
+                price_map=price_map,
+                usd_krw=usd_krw
+            )
             kpi = dash.get("kpi", {})
             cash = dash.get("cash_assets", {})
             stock_assets = dash.get("stock_assets", [])
@@ -178,9 +218,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True)):
     crypto_total_buy = 0.0
     crypto_total_eval = 0.0
 
-    if include_crypto:
+    if include_crypto and c_res:
         try:
-            c_res = get_crypto_summary()
             c_tot = c_res.get("crypto_total", {})
             c_assets = c_res.get("crypto_assets", [])
             

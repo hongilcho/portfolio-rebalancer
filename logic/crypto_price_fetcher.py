@@ -1,36 +1,52 @@
+import time
+import threading
 import requests
 import yfinance as yf
 from datetime import datetime
 
-def get_crypto_prices():
+_crypto_cache = None
+_crypto_cache_time = 0.0
+_crypto_cache_ttl = 60.0  # 1분 캐시
+_crypto_lock = threading.Lock()
+
+def get_crypto_prices(force_refresh: bool = False):
     """
-    비트코인(BTC) 및 이더리움(ETH) 실시간 원화 시세 수집
+    비트코인(BTC) 및 이더리움(ETH) 실시간 원화 시세 수집 (인메모리 캐싱 지원)
     1순위: 업비트(Upbit) Public API
     2순위: 빗썸(Bithumb) Public API
     3순위: yfinance (BTC-KRW, ETH-KRW)
     """
-    prices = {
-        "BTC": {
-            "symbol": "BTC",
-            "name": "비트코인",
-            "price": 0.0,
-            "change_24h_pct": 0.0,
-            "high_24h": 0.0,
-            "low_24h": 0.0,
-            "prev_close": 0.0,
-            "source": "기본값"
-        },
-        "ETH": {
-            "symbol": "ETH",
-            "name": "이더리움",
-            "price": 0.0,
-            "change_24h_pct": 0.0,
-            "high_24h": 0.0,
-            "low_24h": 0.0,
-            "prev_close": 0.0,
-            "source": "기본값"
+    global _crypto_cache, _crypto_cache_time
+    now = time.time()
+    if not force_refresh and _crypto_cache is not None and (now - _crypto_cache_time < _crypto_cache_ttl):
+        return _crypto_cache
+
+    with _crypto_lock:
+        if not force_refresh and _crypto_cache is not None and (time.time() - _crypto_cache_time < _crypto_cache_ttl):
+            return _crypto_cache
+
+        prices = {
+            "BTC": {
+                "symbol": "BTC",
+                "name": "비트코인",
+                "price": 0.0,
+                "change_24h_pct": 0.0,
+                "high_24h": 0.0,
+                "low_24h": 0.0,
+                "prev_close": 0.0,
+                "source": "기본값"
+            },
+            "ETH": {
+                "symbol": "ETH",
+                "name": "이더리움",
+                "price": 0.0,
+                "change_24h_pct": 0.0,
+                "high_24h": 0.0,
+                "low_24h": 0.0,
+                "prev_close": 0.0,
+                "source": "기본값"
+            }
         }
-    }
 
     # 1. 업비트 (Upbit) API 시도
     try:
@@ -64,6 +80,8 @@ def get_crypto_prices():
                         "source": "업비트 (Upbit)"
                     }
             if prices["BTC"]["price"] > 0 and prices["ETH"]["price"] > 0:
+                _crypto_cache = prices
+                _crypto_cache_time = time.time()
                 return prices
     except Exception as e:
         print(f"Upbit API error: {e}")
@@ -90,6 +108,8 @@ def get_crypto_prices():
                         "source": "빗썸 (Bithumb)"
                     }
         if prices["BTC"]["price"] > 0 and prices["ETH"]["price"] > 0:
+            _crypto_cache = prices
+            _crypto_cache_time = time.time()
             return prices
     except Exception as e:
         print(f"Bithumb API error: {e}")
@@ -117,4 +137,7 @@ def get_crypto_prices():
             except Exception as e:
                 print(f"yfinance crypto error for {sym}: {e}")
 
+    if prices["BTC"]["price"] > 0 or prices["ETH"]["price"] > 0:
+        _crypto_cache = prices
+        _crypto_cache_time = time.time()
     return prices

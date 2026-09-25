@@ -29,7 +29,9 @@ class MarketStateService:
         self.is_custom_rate: bool = False
         self.price_data: Optional[List[Dict[str, Any]]] = None
         self.last_price_fetch_time: float = 0.0
-        self.cache_ttl_seconds: float = 60.0
+        self.cache_ttl_seconds: float = 300.0  # 5분 캐시
+        self._fetch_lock = threading.Lock()
+        self._is_fetching: bool = False
 
     @classmethod
     def get_instance(cls):
@@ -61,17 +63,32 @@ class MarketStateService:
         self.price_data = None
         self.last_price_fetch_time = 0.0
 
+    def _do_fetch_prices(self):
+        """내부 시세 수집 실행 함수 (_fetch_lock으로 동시 중복 수집 차단)"""
+        if self._fetch_lock.acquire(blocking=True):
+            try:
+                self._is_fetching = True
+                assets = get_all_assets()
+                if not self.is_custom_rate:
+                    self.refresh_exchange_rate()
+                price_results, _ = fetch_asset_prices(assets, self.usd_krw)
+                self.price_data = price_results
+                self.last_price_fetch_time = time.time()
+            finally:
+                self._is_fetching = False
+                self._fetch_lock.release()
+
     def get_prices(self, force_refresh: bool = False) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
         now = time.time()
-        assets = get_all_assets()
         
-        if force_refresh or self.price_data is None or (now - self.last_price_fetch_time > self.cache_ttl_seconds):
-            if not self.is_custom_rate:
-                self.refresh_exchange_rate()
-                
-            price_results, _ = fetch_asset_prices(assets, self.usd_krw)
-            self.price_data = price_results
-            self.last_price_fetch_time = now
+        # 1. 완전 콜드스타트(최초 실행)이거나 명시적 강제 새로고침인 경우 동기 수집
+        if self.price_data is None or force_refresh:
+            self._do_fetch_prices()
+        # 2. 캐시 TTL 초과 시 Stale-While-Revalidate (기존 캐시 즉시 반환 + 백그라운드 갱신)
+        elif now - self.last_price_fetch_time > self.cache_ttl_seconds:
+            if not self._is_fetching:
+                t = threading.Thread(target=self._do_fetch_prices, daemon=True)
+                t.start()
             
         price_map = {}
         if self.price_data:

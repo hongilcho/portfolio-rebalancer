@@ -68,31 +68,37 @@ export default function App() {
     setError('');
 
     try {
-      // Always fetch portfolios list and prices
-      const [portsRes, pricesRes] = await Promise.all([
+      // If viewing 'all' (전체 자산 종합 요약) or 'crypto', respective tabs handle their own data.
+      // We only fetch portfolios list and lightweight exchange rate to keep header updated without blocking.
+      if (targetPid === 'all' || targetPid === 'crypto') {
+        const [portsRes, rateRes] = await Promise.all([
+          api.getPortfolios(),
+          api.getExchangeRate(),
+        ]);
+        setPortfolios(portsRes.portfolios || []);
+        if (rateRes) {
+          setUsdKrw(rateRes.usd_krw || 1380.0);
+          setRateSource(rateRes.rate_source || '');
+        }
+        return;
+      }
+
+      // If viewing a specific portfolio, fetch all portfolio-specific data concurrently in ONE single batch
+      const [portsRes, pricesRes, dashRes, assetsRes, accountsRes] = await Promise.all([
         api.getPortfolios(),
         api.getPrices(forceRefresh, targetPid),
+        api.getDashboardSummary(targetPid),
+        api.getAssets(targetPid),
+        api.getAccounts(targetPid),
       ]);
+
       setPortfolios(portsRes.portfolios || []);
       setPricesData(pricesRes);
-
-      // If viewing a specific portfolio (not 'all')
-      if (targetPid !== 'all') {
-        const [dashRes, assetsRes, accountsRes] = await Promise.all([
-          api.getDashboardSummary(targetPid),
-          api.getAssets(targetPid),
-          api.getAccounts(targetPid),
-        ]);
-
-        setDashboardData(dashRes);
-        setAssets(assetsRes.assets || []);
-        setAccounts(accountsRes.accounts || []);
-        setUsdKrw(dashRes.usd_krw || pricesRes.usd_krw || 1380.0);
-        setRateSource(dashRes.rate_source || pricesRes.rate_source || '');
-      } else {
-        setUsdKrw(pricesRes.usd_krw || 1380.0);
-        setRateSource(pricesRes.rate_source || '');
-      }
+      setDashboardData(dashRes);
+      setAssets(assetsRes.assets || []);
+      setAccounts(accountsRes.accounts || []);
+      setUsdKrw(dashRes.usd_krw || pricesRes.usd_krw || 1380.0);
+      setRateSource(dashRes.rate_source || pricesRes.rate_source || '');
     } catch (err) {
       console.error('Failed to load portfolio data:', err);
       setError(err.message || '데이터를 불러오는 중 오류가 발생했습니다.');
