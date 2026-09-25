@@ -1,6 +1,5 @@
 import yfinance as yf
 import requests
-import re
 from datetime import datetime
 from lxml import html
 import urllib3

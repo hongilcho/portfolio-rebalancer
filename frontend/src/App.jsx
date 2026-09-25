@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   BarChart3, Target, Scale, History, Settings, RefreshCw 
 } from 'lucide-react';
@@ -75,15 +75,22 @@ export default function App() {
     } catch {}
   };
 
-  const loadAllData = async (forceRefresh = false, targetPid = currentPortfolioId) => {
+  const currentPortfolioIdRef = useRef(currentPortfolioId);
+  currentPortfolioIdRef.current = currentPortfolioId;
+
+  const dashboardDataRef = useRef(dashboardData);
+  dashboardDataRef.current = dashboardData;
+
+  const loadAllData = useCallback(async (forceRefresh = false, targetPid = null) => {
+    const pid = targetPid || currentPortfolioIdRef.current;
     if (forceRefresh) setRefreshing(true);
-    else if (!dashboardData) setLoading(true);
+    else if (!dashboardDataRef.current) setLoading(true);
     setError('');
 
     try {
       // If viewing 'all' (전체 자산 종합 요약) or 'crypto', respective tabs handle their own data.
       // We only fetch portfolios list and lightweight exchange rate to keep header updated without blocking.
-      if (targetPid === 'all' || targetPid === 'crypto') {
+      if (pid === 'all' || pid === 'crypto') {
         const [portsRes, rateRes] = await Promise.all([
           api.getPortfolios(),
           api.getExchangeRate(),
@@ -97,13 +104,13 @@ export default function App() {
       }
 
       // If viewing a specific portfolio, fetch all portfolio-specific data in ONE single unified bundle request
-      const bundle = await api.getPortfolioBundle(targetPid, forceRefresh);
+      const bundle = await api.getPortfolioBundle(pid, forceRefresh);
 
       setPortfolios(bundle.portfolios || []);
       setPricesData(bundle.prices_data);
       setDashboardData(bundle.dashboard);
       try {
-        sessionStorage.setItem('portfolio_dashboard_cache_' + targetPid, JSON.stringify(bundle.dashboard));
+        sessionStorage.setItem('portfolio_dashboard_cache_' + pid, JSON.stringify(bundle.dashboard));
       } catch {}
       setAssets(bundle.assets || []);
       setAccounts(bundle.accounts || []);
@@ -116,13 +123,13 @@ export default function App() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadAllData(false, currentPortfolioId);
     }
-  }, [isAuthenticated, currentPortfolioId]);
+  }, [isAuthenticated, currentPortfolioId, loadAllData]);
 
   if (!isAuthenticated) {
     return <AuthModal onAuthenticated={() => setIsAuthenticated(true)} />;

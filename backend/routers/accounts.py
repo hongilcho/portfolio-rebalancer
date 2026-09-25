@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 from data.data_manager import (
     get_all_accounts, add_account, update_account, delete_account,
-    update_account_settings, update_account_priorities, update_account_limit_exhausted, ACCOUNT_TYPES
+    update_account_priorities, update_account_limit_exhausted, ACCOUNT_TYPES
 )
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])

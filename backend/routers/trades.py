@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
-import datetime
 from data.data_manager import execute_trade, get_trade_history, delete_trade
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])

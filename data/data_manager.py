@@ -50,7 +50,18 @@ class PoolConnectionWrapper:
         self.pool = pool_obj
         self.conn = conn
         self._closed = False
-        
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            try:
+                self.rollback()
+            except Exception:
+                pass
+        self.close()
+
     def cursor(self, *args, **kwargs):
         return self.conn.cursor(*args, **kwargs)
         
@@ -441,14 +452,16 @@ def delete_portfolio(portfolio_id: str):
 # ---------------------------------------------------------
 def get_all_accounts(portfolio_id: str = None):
     conn = get_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    if portfolio_id:
-        cursor.execute("SELECT * FROM accounts WHERE portfolio_id = %s ORDER BY account_alias ASC", (portfolio_id,))
-    else:
-        cursor.execute("SELECT * FROM accounts ORDER BY account_alias ASC")
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        if portfolio_id:
+            cursor.execute("SELECT * FROM accounts WHERE portfolio_id = %s ORDER BY account_alias ASC", (portfolio_id,))
+        else:
+            cursor.execute("SELECT * FROM accounts ORDER BY account_alias ASC")
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 def add_account(account_no, account_alias, account_type, deposit_krw=0.0, deposit_usd=0.0, annual_limit=0.0, tax_limit=0.0, notes="", priority=99, limit_preference="ANNUAL", current_year_deposit=0.0, portfolio_id="default"):
     conn = get_connection()
@@ -551,34 +564,36 @@ def delete_account(account_id):
 # ---------------------------------------------------------
 def get_all_assets(portfolio_id: str = None):
     conn = get_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    if portfolio_id:
-        cursor.execute("SELECT * FROM assets WHERE portfolio_id = %s ORDER BY name ASC", (portfolio_id,))
-    else:
-        cursor.execute("SELECT * FROM assets ORDER BY name ASC")
-    rows = []
-    for r in cursor.fetchall():
-        r = dict(r)
-        try:
-            raw_accs = json.loads(r['allowed_accounts']) if r['allowed_accounts'] else []
-        except Exception:
-            raw_accs = []
-        r['allowed_accounts'] = sanitize_account_names(raw_accs)
-        r['account_no'] = r.get('account_no') or ''
-        r['is_risk_asset'] = bool(r.get('is_risk_asset', 1))
-        r['is_active'] = bool(r.get('is_active', True) if r.get('is_active') is not None else True)
-        r['is_deposit'] = bool(r.get('is_deposit', False))
-        r['deposit_principal'] = float(r.get('deposit_principal') or 0.0)
-        r['interest_rate'] = float(r.get('interest_rate') or 0.0)
-        r['start_date'] = r.get('start_date') or ''
-        r['maturity_date'] = r.get('maturity_date') or ''
-        r['early_termination_rate'] = float(r.get('early_termination_rate') or 0.0)
-        r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
-        r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
-        r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
-        rows.append(r)
-    conn.close()
-    return rows
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        if portfolio_id:
+            cursor.execute("SELECT * FROM assets WHERE portfolio_id = %s ORDER BY name ASC", (portfolio_id,))
+        else:
+            cursor.execute("SELECT * FROM assets ORDER BY name ASC")
+        rows = []
+        for r in cursor.fetchall():
+            r = dict(r)
+            try:
+                raw_accs = json.loads(r['allowed_accounts']) if r['allowed_accounts'] else []
+            except Exception:
+                raw_accs = []
+            r['allowed_accounts'] = sanitize_account_names(raw_accs)
+            r['account_no'] = r.get('account_no') or ''
+            r['is_risk_asset'] = bool(r.get('is_risk_asset', 1))
+            r['is_active'] = bool(r.get('is_active', True) if r.get('is_active') is not None else True)
+            r['is_deposit'] = bool(r.get('is_deposit', False))
+            r['deposit_principal'] = float(r.get('deposit_principal') or 0.0)
+            r['interest_rate'] = float(r.get('interest_rate') or 0.0)
+            r['start_date'] = r.get('start_date') or ''
+            r['maturity_date'] = r.get('maturity_date') or ''
+            r['early_termination_rate'] = float(r.get('early_termination_rate') or 0.0)
+            r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
+            r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
+            r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
+            rows.append(r)
+        return rows
+    finally:
+        conn.close()
 
 def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes="", portfolio_id="default",
               is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
@@ -717,32 +732,36 @@ def delete_asset(asset_id):
 # ---------------------------------------------------------
 def get_holdings_by_account(account_id):
     conn = get_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    cursor.execute('''
-        SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
-               a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell
-        FROM holdings h
-        JOIN assets a ON h.asset_id = a.id
-        WHERE h.account_id = %s
-    ''', (str(account_id),))
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('''
+            SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
+                   a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell
+            FROM holdings h
+            JOIN assets a ON h.asset_id = a.id
+            WHERE h.account_id = %s
+        ''', (str(account_id),))
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 def get_all_holdings():
     conn = get_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    cursor.execute('''
-        SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
-               a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
-               acc.account_alias, acc.account_type
-        FROM holdings h
-        JOIN assets a ON h.asset_id = a.id
-        JOIN accounts acc ON h.account_id = acc.id
-    ''')
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('''
+            SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
+                   a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
+                   acc.account_alias, acc.account_type
+            FROM holdings h
+            JOIN assets a ON h.asset_id = a.id
+            JOIN accounts acc ON h.account_id = acc.id
+        ''')
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 def clear_all_caches():
     pass
@@ -952,28 +971,30 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price)
 
 def get_trade_history(portfolio_id: str = None):
     conn = get_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    if portfolio_id:
-        cursor.execute('''
-            SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
-            FROM trade_history t
-            JOIN accounts a ON t.account_id = a.id
-            JOIN assets ast ON t.asset_id = ast.id
-            WHERE t.trade_type != 'INIT' AND a.portfolio_id = %s
-            ORDER BY t.trade_date DESC, t.id DESC
-        ''', (portfolio_id,))
-    else:
-        cursor.execute('''
-            SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
-            FROM trade_history t
-            JOIN accounts a ON t.account_id = a.id
-            JOIN assets ast ON t.asset_id = ast.id
-            WHERE t.trade_type != 'INIT'
-            ORDER BY t.trade_date DESC, t.id DESC
-        ''')
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        if portfolio_id:
+            cursor.execute('''
+                SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
+                FROM trade_history t
+                JOIN accounts a ON t.account_id = a.id
+                JOIN assets ast ON t.asset_id = ast.id
+                WHERE t.trade_type != 'INIT' AND a.portfolio_id = %s
+                ORDER BY t.trade_date DESC, t.id DESC
+            ''', (portfolio_id,))
+        else:
+            cursor.execute('''
+                SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
+                FROM trade_history t
+                JOIN accounts a ON t.account_id = a.id
+                JOIN assets ast ON t.asset_id = ast.id
+                WHERE t.trade_type != 'INIT'
+                ORDER BY t.trade_date DESC, t.id DESC
+            ''')
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 def delete_trade(trade_id):
     conn = get_connection()
@@ -1080,6 +1101,8 @@ def apply_transfer_plan(transfer_plan):
     except Exception as e:
         conn.rollback()
         return False, f"이체 내역 반영 중 오류가 발생했습니다: {str(e)}"
+    finally:
+        conn.close()
 # ---------------------------------------------------------
 # Crypto Holdings (Bitcoin & Ethereum)
 # ---------------------------------------------------------
@@ -1194,8 +1217,8 @@ def save_market_cache(key: str, data: Any) -> bool:
     지속성 시장 데이터/시세/환율 캐시 저장 (JSONB 포맷)
     PostgreSQL의 market_cache 테이블에 저장하여 서버 재시작 및 배포 후에도 즉시 복구 가능하게 함.
     """
+    conn = get_connection()
     try:
-        conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO market_cache (key, data, updated_at)
@@ -1204,11 +1227,12 @@ def save_market_cache(key: str, data: Any) -> bool:
             SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP
         """, (key, json.dumps(data)))
         conn.commit()
-        conn.close()
         return True
     except Exception as e:
         print(f"Error saving market cache for {key}: {e}")
         return False
+    finally:
+        conn.close()
 
 def get_market_cache(key: str) -> Tuple[Optional[Any], float]:
     """
@@ -1216,15 +1240,14 @@ def get_market_cache(key: str) -> Tuple[Optional[Any], float]:
     Returns:
         (data, age_in_seconds): 캐시 데이터와 생성 후 경과 시간(초). 없으면 (None, 999999.0)
     """
+    conn = get_connection()
     try:
-        conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("""
             SELECT data, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at)) as age_seconds
             FROM market_cache WHERE key = %s
         """, (key,))
         row = cursor.fetchone()
-        conn.close()
         if row:
             raw_data = row[0]
             parsed = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
@@ -1232,6 +1255,8 @@ def get_market_cache(key: str) -> Tuple[Optional[Any], float]:
             return parsed, age
     except Exception as e:
         print(f"Error getting market cache for {key}: {e}")
+    finally:
+        conn.close()
     return None, 999999.0
 
 if __name__ == "__main__":

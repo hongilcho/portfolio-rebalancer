@@ -1,5 +1,5 @@
 import math
-import pandas as pd
+import copy
 from typing import List, Dict, Tuple
 
 def calculate_rebalancing_plan(
@@ -38,7 +38,6 @@ def calculate_rebalancing_plan(
 
     # Sort accounts by user priority (lowest number = highest priority)
     # Default to 99 if not set.
-    import copy
     sorted_accounts = copy.deepcopy(sorted(accounts, key=lambda x: int(x.get('priority', 99))))
     
     # 2. Check Drift Condition (if scenario == "DRIFT")

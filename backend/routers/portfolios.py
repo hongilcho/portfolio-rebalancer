@@ -1,11 +1,10 @@
-import concurrent.futures
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 
 from data.data_manager import (
     get_portfolios, get_portfolio, create_portfolio, update_portfolio, delete_portfolio,
-    get_all_accounts, get_all_assets, get_all_holdings, get_overview_batch_data
+    get_overview_batch_data
 )
 from backend.services import market_service
 from backend.routers.dashboard import get_dashboard_summary

@@ -1,9 +1,7 @@
-import os
-import math
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter
 from typing import Dict, Any, List, Optional
 
-from data.data_manager import get_all_accounts, get_all_assets, get_all_holdings, get_overview_batch_data
+from data.data_manager import get_overview_batch_data
 from backend.services import market_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])

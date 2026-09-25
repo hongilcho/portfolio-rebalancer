@@ -2,7 +2,6 @@ import time
 import threading
 import requests
 import yfinance as yf
-from datetime import datetime
 from data.data_manager import get_market_cache, save_market_cache
 
 _crypto_cache = None

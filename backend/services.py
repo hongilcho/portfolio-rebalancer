@@ -8,16 +8,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from data.data_manager import (
-    init_db, get_all_assets, get_all_accounts, add_account, update_account, delete_account,
-    add_asset, update_asset, delete_asset, get_holdings_by_account, get_all_holdings, save_account_holdings,
-    execute_trade, get_trade_history, delete_trade,
-    ACCOUNT_TYPES, update_account_settings, update_account_priorities, apply_transfer_plan,
-    sync_account_with_api, get_market_cache, save_market_cache
-)
+from data.data_manager import get_all_assets, get_market_cache, save_market_cache
 from logic.price_fetcher import get_exchange_rate_usd_krw, fetch_asset_prices
-from logic.rebalance_calculator import calculate_rebalancing_plan
-from data.nh_api import nh_api_client
 
 class MarketStateService:
     _instance = None
