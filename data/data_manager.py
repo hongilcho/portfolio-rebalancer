@@ -254,12 +254,23 @@ def _do_init_db_schema(conn, cursor):
             quantity REAL DEFAULT 0.0,
             avg_price REAL DEFAULT 0.0,
             avg_price_usd REAL DEFAULT 0.0,
+            buy_fx_rate REAL DEFAULT 0.0,
             FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
             UNIQUE(account_id, asset_id)
         )
     ''')
     cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS avg_price_usd REAL DEFAULT 0.0")
+    cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS buy_fx_rate REAL DEFAULT 0.0")
+    try:
+        cursor.execute('''
+            UPDATE holdings 
+            SET buy_fx_rate = ROUND((avg_price / avg_price_usd)::numeric, 2)
+            WHERE (buy_fx_rate IS NULL OR buy_fx_rate = 0.0) 
+              AND avg_price_usd > 0 AND avg_price > 0
+        ''')
+    except Exception as e:
+        print(f"buy_fx_rate migration note: {e}")
 
 
     cursor.execute('''
@@ -818,10 +829,18 @@ def save_account_holdings(account_id, holdings_data):
             qty = float(item.get('quantity', 0.0))
             avg_p = float(item.get('avg_price', 0.0))
             avg_p_usd = float(item.get('avg_price_usd', 0.0))
+            buy_fx = float(item.get('buy_fx_rate', 0.0))
             
-            if qty < 0 or avg_p < 0 or avg_p_usd < 0:
+            if qty < 0 or avg_p < 0 or avg_p_usd < 0 or buy_fx < 0:
                 conn.rollback()
-                return False, "수량과 평단가는 0 이상이어야 합니다."
+                return False, "수량, 평단가 및 매입환율은 0 이상이어야 합니다."
+
+            # 미국 자산 또는 달러 평단가가 있는 경우 상호 일치 보정
+            if avg_p_usd > 0:
+                if buy_fx > 0:
+                    avg_p = round(avg_p_usd * buy_fx, 2)
+                elif avg_p > 0:
+                    buy_fx = round(avg_p / avg_p_usd, 2)
                 
             cursor.execute("SELECT id FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
             row = cursor.fetchone()
@@ -831,16 +850,19 @@ def save_account_holdings(account_id, holdings_data):
                     cursor.execute("DELETE FROM holdings WHERE id = %s", (row[0],))
             else:
                 if row:
-                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s, avg_price_usd = %s WHERE id = %s", (qty, avg_p, avg_p_usd, row[0]))
+                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s WHERE id = %s", (qty, avg_p, avg_p_usd, buy_fx, row[0]))
                 else:
                     new_h_id = generate_id()
-                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd) VALUES (%s, %s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p, avg_p_usd))
+                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate) VALUES (%s, %s, %s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p, avg_p_usd, buy_fx))
                     
                 new_trade_id = generate_id()
+                trade_price = avg_p_usd if avg_p_usd > 0 else avg_p
+                trade_curr = 'USD' if avg_p_usd > 0 else 'KRW'
+                trade_fx = buy_fx if buy_fx > 0 else 1.0
                 cursor.execute('''
-                    INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ''', (new_trade_id, today_str, str(account_id), aid, 'INIT', qty, avg_p))
+                    INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price, currency, exchange_rate)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (new_trade_id, today_str, str(account_id), aid, 'INIT', qty, trade_price, trade_curr, trade_fx))
                 
         conn.commit()
         return True, "보유 내역이 성공적으로 저장되었습니다."
@@ -925,7 +947,7 @@ def sync_account_with_api(account_id, api_data):
 # ---------------------------------------------------------
 # Trade History & Execution
 # ---------------------------------------------------------
-def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price):
+def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price, currency=None, exchange_rate=None):
     if quantity <= 0 or price <= 0:
         return False, "수량과 단가는 0보다 커야 합니다."
         
@@ -933,73 +955,148 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price)
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     new_trade_id = generate_id()
     try:
+        is_us = (currency == 'USD') or (exchange_rate is not None and float(exchange_rate) > 1.0)
+        if currency is None:
+            currency = 'USD' if is_us else 'KRW'
+
+        if is_us or currency == 'USD':
+            if exchange_rate is None or float(exchange_rate) <= 1.0:
+                try:
+                    from backend.services.market_service import get_usd_krw
+                    exchange_rate = get_usd_krw() or 1380.0
+                except Exception:
+                    exchange_rate = 1380.0
+            else:
+                exchange_rate = float(exchange_rate)
+        else:
+            exchange_rate = 1.0
+
         cursor.execute('''
-            INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (new_trade_id, trade_date, str(account_id), str(asset_id), trade_type, quantity, price))
+            INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price, currency, exchange_rate)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (new_trade_id, trade_date, str(account_id), str(asset_id), trade_type, quantity, price, currency, exchange_rate))
         
-        # 현금 잔고(예수금) 업데이트 로직 (모든 매매 대금은 원화 기준)
+        # 현금 잔고(예수금) 업데이트 로직
         if trade_type in ('BUY', 'SELL'):
-            trade_amount = quantity * price
-            
-            # 계좌 원화 잔고 확인
-            cursor.execute('SELECT deposit_krw FROM accounts WHERE id = %s', (str(account_id),))
-            acc_row = cursor.fetchone()
-            if acc_row:
-                dep_krw = float(acc_row['deposit_krw'])
-                
-                if trade_type == 'BUY':
-                    dep_krw -= trade_amount
-                elif trade_type == 'SELL':
-                    dep_krw += trade_amount
-                        
-                # 계좌 원화 잔고 업데이트
-                cursor.execute('''
-                    UPDATE accounts
-                    SET deposit_krw = %s
-                    WHERE id = %s
-                ''', (dep_krw, str(account_id)))
+            if is_us or currency == 'USD':
+                cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s', (str(account_id),))
+                acc_row = cursor.fetchone()
+                if acc_row:
+                    dep_krw = float(acc_row.get('deposit_krw') or 0.0)
+                    dep_usd = float(acc_row.get('deposit_usd') or 0.0)
+                    trade_amt_usd = quantity * price
+                    trade_amt_krw = trade_amt_usd * exchange_rate
+                    if trade_type == 'BUY':
+                        if dep_usd >= trade_amt_usd:
+                            dep_usd -= trade_amt_usd
+                        else:
+                            dep_krw -= trade_amt_krw
+                    else: # SELL
+                        if dep_usd > 0:
+                            dep_usd += trade_amt_usd
+                        else:
+                            dep_krw += trade_amt_krw
+                    cursor.execute('''
+                        UPDATE accounts
+                        SET deposit_krw = %s, deposit_usd = %s
+                        WHERE id = %s
+                    ''', (dep_krw, dep_usd, str(account_id)))
+            else:
+                trade_amount = quantity * price
+                cursor.execute('SELECT deposit_krw FROM accounts WHERE id = %s', (str(account_id),))
+                acc_row = cursor.fetchone()
+                if acc_row:
+                    dep_krw = float(acc_row['deposit_krw'])
+                    if trade_type == 'BUY':
+                        dep_krw -= trade_amount
+                    elif trade_type == 'SELL':
+                        dep_krw += trade_amount
+                    cursor.execute('''
+                        UPDATE accounts
+                        SET deposit_krw = %s
+                        WHERE id = %s
+                    ''', (dep_krw, str(account_id)))
                     
         cursor.execute('''
-            SELECT quantity, avg_price FROM holdings 
+            SELECT quantity, avg_price, avg_price_usd, buy_fx_rate FROM holdings 
             WHERE account_id = %s AND asset_id = %s
         ''', (str(account_id), str(asset_id)))
         
         row = cursor.fetchone()
         
         if row:
-            curr_qty = float(row['quantity'])
-            curr_avg_price = float(row['avg_price'])
+            curr_qty = float(row['quantity'] or 0.0)
+            curr_avg_price = float(row['avg_price'] or 0.0)
+            curr_avg_usd = float(row.get('avg_price_usd') or 0.0)
+            curr_buy_fx = float(row.get('buy_fx_rate') or 0.0)
+            if curr_buy_fx == 0.0 and curr_avg_usd > 0 and curr_avg_price > 0:
+                curr_buy_fx = curr_avg_price / curr_avg_usd
             
             if trade_type == 'INIT':
                 new_qty = quantity
-                new_avg_price = price
+                if is_us or currency == 'USD':
+                    new_avg_usd = price
+                    new_buy_fx = exchange_rate
+                    new_avg_price = round(new_avg_usd * new_buy_fx, 2)
+                else:
+                    new_avg_price = price
+                    new_avg_usd = 0.0
+                    new_buy_fx = 0.0
             elif trade_type == 'BUY':
                 new_qty = curr_qty + quantity
                 if new_qty > 0:
-                    new_avg_price = ((curr_qty * curr_avg_price) + (quantity * price)) / new_qty
+                    if is_us or currency == 'USD':
+                        c_usd_0 = curr_qty * curr_avg_usd
+                        c_krw_0 = c_usd_0 * curr_buy_fx
+                        c_usd_new = quantity * price
+                        c_krw_new = c_usd_new * exchange_rate
+                        
+                        total_c_usd = c_usd_0 + c_usd_new
+                        total_c_krw = c_krw_0 + c_krw_new
+                        
+                        new_avg_usd = total_c_usd / new_qty
+                        new_buy_fx = (total_c_krw / total_c_usd) if total_c_usd > 0 else exchange_rate
+                        new_avg_price = total_c_krw / new_qty
+                    else:
+                        new_avg_price = ((curr_qty * curr_avg_price) + (quantity * price)) / new_qty
+                        new_avg_usd = 0.0
+                        new_buy_fx = 0.0
                 else:
                     new_avg_price = price
+                    new_avg_usd = price if (is_us or currency == 'USD') else 0.0
+                    new_buy_fx = exchange_rate if (is_us or currency == 'USD') else 0.0
             else: # SELL
                 new_qty = curr_qty - quantity
                 new_avg_price = curr_avg_price
+                new_avg_usd = curr_avg_usd
+                new_buy_fx = curr_buy_fx
                 if new_qty <= 0:
-                    new_qty = 0
+                    new_qty = 0.0
                     new_avg_price = 0.0
+                    new_avg_usd = 0.0
+                    new_buy_fx = 0.0
                     
             cursor.execute('''
                 UPDATE holdings
-                SET quantity = %s, avg_price = %s
+                SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s
                 WHERE account_id = %s AND asset_id = %s
-            ''', (new_qty, new_avg_price, str(account_id), str(asset_id)))
+            ''', (new_qty, new_avg_price, new_avg_usd, new_buy_fx, str(account_id), str(asset_id)))
             
         else:
             if trade_type in ('BUY', 'INIT'):
                 new_h_id = generate_id()
+                if is_us or currency == 'USD':
+                    new_avg_usd = price
+                    new_buy_fx = exchange_rate
+                    new_avg_price = round(price * exchange_rate, 2)
+                else:
+                    new_avg_price = price
+                    new_avg_usd = 0.0
+                    new_buy_fx = 0.0
                 cursor.execute('''
-                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price)
-                    VALUES (%s, %s, %s, %s, %s)
-                ''', (new_h_id, str(account_id), str(asset_id), quantity, price))
+                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ''', (new_h_id, str(account_id), str(asset_id), quantity, new_avg_price, new_avg_usd, new_buy_fx))
             else:
                 conn.rollback()
                 return False, "매도할 보유 잔고가 없습니다."
@@ -1018,7 +1115,7 @@ def get_trade_history(portfolio_id: str = None):
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         if portfolio_id:
             cursor.execute('''
-                SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
+                SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker, ast.market
                 FROM trade_history t
                 JOIN accounts a ON t.account_id = a.id
                 JOIN assets ast ON t.asset_id = ast.id
@@ -1027,7 +1124,7 @@ def get_trade_history(portfolio_id: str = None):
             ''', (portfolio_id,))
         else:
             cursor.execute('''
-                SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker
+                SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker, ast.market
                 FROM trade_history t
                 JOIN accounts a ON t.account_id = a.id
                 JOIN assets ast ON t.asset_id = ast.id
@@ -1054,46 +1151,78 @@ def delete_trade(trade_id):
         cursor.execute("DELETE FROM trade_history WHERE id = %s", (str(trade_id),))
         
         cursor.execute('''
-            SELECT trade_type, quantity, price 
-            FROM trade_history 
-            WHERE account_id = %s AND asset_id = %s 
-            ORDER BY trade_date ASC, id ASC
+            SELECT t.trade_type, t.quantity, t.price, t.currency, t.exchange_rate, a.market
+            FROM trade_history t
+            JOIN assets a ON t.asset_id = a.id
+            WHERE t.account_id = %s AND t.asset_id = %s 
+            ORDER BY t.trade_date ASC, t.id ASC
         ''', (account_id, asset_id))
         
         remaining_trades = cursor.fetchall()
         
         new_qty = 0.0
         new_avg_price = 0.0
+        new_avg_usd = 0.0
+        new_buy_fx = 0.0
         
         for t in remaining_trades:
             t_type = t['trade_type']
             t_qty = float(t['quantity'])
             t_price = float(t['price'])
+            t_curr = t.get('currency') or ('USD' if t.get('market') == 'US' else 'KRW')
+            t_fx = float(t.get('exchange_rate') or 1.0)
+            is_t_us = (t_curr == 'USD' or t.get('market') == 'US')
             
             if t_type == 'INIT':
                 new_qty = t_qty
-                new_avg_price = t_price
+                if is_t_us:
+                    new_avg_usd = t_price
+                    new_buy_fx = t_fx
+                    new_avg_price = round(new_avg_usd * new_buy_fx, 2)
+                else:
+                    new_avg_price = t_price
+                    new_avg_usd = 0.0
+                    new_buy_fx = 0.0
             elif t_type == 'BUY':
                 next_qty = new_qty + t_qty
                 if next_qty > 0:
-                    new_avg_price = ((new_qty * new_avg_price) + (t_qty * t_price)) / next_qty
+                    if is_t_us:
+                        c_usd_0 = new_qty * new_avg_usd
+                        c_krw_0 = c_usd_0 * new_buy_fx
+                        c_usd_new = t_qty * t_price
+                        c_krw_new = c_usd_new * t_fx
+                        total_c_usd = c_usd_0 + c_usd_new
+                        total_c_krw = c_krw_0 + c_krw_new
+                        new_avg_usd = total_c_usd / next_qty
+                        new_buy_fx = (total_c_krw / total_c_usd) if total_c_usd > 0 else t_fx
+                        new_avg_price = total_c_krw / next_qty
+                    else:
+                        new_avg_price = ((new_qty * new_avg_price) + (t_qty * t_price)) / next_qty
+                        new_avg_usd = 0.0
+                        new_buy_fx = 0.0
                 else:
                     new_avg_price = t_price
+                    new_avg_usd = t_price if is_t_us else 0.0
+                    new_buy_fx = t_fx if is_t_us else 0.0
                 new_qty = next_qty
             else: # SELL
                 new_qty -= t_qty
                 if new_qty <= 0:
                     new_qty = 0.0
                     new_avg_price = 0.0
+                    new_avg_usd = 0.0
+                    new_buy_fx = 0.0
                     
         if new_qty > 0:
             cursor.execute('''
-                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(account_id, asset_id) DO UPDATE SET
                     quantity = EXCLUDED.quantity,
-                    avg_price = EXCLUDED.avg_price
-            ''', (generate_id(), account_id, asset_id, new_qty, new_avg_price))
+                    avg_price = EXCLUDED.avg_price,
+                    avg_price_usd = EXCLUDED.avg_price_usd,
+                    buy_fx_rate = EXCLUDED.buy_fx_rate
+            ''', (generate_id(), account_id, asset_id, new_qty, new_avg_price, new_avg_usd, new_buy_fx))
         else:
             cursor.execute('''
                 DELETE FROM holdings 

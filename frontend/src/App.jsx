@@ -276,6 +276,8 @@ export default function App() {
                   assets={assets}
                   accounts={accounts}
                   priceMap={priceMap}
+                  usdKrw={usdKrw}
+                  pricesData={pricesData}
                   currentPortfolioId={currentPortfolioId}
                   onSaved={() => loadAllData(false, currentPortfolioId)}
                 />

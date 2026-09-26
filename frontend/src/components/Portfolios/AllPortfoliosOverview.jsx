@@ -243,11 +243,24 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                       {formatUSD(grand?.usd_summary?.stock_profit_usd, true)} ({formatPercent(grand?.usd_summary?.stock_return_usd)})
                     </span>
                   </div>
+                  {(grand?.usd_summary?.stock_buy_usd || 0) > 0 && (
+                    <div className="dual-kpi-sub-row" style={{ marginTop: '4px', fontSize: '0.78rem' }}>
+                      <span className="dual-kpi-sub-label">💱 환차익(원화):</span>
+                      <span className="dual-kpi-sub-value" style={{ color: getProfitColor(grand?.usd_summary?.total_fx_profit_krw) }}>
+                        {formatKRW(grand?.usd_summary?.total_fx_profit_krw, true)} ({formatPercent(grand?.usd_summary?.total_fx_profit_pct)})
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="dual-kpi-footer">
                   <div className="dual-kpi-footer-item">
                     <span>외화 투자원금</span>
                     <strong>{formatUSD(grand?.usd_summary?.stock_buy_usd)}</strong>
+                    {(grand?.usd_summary?.weighted_buy_fx_rate || 0) > 0 && (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                        @ {formatKRW(grand?.usd_summary?.weighted_buy_fx_rate)}/$
+                      </span>
+                    )}
                   </div>
                   <div className="dual-kpi-footer-divider" />
                   <div className="dual-kpi-footer-item">
@@ -688,13 +701,25 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                           ? `${Number(item.total_quantity).toFixed(8).replace(/\.?0+$/, '')} ${item.ticker}` 
                           : `${Number(item.total_quantity).toLocaleString()}주`}
                       </td>
-                      <td>{isUsdMode ? formatUSD(item.weighted_avg_price_usd) : formatKRW(item.weighted_avg_price)}</td>
+                      <td>
+                        <div>{isUsdMode ? formatUSD(item.weighted_avg_price_usd) : formatKRW(item.weighted_avg_price)}</div>
+                        {isUs && item.buy_fx_rate > 0 && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                            {isUsdMode ? `매입환율: ${formatKRW(item.buy_fx_rate)}` : `$${item.weighted_avg_price_usd} (@ ${formatKRW(item.buy_fx_rate)})`}
+                          </div>
+                        )}
+                      </td>
                       <td>{isUsdMode ? formatUSD(item.current_price_usd) : formatKRW(item.current_price)}</td>
                       <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
                         {isUsdMode ? formatUSD(item.total_eval_amount_usd) : formatKRW(item.total_eval_amount)}
                       </td>
                       <td style={{ color: getProfitColor(rowProfit), fontWeight: 700 }}>
-                        {isUsdMode ? formatUSD(item.total_profit_usd, true) : `${rowProfit > 0 ? '+' : ''}${formatKRW(item.total_profit)}`}
+                        <div>{isUsdMode ? formatUSD(item.total_profit_usd, true) : `${rowProfit > 0 ? '+' : ''}${formatKRW(item.total_profit)}`}</div>
+                        {isUs && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
+                            주가 {isUsdMode ? formatUSD(item.total_profit_usd, true) : formatKRW(item.pure_stock_profit_krw, true)} / 환차 {formatKRW(item.fx_profit_krw, true)}
+                          </div>
+                        )}
                       </td>
                       <td style={{ color: getProfitColor(rowReturn), fontWeight: 700 }}>
                         {formatPercent(rowReturn)}

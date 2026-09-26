@@ -109,6 +109,12 @@ export default function DashboardTab({
     const usStockReturn = usStockBuy > 0 ? (usStockProfit / usStockBuy * 100) : 0;
     const usCash = Number(cash_assets?.usd_cash) || 0;
 
+    const totalFxProfitKrw = usStocks.reduce((sum, item) => sum + (Number(item.fx_profit_krw) || 0), 0);
+    const totalPureStockProfitKrw = usStocks.reduce((sum, item) => sum + (Number(item.pure_stock_profit_krw) || 0), 0);
+    const totalBuyKrw = usStocks.reduce((sum, item) => sum + (Number(item.buy_amount) || 0), 0);
+    const weightedBuyFxRate = usStockBuy > 0 ? (totalBuyKrw / usStockBuy) : (kpi?.usd_summary?.weighted_buy_fx_rate || 0);
+    const totalFxProfitPct = (weightedBuyFxRate > 0 && totalBuyKrw > 0) ? (totalFxProfitKrw / totalBuyKrw * 100) : 0;
+
     // KRW assets (Non-US stocks, gold, deposits)
     const krStocks = (displayStockAssets || []).filter(item => item.market !== 'US');
     const krStockEval = krStocks.reduce((sum, item) => sum + (Number(item.eval_amount) || 0), 0);
@@ -124,7 +130,11 @@ export default function DashboardTab({
         total_profit: usStockProfit,
         total_return: usStockReturn,
         cash: usCash,
-        isProfit: usStockProfit >= 0
+        isProfit: usStockProfit >= 0,
+        total_fx_profit_krw: totalFxProfitKrw,
+        total_fx_profit_pct: totalFxProfitPct,
+        pure_stock_profit_krw: totalPureStockProfitKrw,
+        weighted_buy_fx_rate: weightedBuyFxRate
       },
       krw: {
         total_eval: krStockEval,
@@ -135,7 +145,7 @@ export default function DashboardTab({
         isProfit: krStockProfit >= 0
       }
     };
-  }, [displayStockAssets, cash_assets]);
+  }, [displayStockAssets, cash_assets, kpi?.usd_summary]);
 
   const accSummaries = useMemo(() => {
     return dashboardData?.account_summaries || dashboardData?.accounts || [];
@@ -409,11 +419,24 @@ export default function DashboardTab({
                   {formatUSD(displayDualKpi.usd.total_profit, true)} ({formatPercent(displayDualKpi.usd.total_return)})
                 </span>
               </div>
+              {displayDualKpi.usd.total_buy > 0 && (
+                <div className="dual-kpi-sub-row" style={{ marginTop: '4px', fontSize: '0.78rem' }}>
+                  <span className="dual-kpi-sub-label">💱 환차익(원화):</span>
+                  <span className="dual-kpi-sub-value" style={{ color: getProfitColor(displayDualKpi.usd.total_fx_profit_krw) }}>
+                    {formatKRW(displayDualKpi.usd.total_fx_profit_krw, true)} ({formatPercent(displayDualKpi.usd.total_fx_profit_pct)})
+                  </span>
+                </div>
+              )}
             </div>
             <div className="dual-kpi-footer">
               <div className="dual-kpi-footer-item">
                 <span>외화 투자원금</span>
                 <strong>{formatUSD(displayDualKpi.usd.total_buy)}</strong>
+                {displayDualKpi.usd.weighted_buy_fx_rate > 0 && (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                    @ {formatKRW(displayDualKpi.usd.weighted_buy_fx_rate)}/$
+                  </span>
+                )}
               </div>
               <div className="dual-kpi-footer-divider" />
               <div className="dual-kpi-footer-item">
@@ -653,13 +676,23 @@ export default function DashboardTab({
                         {formatPercent(itemReturn)}
                       </td>
                       <td style={{ color: getProfitColor(itemProfit), fontWeight: 700 }}>
-                        {isUsdMode ? formatUSD(item.profit_usd, true) : `${itemProfit > 0 ? '+' : ''}${formatKRW(item.profit_krw)}`}
+                        <div>{isUsdMode ? formatUSD(item.profit_usd, true) : `${itemProfit > 0 ? '+' : ''}${formatKRW(item.profit_krw)}`}</div>
+                        {isUs && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
+                            주가 {isUsdMode ? formatUSD(item.profit_usd, true) : formatKRW(item.pure_stock_profit_krw, true)} / 환차 {formatKRW(item.fx_profit_krw, true)}
+                          </div>
+                        )}
                       </td>
                       <td style={{ fontWeight: 600 }}>
                         {isUsdMode ? formatUSD(item.eval_amount_usd) : formatKRW(item.eval_amount)}
                       </td>
                       <td>
-                        {isUsdMode ? formatUSD(item.avg_price_usd) : formatKRW(item.avg_price)}
+                        <div>{isUsdMode ? formatUSD(item.avg_price_usd) : formatKRW(item.avg_price)}</div>
+                        {isUs && item.buy_fx_rate > 0 && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                            {isUsdMode ? `매입환율: ${formatKRW(item.buy_fx_rate)}` : `$${item.avg_price_usd} (@ ${formatKRW(item.buy_fx_rate)})`}
+                          </div>
+                        )}
                       </td>
                       <td>
                         {isUsdMode ? formatUSD(item.current_price_usd) : formatKRW(item.current_price)}
@@ -811,6 +844,18 @@ export default function DashboardTab({
                     )}
                   </span>
                 </div>
+
+                {/* US Asset FX Rate & Profit Decomposition */}
+                {isUs && (
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                    <span>매입환율: {formatKRW(item.buy_fx_rate || 0)}</span>
+                    <span>
+                      주가 {isUsdMode ? formatUSD(item.profit_usd, true) : formatKRW(item.pure_stock_profit_krw, true)}
+                      {' · '}
+                      환차 {formatKRW(item.fx_profit_krw, true)}
+                    </span>
+                  </div>
+                )}
 
                 {/* Row 3: Weight info & Drift (투자 자산만 표시, 예금형 자산은 완전 제외) */}
                 {!item.is_deposit && incRebal && (
@@ -1120,11 +1165,23 @@ export default function DashboardTab({
                                   </td>
                                   <td>{h.ticker}</td>
                                   <td>{formatQuantity(h.quantity, h.unit)}</td>
-                                  <td>{isHUsdMode ? formatUSD(h.avg_price_usd) : formatKRW(h.avg_price)}</td>
+                                  <td>
+                                    <div>{isHUsdMode ? formatUSD(h.avg_price_usd) : formatKRW(h.avg_price)}</div>
+                                    {isHUs && h.buy_fx_rate > 0 && (
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                        {isHUsdMode ? `매입환율: ${formatKRW(h.buy_fx_rate)}` : `$${h.avg_price_usd} (@ ${formatKRW(h.buy_fx_rate)})`}
+                                      </div>
+                                    )}
+                                  </td>
                                   <td>{isHUsdMode ? formatUSD(h.current_price_usd) : formatKRW(h.current_price)}</td>
                                   <td style={{ fontWeight: 700 }}>{isHUsdMode ? formatUSD(h.eval_amount_usd) : formatKRW(h.eval_amount)}</td>
                                   <td style={{ color: getProfitColor(isHUsdMode ? h.profit_usd : h.profit_krw), fontWeight: 700 }}>
-                                    {isHUsdMode ? formatUSD(h.profit_usd, true) : `${(h.profit_krw || 0) > 0 ? '+' : ''}${formatKRW(h.profit_krw)}`} ({formatPercent(isHUsdMode ? h.profit_pct_usd : h.profit_pct)})
+                                    <div>{isHUsdMode ? formatUSD(h.profit_usd, true) : `${(h.profit_krw || 0) > 0 ? '+' : ''}${formatKRW(h.profit_krw)}`} ({formatPercent(isHUsdMode ? h.profit_pct_usd : h.profit_pct)})</div>
+                                    {isHUs && (
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
+                                        주가 {isHUsdMode ? formatUSD(h.profit_usd, true) : formatKRW(h.pure_stock_profit_krw, true)} / 환차 {formatKRW(h.fx_profit_krw, true)}
+                                      </div>
+                                    )}
                                   </td>
                                 </tr>
                               );
@@ -1191,6 +1248,16 @@ export default function DashboardTab({
                                 )}
                               </span>
                             </div>
+                            {isHUs && (
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                                <span>매입환율: {formatKRW(h.buy_fx_rate || 0)}</span>
+                                <span>
+                                  주가 {isHUsdMode ? formatUSD(h.profit_usd, true) : formatKRW(h.pure_stock_profit_krw, true)}
+                                  {' · '}
+                                  환차 {formatKRW(h.fx_profit_krw, true)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         );
                       })}

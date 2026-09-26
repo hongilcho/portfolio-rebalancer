@@ -5,17 +5,28 @@
  * 과거 거래 내역의 다차원 필터링 조회 및 일괄 삭제(평단가 자동 롤백)를 지원합니다.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { api } from '../../utils/api';
-import { formatKRW, formatQuantity } from '../../utils/formatters';
+import { formatKRW, formatUSD, formatQuantity } from '../../utils/formatters';
 
-export default function HistoryTab({ assets, accounts, priceMap, onSaved, currentPortfolioId = 'default' }) {
+export default function HistoryTab({ assets, accounts, priceMap, usdKrw = 1380.0, pricesData, onSaved, currentPortfolioId = 'default' }) {
   // Batch Trade Form State
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().split('T')[0]);
-  const [buyRows, setBuyRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0 }]);
-  const [sellRows, setSellRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0 }]);
+  const [buyRows, setBuyRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
+  const [sellRows, setSellRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
   const [savingBatch, setSavingBatch] = useState(false);
+
+  // Price map lookup for USD native prices
+  const usdPriceMap = useMemo(() => {
+    const map = {};
+    if (pricesData?.prices) {
+      pricesData.prices.forEach((p) => {
+        if (p.price_usd) map[String(p.id)] = p.price_usd;
+      });
+    }
+    return map;
+  }, [pricesData]);
 
   // Account Holdings Map for Sell Validation
   const [accountHoldingsMap, setAccountHoldingsMap] = useState({});
@@ -74,7 +85,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
   const addBuyRow = () => {
     setBuyRows((prev) => [
       ...prev,
-      { id: Date.now().toString(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0 }
+      { id: Date.now().toString(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }
     ]);
   };
 
@@ -89,7 +100,14 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
         if (r.id !== id) return r;
         const updated = { ...r, [field]: value };
         if (field === 'assetId' && value) {
-          updated.price = priceMap[String(value)] || 0;
+          const ast = assets.find((a) => String(a.id) === String(value));
+          if (ast?.market === 'US') {
+            updated.price = usdPriceMap[String(value)] || (priceMap[String(value)] ? Number((priceMap[String(value)] / (usdKrw || 1380)).toFixed(2)) : 0);
+            updated.exchangeRate = r.exchangeRate || usdKrw;
+          } else {
+            updated.price = priceMap[String(value)] || 0;
+            updated.exchangeRate = 1.0;
+          }
         }
         return updated;
       })
@@ -100,7 +118,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
   const addSellRow = () => {
     setSellRows((prev) => [
       ...prev,
-      { id: Date.now().toString(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0 }
+      { id: Date.now().toString(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }
     ]);
   };
 
@@ -115,7 +133,14 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
         if (r.id !== id) return r;
         const updated = { ...r, [field]: value };
         if (field === 'assetId' && value) {
-          updated.price = priceMap[String(value)] || 0;
+          const ast = assets.find((a) => String(a.id) === String(value));
+          if (ast?.market === 'US') {
+            updated.price = usdPriceMap[String(value)] || (priceMap[String(value)] ? Number((priceMap[String(value)] / (usdKrw || 1380)).toFixed(2)) : 0);
+            updated.exchangeRate = r.exchangeRate || usdKrw;
+          } else {
+            updated.price = priceMap[String(value)] || 0;
+            updated.exchangeRate = 1.0;
+          }
         }
         return updated;
       })
@@ -126,23 +151,35 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
   const handleSaveBatchTrades = async () => {
     const validBuys = buyRows
       .filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0)
-      .map((r) => ({
-        account_id: String(r.accountId),
-        asset_id: String(r.assetId),
-        trade_type: 'BUY',
-        quantity: Number(r.quantity),
-        price: Number(r.price)
-      }));
+      .map((r) => {
+        const ast = assets.find((a) => String(a.id) === String(r.assetId));
+        const isUS = ast?.market === 'US';
+        return {
+          account_id: String(r.accountId),
+          asset_id: String(r.assetId),
+          trade_type: 'BUY',
+          quantity: Number(r.quantity),
+          price: Number(r.price),
+          currency: isUS ? 'USD' : 'KRW',
+          exchange_rate: isUS ? Number(r.exchangeRate || usdKrw) : 1.0
+        };
+      });
 
     const validSells = sellRows
       .filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0)
-      .map((r) => ({
-        account_id: String(r.accountId),
-        asset_id: String(r.assetId),
-        trade_type: 'SELL',
-        quantity: Number(r.quantity),
-        price: Number(r.price)
-      }));
+      .map((r) => {
+        const ast = assets.find((a) => String(a.id) === String(r.assetId));
+        const isUS = ast?.market === 'US';
+        return {
+          account_id: String(r.accountId),
+          asset_id: String(r.assetId),
+          trade_type: 'SELL',
+          quantity: Number(r.quantity),
+          price: Number(r.price),
+          currency: isUS ? 'USD' : 'KRW',
+          exchange_rate: isUS ? Number(r.exchangeRate || usdKrw) : 1.0
+        };
+      });
 
     const allTrades = [...validBuys, ...validSells];
     if (allTrades.length === 0) {
@@ -155,8 +192,8 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
       const res = await api.batchExecuteTrades(tradeDate, allTrades);
       alert(res.message || '매매 내역이 성공적으로 저장되었습니다.');
       // Reset form
-      setBuyRows([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0 }]);
-      setSellRows([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0 }]);
+      setBuyRows([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
+      setSellRows([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
       loadTrades();
       onSaved();
     } catch (err) {
@@ -219,18 +256,29 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                   <th>종목명</th>
                   <th>티커</th>
                   <th>시장</th>
-                  <th>현재가 (원화 환산)</th>
+                  <th>실시간 현재가</th>
+                  <th>원화 환산가</th>
                 </tr>
               </thead>
               <tbody>
-                {assets.map((ast) => (
-                  <tr key={ast.id}>
-                    <td style={{ fontWeight: 600 }}>{ast.name}</td>
-                    <td>{ast.ticker}</td>
-                    <td>{ast.market === 'KR' ? '🇰🇷 국내' : '🇺🇸 미국'}</td>
-                    <td style={{ fontWeight: 700 }}>{formatKRW(priceMap[String(ast.id)])}</td>
-                  </tr>
-                ))}
+                {assets.map((ast) => {
+                  const isUS = ast.market === 'US';
+                  const usdP = usdPriceMap[String(ast.id)] || (priceMap[String(ast.id)] ? Number((priceMap[String(ast.id)] / (usdKrw || 1380)).toFixed(2)) : 0);
+                  const krwP = priceMap[String(ast.id)] || 0;
+                  return (
+                    <tr key={ast.id}>
+                      <td style={{ fontWeight: 600 }}>{isUS ? '🇺🇸 ' : '🇰🇷 '}{ast.name}</td>
+                      <td>{ast.ticker}</td>
+                      <td>{isUS ? '미국 (USD)' : '국내 (KRW)'}</td>
+                      <td style={{ fontWeight: 700 }}>
+                        {isUS ? formatUSD(usdP) : formatKRW(krwP)}
+                      </td>
+                      <td style={{ fontWeight: 600, color: isUS ? 'var(--text-secondary)' : 'inherit' }}>
+                        {formatKRW(krwP)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -265,6 +313,8 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
               const allowedForAcc = assets.filter((ast) =>
                 (ast.allowed_accounts || []).map(String).includes(String(row.accountId))
               );
+              const selectedAst = assets.find((a) => String(a.id) === String(row.assetId));
+              const isUS = selectedAst?.market === 'US';
 
               return (
                 <div key={row.id} className="trade-row-card">
@@ -289,7 +339,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                     >
                       <option value="">종목 선택</option>
                       {allowedForAcc.map((ast) => (
-                        <option key={ast.id} value={ast.id}>{ast.name}</option>
+                        <option key={ast.id} value={ast.id}>{ast.market === 'US' ? '🇺🇸 ' : ''}{ast.name}</option>
                       ))}
                     </select>
 
@@ -306,13 +356,13 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
 
                     <input
                       type="number"
-                      placeholder="단가(원)"
+                      placeholder={isUS ? '단가($ USD)' : '단가(원)'}
                       className="input-number"
                       style={{ fontSize: '0.82rem', padding: '6px' }}
                       value={row.price || ''}
                       onChange={(e) => updateBuyRow(row.id, 'price', parseFloat(e.target.value) || 0)}
                       min={0}
-                      step={100}
+                      step={isUS ? 0.01 : 100}
                     />
 
                     <button
@@ -345,7 +395,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                       >
                         <option value="">종목 선택</option>
                         {allowedForAcc.map((ast) => (
-                          <option key={ast.id} value={ast.id}>{ast.name}</option>
+                          <option key={ast.id} value={ast.id}>{ast.market === 'US' ? '🇺🇸 ' : ''}{ast.name}</option>
                         ))}
                       </select>
                     </div>
@@ -363,12 +413,12 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
 
                       <input
                         type="number"
-                        placeholder="체결단가 (원)"
+                        placeholder={isUS ? '단가 ($ USD)' : '체결단가 (원)'}
                         className="input-number"
                         value={row.price || ''}
                         onChange={(e) => updateBuyRow(row.id, 'price', parseFloat(e.target.value) || 0)}
                         min={0}
-                        step={100}
+                        step={isUS ? 0.01 : 100}
                       />
 
                       <button
@@ -381,6 +431,42 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                       </button>
                     </div>
                   </div>
+
+                  {/* US Asset Applied FX Rate Card & Preview */}
+                  {isUS && (
+                    <div style={{
+                      marginTop: '6px',
+                      padding: '8px 12px',
+                      background: 'rgba(59, 130, 246, 0.08)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid rgba(59, 130, 246, 0.25)',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                      fontSize: '0.8rem'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>🇺🇸 체결환율:</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          style={{ width: '85px', padding: '3px 6px', fontSize: '0.8rem' }}
+                          className="input-number"
+                          value={row.exchangeRate ?? usdKrw}
+                          onChange={(e) => updateBuyRow(row.id, 'exchangeRate', parseFloat(e.target.value) || 0)}
+                        />
+                        <span>원/$</span>
+                      </div>
+                      <div style={{ color: 'var(--text-secondary)' }}>
+                        1주당 ≈ <b>{formatKRW(row.price * (row.exchangeRate || usdKrw))}</b>
+                        {row.quantity > 0 && (
+                          <span> | 총액: <b>{formatUSD(row.quantity * row.price)}</b> (≈ {formatKRW(row.quantity * row.price * (row.exchangeRate || usdKrw))})</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -399,6 +485,8 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
 
             {sellRows.map((row) => {
               const accHoldings = (accountHoldingsMap[String(row.accountId)] || []).filter((h) => h.quantity > 0);
+              const selectedAst = assets.find((a) => String(a.id) === String(row.assetId));
+              const isUS = selectedAst?.market === 'US';
 
               return (
                 <div key={row.id} className="trade-row-card">
@@ -422,11 +510,14 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                       onChange={(e) => updateSellRow(row.id, 'assetId', e.target.value)}
                     >
                       <option value="">보유 종목 선택</option>
-                      {accHoldings.map((h) => (
-                        <option key={h.asset_id} value={h.asset_id}>
-                          {h.asset_name} (잔고: {h.quantity})
-                        </option>
-                      ))}
+                      {accHoldings.map((h) => {
+                        const holdingAst = assets.find(a => String(a.id) === String(h.asset_id));
+                        return (
+                          <option key={h.asset_id} value={h.asset_id}>
+                            {holdingAst?.market === 'US' ? '🇺🇸 ' : ''}{h.asset_name} (잔고: {h.quantity})
+                          </option>
+                        );
+                      })}
                     </select>
 
                     <input
@@ -442,13 +533,13 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
 
                     <input
                       type="number"
-                      placeholder="단가(원)"
+                      placeholder={isUS ? '단가($ USD)' : '단가(원)'}
                       className="input-number"
                       style={{ fontSize: '0.82rem', padding: '6px' }}
                       value={row.price || ''}
                       onChange={(e) => updateSellRow(row.id, 'price', parseFloat(e.target.value) || 0)}
                       min={0}
-                      step={100}
+                      step={isUS ? 0.01 : 100}
                     />
 
                     <button
@@ -480,11 +571,14 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                         onChange={(e) => updateSellRow(row.id, 'assetId', e.target.value)}
                       >
                         <option value="">보유 종목 선택</option>
-                        {accHoldings.map((h) => (
-                          <option key={h.asset_id} value={h.asset_id}>
-                            {h.asset_name} (잔고: {h.quantity})
-                          </option>
-                        ))}
+                        {accHoldings.map((h) => {
+                          const holdingAst = assets.find(a => String(a.id) === String(h.asset_id));
+                          return (
+                            <option key={h.asset_id} value={h.asset_id}>
+                              {holdingAst?.market === 'US' ? '🇺🇸 ' : ''}{h.asset_name} (잔고: {h.quantity})
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
 
@@ -501,12 +595,12 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
 
                       <input
                         type="number"
-                        placeholder="체결단가 (원)"
+                        placeholder={isUS ? '단가 ($ USD)' : '체결단가 (원)'}
                         className="input-number"
                         value={row.price || ''}
                         onChange={(e) => updateSellRow(row.id, 'price', parseFloat(e.target.value) || 0)}
                         min={0}
-                        step={100}
+                        step={isUS ? 0.01 : 100}
                       />
 
                       <button
@@ -519,6 +613,42 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                       </button>
                     </div>
                   </div>
+
+                  {/* US Asset Applied FX Rate Card & Preview */}
+                  {isUS && (
+                    <div style={{
+                      marginTop: '6px',
+                      padding: '8px 12px',
+                      background: 'rgba(59, 130, 246, 0.08)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid rgba(59, 130, 246, 0.25)',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                      fontSize: '0.8rem'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>🇺🇸 체결환율:</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          style={{ width: '85px', padding: '3px 6px', fontSize: '0.8rem' }}
+                          className="input-number"
+                          value={row.exchangeRate ?? usdKrw}
+                          onChange={(e) => updateSellRow(row.id, 'exchangeRate', parseFloat(e.target.value) || 0)}
+                        />
+                        <span>원/$</span>
+                      </div>
+                      <div style={{ color: 'var(--text-secondary)' }}>
+                        1주당 ≈ <b>{formatKRW(row.price * (row.exchangeRate || usdKrw))}</b>
+                        {row.quantity > 0 && (
+                          <span> | 총액: <b>{formatUSD(row.quantity * row.price)}</b> (≈ {formatKRW(row.quantity * row.price * (row.exchangeRate || usdKrw))})</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -592,7 +722,7 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
             >
               <option value="all">전체 종목</option>
               {assets.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
+                <option key={a.id} value={a.id}>{a.market === 'US' ? '🇺🇸 ' : ''}{a.name}</option>
               ))}
             </select>
           </div>
@@ -621,14 +751,16 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                     <th>종목</th>
                     <th>구분</th>
                     <th>수량</th>
-                    <th>단가(원)</th>
-                    <th>체결금액(원)</th>
+                    <th>체결단가</th>
+                    <th>체결금액 (원화환산)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {trades.map((t) => {
                     const isBuy = t.trade_type === 'BUY';
                     const isSelected = selectedTradeIds.includes(t.id);
+                    const isUS = t.currency === 'USD' || t.market === 'US';
+                    const fxRate = Number(t.exchange_rate || 1.0);
 
                     return (
                       <tr key={t.id} style={{ background: isSelected ? 'rgba(99, 102, 241, 0.1)' : undefined }}>
@@ -641,15 +773,39 @@ export default function HistoryTab({ assets, accounts, priceMap, onSaved, curren
                         </td>
                         <td>{t.trade_date}</td>
                         <td style={{ fontWeight: 600 }}>[{t.account_type}] {t.account_alias}</td>
-                        <td style={{ fontWeight: 600 }}>{t.asset_name}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          {isUS ? '🇺🇸 ' : ''}{t.asset_name}
+                        </td>
                         <td>
                           <span className={`badge ${isBuy ? 'badge-profit' : 'badge-loss'}`}>
                             {isBuy ? '매수' : '매도'}
                           </span>
                         </td>
                         <td>{formatQuantity(t.quantity)}</td>
-                        <td>{formatKRW(t.price)}</td>
-                        <td style={{ fontWeight: 700 }}>{formatKRW(t.total_amount)}</td>
+                        <td>
+                          {isUS ? (
+                            <div>
+                              <div style={{ fontWeight: 700 }}>{formatUSD(t.price)}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                @ {formatKRW(fxRate)}/$
+                              </div>
+                            </div>
+                          ) : (
+                            <div>{formatKRW(t.price)}</div>
+                          )}
+                        </td>
+                        <td>
+                          {isUS ? (
+                            <div>
+                              <div style={{ fontWeight: 700 }}>{formatKRW(t.total_amount_krw || (t.total_amount * fxRate))}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                ({formatUSD(t.total_amount)})
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ fontWeight: 700 }}>{formatKRW(t.total_amount)}</div>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

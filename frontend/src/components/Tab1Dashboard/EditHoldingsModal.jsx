@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
-import { formatKRW, formatUSD } from '../../utils/formatters';
+import { formatKRW, formatUSD, getProfitColor } from '../../utils/formatters';
 import KoreanNumberInput from '../common/KoreanNumberInput';
 
 export default function EditHoldingsModal({ 
@@ -42,13 +42,20 @@ export default function EditHoldingsModal({
           const isUs = h.market === 'US';
           const avgKrw = Number(h.avg_price || 0);
           let avgUsd = Number(h.avg_price_usd || 0);
-          if (isUs && avgUsd <= 0 && avgKrw > 0 && effectiveRate > 0) {
-            avgUsd = Math.round((avgKrw / effectiveRate) * 100) / 100;
+          let buyFx = Number(h.buy_fx_rate || 0);
+          if (isUs) {
+            if (buyFx <= 0) {
+              buyFx = avgUsd > 0 && avgKrw > 0 ? Math.round((avgKrw / avgUsd) * 100) / 100 : effectiveRate;
+            }
+            if (avgUsd <= 0 && avgKrw > 0 && buyFx > 0) {
+              avgUsd = Math.round((avgKrw / buyFx) * 100) / 100;
+            }
           }
           map[String(h.asset_id)] = {
             quantity: Number(h.quantity || 0),
             avg_price: avgKrw,
-            avg_price_usd: avgUsd
+            avg_price_usd: avgUsd,
+            buy_fx_rate: buyFx
           };
         });
         setHoldingsInputs(map);
@@ -74,12 +81,28 @@ export default function EditHoldingsModal({
 
   const handleAvgPriceUsdChange = (assetId, priceUsd) => {
     const numUsd = parseFloat(priceUsd) || 0;
-    const computedKrw = Math.round(numUsd * effectiveRate);
+    const currentBuyFx = Number(holdingsInputs[assetId]?.buy_fx_rate) || effectiveRate;
+    const computedKrw = Math.round(numUsd * currentBuyFx);
     setHoldingsInputs((prev) => ({
       ...prev,
       [assetId]: {
         ...prev[assetId],
         avg_price_usd: numUsd,
+        avg_price: computedKrw,
+        buy_fx_rate: currentBuyFx
+      }
+    }));
+  };
+
+  const handleBuyFxRateChange = (assetId, fxRate) => {
+    const numFx = parseFloat(fxRate) || 0;
+    const currentUsd = Number(holdingsInputs[assetId]?.avg_price_usd) || 0;
+    const computedKrw = Math.round(currentUsd * numFx);
+    setHoldingsInputs((prev) => ({
+      ...prev,
+      [assetId]: {
+        ...prev[assetId],
+        buy_fx_rate: numFx,
         avg_price: computedKrw
       }
     }));
@@ -102,12 +125,13 @@ export default function EditHoldingsModal({
     setSaving(true);
     try {
       const holdingsPayload = allowedAssets.map((ast) => {
-        const current = holdingsInputs[String(ast.id)] || { quantity: 0, avg_price: 0, avg_price_usd: 0 };
+        const current = holdingsInputs[String(ast.id)] || { quantity: 0, avg_price: 0, avg_price_usd: 0, buy_fx_rate: 0 };
         return {
           asset_id: String(ast.id),
           quantity: Number(current.quantity || 0),
           avg_price: Number(current.avg_price || 0),
-          avg_price_usd: Number(current.avg_price_usd || 0)
+          avg_price_usd: Number(current.avg_price_usd || 0),
+          buy_fx_rate: Number(current.buy_fx_rate || 0)
         };
       });
 
@@ -118,7 +142,7 @@ export default function EditHoldingsModal({
         holdings: holdingsPayload
       });
 
-      alert('예수금 및 보유 수량/평단가가 성공적으로 저장되었습니다.');
+      alert('예수금 및 보유 수량/평단가/매입환율이 성공적으로 저장되었습니다.');
       onSaved();
       onClose();
     } catch (err) {
@@ -227,7 +251,7 @@ export default function EditHoldingsModal({
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isUs ? 'repeat(auto-fit, minmax(170px, 1fr))' : '1fr 1fr', gap: '12px' }}>
                     {/* 1. 수량 입력 */}
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="form-label" style={{ fontSize: '0.78rem' }}>
@@ -243,32 +267,53 @@ export default function EditHoldingsModal({
                       />
                     </div>
 
-                    {/* 2. 평단가 입력: 미국 상장 자산은 USD($) 직접 입력, 국내 자산은 KRW(원) 입력 */}
+                    {/* 2. 평단가 입력: 미국 상장 자산은 USD($) 및 매입환율(원) 입력, 국내 자산은 KRW(원) 입력 */}
                     {isUs ? (
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>평균 매입단가 ($ USD)</span>
-                          <span className="badge badge-accent" style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
-                            달러 직접입력
-                          </span>
-                        </label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--accent-primary)' }}>$</span>
-                          <input
-                            type="number"
-                            className="input-number"
-                            style={{ paddingLeft: '24px', fontWeight: 700 }}
-                            value={h.avg_price_usd !== undefined && h.avg_price_usd !== null ? h.avg_price_usd : ''}
-                            placeholder="0.00"
-                            onChange={(e) => handleAvgPriceUsdChange(String(ast.id), e.target.value)}
-                            step={0.01}
-                            min={0}
-                          />
+                      <>
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>평균 매입단가 ($ USD)</span>
+                            <span className="badge badge-accent" style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
+                              달러 직접입력
+                            </span>
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--accent-primary)' }}>$</span>
+                            <input
+                              type="number"
+                              className="input-number"
+                              style={{ paddingLeft: '24px', fontWeight: 700 }}
+                              value={h.avg_price_usd !== undefined && h.avg_price_usd !== null ? h.avg_price_usd : ''}
+                              placeholder="0.00"
+                              onChange={(e) => handleAvgPriceUsdChange(String(ast.id), e.target.value)}
+                              step={0.01}
+                              min={0}
+                            />
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                          ≈ {formatKRW(h.avg_price)} <span style={{ opacity: 0.8 }}>(환율 {effectiveRate.toLocaleString()}원 적용)</span>
+
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>평균 매입환율 (원/$)</span>
+                            <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--color-safe)' }}>
+                              MTS 매입환율
+                            </span>
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--color-safe)' }}>₩</span>
+                            <input
+                              type="number"
+                              className="input-number"
+                              style={{ paddingLeft: '24px', fontWeight: 700 }}
+                              value={h.buy_fx_rate !== undefined && h.buy_fx_rate !== null ? h.buy_fx_rate : ''}
+                              placeholder={effectiveRate.toFixed(2)}
+                              onChange={(e) => handleBuyFxRateChange(String(ast.id), e.target.value)}
+                              step={0.1}
+                              min={0}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      </>
                     ) : (
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label" style={{ fontSize: '0.78rem' }}>
@@ -285,6 +330,38 @@ export default function EditHoldingsModal({
                       </div>
                     )}
                   </div>
+
+                  {/* 미국 자산 전용 실시간 원화 환산 평단가 및 환차익/환차손 미리보기 바 */}
+                  {isUs && (
+                    <div style={{
+                      marginTop: '10px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                      background: 'var(--bg-surface)',
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '0.78rem'
+                    }}>
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>원화 환산 평단가: </span>
+                        <strong style={{ color: 'var(--text-primary)', marginLeft: '4px' }}>{formatKRW(h.avg_price)}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>환율 차손익: </span>
+                        <strong style={{ color: getProfitColor(effectiveRate - (Number(h.buy_fx_rate) || effectiveRate)), marginLeft: '4px' }}>
+                          {(effectiveRate - (Number(h.buy_fx_rate) || effectiveRate)) > 0 ? '+' : ''}
+                          {(effectiveRate - (Number(h.buy_fx_rate) || effectiveRate)).toFixed(1)}원/$ (
+                          {(effectiveRate - (Number(h.buy_fx_rate) || effectiveRate)) > 0 ? '+' : ''}
+                          {(((effectiveRate - (Number(h.buy_fx_rate) || effectiveRate)) / (Number(h.buy_fx_rate) || effectiveRate)) * 100).toFixed(1)}%)
+                        </strong>
+                        <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>(현재 {effectiveRate.toLocaleString()}원)</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

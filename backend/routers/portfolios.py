@@ -257,11 +257,26 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
         profit_usd = (tot_eval_usd - tot_buy_usd) if is_us_asset else 0.0
         profit_pct_usd = (profit_usd / tot_buy_usd * 100) if (tot_buy_usd > 0 and is_us_asset) else 0.0
 
+        if is_us_asset and tot_buy_usd > 0:
+            weighted_buy_fx = (tot_buy / tot_buy_usd) if tot_buy_usd > 0 else (usd_krw or 1380.0)
+            fx_profit_krw = tot_buy_usd * ((usd_krw or 1380.0) - weighted_buy_fx)
+            fx_profit_pct = (((usd_krw or 1380.0) - weighted_buy_fx) / weighted_buy_fx * 100) if weighted_buy_fx > 0 else 0.0
+            pure_stock_profit_krw = profit_usd * (usd_krw or 1380.0)
+        else:
+            weighted_buy_fx = 0.0
+            fx_profit_krw = 0.0
+            fx_profit_pct = 0.0
+            pure_stock_profit_krw = profit
+
         item["weighted_avg_price_usd"] = round(weighted_avg_usd, 2)
         item["total_eval_amount_usd"] = round(tot_eval_usd, 2)
         item["total_buy_amount_usd"] = round(tot_buy_usd, 2)
         item["total_profit_usd"] = round(profit_usd, 2)
         item["total_profit_pct_usd"] = round(profit_pct_usd, 2)
+        item["buy_fx_rate"] = round(weighted_buy_fx, 2) if is_us_asset else 0.0
+        item["fx_profit_krw"] = round(fx_profit_krw, 0) if is_us_asset else 0.0
+        item["fx_profit_pct"] = round(fx_profit_pct, 2) if is_us_asset else 0.0
+        item["pure_stock_profit_krw"] = round(pure_stock_profit_krw, 0)
         aggregated_assets_list.append(item)
 
     # Crypto summary handling
@@ -348,6 +363,11 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     grand_stock_profit_usd = grand_stock_eval_usd - grand_stock_buy_usd
     grand_stock_return_usd = (grand_stock_profit_usd / grand_stock_buy_usd * 100) if grand_stock_buy_usd > 0 else 0.0
     
+    grand_total_fx_profit_krw = sum(a.get("fx_profit_krw", 0.0) for a in us_agg)
+    grand_total_pure_stock_profit_krw = sum(a.get("pure_stock_profit_krw", 0.0) for a in us_agg)
+    grand_weighted_buy_fx_rate = (sum(a.get("total_buy_amount", 0.0) for a in us_agg) / grand_stock_buy_usd) if grand_stock_buy_usd > 0 else (usd_krw or 1380.0)
+    grand_total_fx_profit_pct = (((usd_krw or 1380.0) - grand_weighted_buy_fx_rate) / grand_weighted_buy_fx_rate * 100) if grand_weighted_buy_fx_rate > 0 else 0.0
+
     total_usd_cash = sum(
         sum(float(acc.get("deposit_usd") or 0.0) for acc in accounts_by_pid.get(p["id"], []))
         for p in portfolios
@@ -360,7 +380,11 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
         "stock_return_usd": round(grand_stock_return_usd, 2),
         "cash_usd": round(total_usd_cash, 2),
         "total_eval_usd": round(grand_stock_eval_usd + total_usd_cash, 2),
-        "total_buy_usd": round(grand_stock_buy_usd + total_usd_cash, 2)
+        "total_buy_usd": round(grand_stock_buy_usd + total_usd_cash, 2),
+        "weighted_buy_fx_rate": round(grand_weighted_buy_fx_rate, 2),
+        "total_fx_profit_krw": round(grand_total_fx_profit_krw, 0),
+        "total_fx_profit_pct": round(grand_total_fx_profit_pct, 2),
+        "pure_stock_profit_krw": round(grand_total_pure_stock_profit_krw, 0)
     }
 
     kr_agg = [a for a in aggregated_assets_list if a.get("market") != "US"]

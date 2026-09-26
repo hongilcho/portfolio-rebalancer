@@ -172,6 +172,25 @@ def get_dashboard_summary(
             profit_usd = eval_val_usd - buy_amt_usd
             profit_pct_usd = (profit_usd / buy_amt_usd * 100) if buy_amt_usd > 0 else 0.0
 
+            # 매입환율 및 환차익/환차손 분해 계산
+            buy_fx_rate = float(h.get('buy_fx_rate') or 0.0)
+            if buy_fx_rate <= 0:
+                if avg_p_usd > 0 and avg_p_krw > 0:
+                    buy_fx_rate = round(avg_p_krw / avg_p_usd, 2)
+                else:
+                    buy_fx_rate = usd_krw
+
+            if is_us:
+                fx_profit_krw = buy_amt_usd * (usd_krw - buy_fx_rate)
+                fx_profit_pct = ((usd_krw - buy_fx_rate) / buy_fx_rate * 100) if buy_fx_rate > 0 else 0.0
+                pure_stock_profit_krw = profit_usd * usd_krw
+                pure_stock_profit_pct = profit_pct_usd
+            else:
+                fx_profit_krw = 0.0
+                fx_profit_pct = 0.0
+                pure_stock_profit_krw = profit_krw
+                pure_stock_profit_pct = profit_pct
+
             holding_details.append({
                 "asset_id": h['asset_id'],
                 "asset_name": h['asset_name'],
@@ -192,6 +211,11 @@ def get_dashboard_summary(
                 "buy_amount_usd": round(buy_amt_usd, 2) if is_us else 0.0,
                 "profit_usd": round(profit_usd, 2) if is_us else 0.0,
                 "profit_pct_usd": round(profit_pct_usd, 2) if is_us else 0.0,
+                "buy_fx_rate": round(buy_fx_rate, 2) if is_us else 0.0,
+                "fx_profit_krw": round(fx_profit_krw, 0) if is_us else 0.0,
+                "fx_profit_pct": round(fx_profit_pct, 2) if is_us else 0.0,
+                "pure_stock_profit_krw": round(pure_stock_profit_krw, 0),
+                "pure_stock_profit_pct": round(pure_stock_profit_pct, 2),
                 "is_risk_asset": bool(h.get('is_risk_asset', True)),
                 "is_deposit": is_deposit,
                 "deposit_principal": float(h.get('deposit_principal') or 0.0),
@@ -377,13 +401,26 @@ def get_dashboard_summary(
         if is_us and data.get('buy_amt_usd', 0.0) > 0:
             buy_amount_usd = data['buy_amt_usd']
             avg_price_usd = (buy_amount_usd / data['quantity']) if data['quantity'] > 0 else 0.0
+            weighted_buy_fx = (data['buy_amt_krw'] / buy_amount_usd) if buy_amount_usd > 0 else usd_krw
         else:
             avg_price_usd = (calc_avg_price / usd_krw) if (usd_krw and usd_krw > 0) else 0.0
             buy_amount_usd = data['quantity'] * avg_price_usd
+            weighted_buy_fx = usd_krw
 
         eval_amount_usd = data['quantity'] * curr_price_usd
         profit_usd = eval_amount_usd - buy_amount_usd
         profit_pct_usd = (profit_usd / buy_amount_usd * 100) if buy_amount_usd > 0 else 0.0
+
+        if is_us:
+            fx_profit_krw = buy_amount_usd * (usd_krw - weighted_buy_fx)
+            fx_profit_pct = ((usd_krw - weighted_buy_fx) / weighted_buy_fx * 100) if weighted_buy_fx > 0 else 0.0
+            pure_stock_profit_krw = profit_usd * usd_krw
+            pure_stock_profit_pct = profit_pct_usd
+        else:
+            fx_profit_krw = 0.0
+            fx_profit_pct = 0.0
+            pure_stock_profit_krw = profit_krw
+            pure_stock_profit_pct = profit_pct
 
         stock_summary_rows.append({
             "asset_id": aid,
@@ -406,6 +443,11 @@ def get_dashboard_summary(
             "buy_amount_usd": round(buy_amount_usd, 2) if is_us else 0.0,
             "profit_usd": round(profit_usd, 2) if is_us else 0.0,
             "profit_pct_usd": round(profit_pct_usd, 2) if is_us else 0.0,
+            "buy_fx_rate": round(weighted_buy_fx, 2) if is_us else 0.0,
+            "fx_profit_krw": round(fx_profit_krw, 0) if is_us else 0.0,
+            "fx_profit_pct": round(fx_profit_pct, 2) if is_us else 0.0,
+            "pure_stock_profit_krw": round(pure_stock_profit_krw, 0),
+            "pure_stock_profit_pct": round(pure_stock_profit_pct, 2),
             "weight_pct": weight_pct,
             "target_weight_pct": target_w,
             "drift_pct": drift_pct,
@@ -438,6 +480,11 @@ def get_dashboard_summary(
     total_stock_profit_usd = total_stock_eval_usd - total_stock_buy_usd
     total_stock_return_usd = (total_stock_profit_usd / total_stock_buy_usd * 100) if total_stock_buy_usd > 0 else 0.0
     
+    total_fx_profit_krw = sum(r.get('fx_profit_krw', 0.0) for r in us_stock_rows)
+    total_pure_stock_profit_krw = sum(r.get('pure_stock_profit_krw', 0.0) for r in us_stock_rows)
+    weighted_buy_fx_rate = (sum(r['buy_amount'] for r in us_stock_rows) / total_stock_buy_usd) if total_stock_buy_usd > 0 else usd_krw
+    total_fx_profit_pct = ((usd_krw - weighted_buy_fx_rate) / weighted_buy_fx_rate * 100) if weighted_buy_fx_rate > 0 else 0.0
+
     kr_stock_rows = [r for r in stock_summary_rows if r.get('market') != 'US' and r.get('quantity', 0) > 0]
     total_stock_eval_krw_only = sum(r['eval_amount'] for r in kr_stock_rows)
     total_stock_buy_krw_only = sum(r['buy_amount'] for r in kr_stock_rows)
@@ -459,7 +506,11 @@ def get_dashboard_summary(
                 "stock_return_usd": round(total_stock_return_usd, 2),
                 "cash_usd": round(total_usd_cash, 2),
                 "total_eval_usd": round(total_stock_eval_usd + total_usd_cash, 2),
-                "total_buy_usd": round(total_stock_buy_usd + total_usd_cash, 2)
+                "total_buy_usd": round(total_stock_buy_usd + total_usd_cash, 2),
+                "weighted_buy_fx_rate": round(weighted_buy_fx_rate, 2),
+                "total_fx_profit_krw": round(total_fx_profit_krw, 0),
+                "total_fx_profit_pct": round(total_fx_profit_pct, 2),
+                "pure_stock_profit_krw": round(total_pure_stock_profit_krw, 0)
             },
             "krw_summary": {
                 "stock_eval_krw": round(total_stock_eval_krw_only, 0),

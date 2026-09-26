@@ -19,6 +19,8 @@ class TradeBatchItem(BaseModel):
     trade_type: str # 'BUY' or 'SELL'
     quantity: float
     price: float
+    currency: Optional[str] = None
+    exchange_rate: Optional[float] = None
 
 class BatchTradeRequest(BaseModel):
     """일괄 매매 기록 실행 요청 스키마"""
@@ -51,7 +53,14 @@ def list_trades(
         filtered = [t for t in filtered if str(t['asset_id']) == asset_id]
         
     for t in filtered:
-        t['total_amount'] = float(t['quantity']) * float(t['price'])
+        qty = float(t.get('quantity') or 0.0)
+        p = float(t.get('price') or 0.0)
+        t['total_amount'] = qty * p
+        if t.get('currency') == 'USD' or t.get('market') == 'US':
+            fx = float(t.get('exchange_rate') or 1.0)
+            t['total_amount_krw'] = round(qty * p * fx)
+        else:
+            t['total_amount_krw'] = round(qty * p)
         
     return {"trades": filtered}
 
@@ -70,7 +79,9 @@ def execute_batch_trades(req: BatchTradeRequest):
             asset_id=item.asset_id,
             trade_type=item.trade_type,
             quantity=item.quantity,
-            price=item.price
+            price=item.price,
+            currency=item.currency,
+            exchange_rate=item.exchange_rate
         )
         if success:
             success_count += 1

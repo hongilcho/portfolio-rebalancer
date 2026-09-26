@@ -22,6 +22,7 @@ class HoldingInputItem(BaseModel):
     quantity: float
     avg_price: float = 0.0
     avg_price_usd: Optional[float] = 0.0
+    buy_fx_rate: Optional[float] = 0.0
 
 class SaveAccountHoldingsRequest(BaseModel):
     """계좌별 예수금 및 보유 종목 저장 요청 스키마"""
@@ -74,12 +75,18 @@ def save_holdings(req: SaveAccountHoldingsRequest):
         asset_info = assets_map.get(aid, {})
         is_us = (asset_info.get('market') == 'US')
         
-        # If user entered avg_price_usd but avg_price is 0, compute KRW
-        if is_us and h_dict.get('avg_price_usd', 0.0) > 0 and h_dict.get('avg_price', 0.0) <= 0:
-            h_dict['avg_price'] = round(h_dict['avg_price_usd'] * usd_krw)
-        # If user entered avg_price (KRW) but avg_price_usd is 0, compute USD
+        # 미국 자산: 달러 매입단가와 매입환율 상호 연계 보정
+        if is_us and h_dict.get('avg_price_usd', 0.0) > 0:
+            buy_fx = float(h_dict.get('buy_fx_rate') or 0.0)
+            if buy_fx <= 0:
+                buy_fx = usd_krw
+                h_dict['buy_fx_rate'] = buy_fx
+            if h_dict.get('avg_price', 0.0) <= 0:
+                h_dict['avg_price'] = round(h_dict['avg_price_usd'] * buy_fx)
         elif is_us and h_dict.get('avg_price', 0.0) > 0 and h_dict.get('avg_price_usd', 0.0) <= 0:
             h_dict['avg_price_usd'] = round(h_dict['avg_price'] / usd_krw, 2)
+            if not h_dict.get('buy_fx_rate') or float(h_dict.get('buy_fx_rate')) <= 0:
+                h_dict['buy_fx_rate'] = usd_krw
             
         holdings_data.append(h_dict)
 
