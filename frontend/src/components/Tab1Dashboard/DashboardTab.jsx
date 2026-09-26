@@ -657,7 +657,7 @@ export default function DashboardTab({
                         {item.name}
                         {isUs && (
                           <span className="badge badge-accent" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
-                            🇺🇸 US
+                            US
                           </span>
                         )}
                         {item.is_deposit && (
@@ -806,7 +806,7 @@ export default function DashboardTab({
                     <span>{item.name}</span>
                     {isUs && (
                       <span className="badge badge-accent" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
-                        🇺🇸 US
+                        US
                       </span>
                     )}
                     {item.is_deposit ? (
@@ -1154,7 +1154,7 @@ export default function DashboardTab({
                                     {h.asset_name}
                                     {isHUs && (
                                       <span className="badge badge-accent" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
-                                        🇺🇸 US
+                                        US
                                       </span>
                                     )}
                                     {h.is_deposit && (
@@ -1217,7 +1217,7 @@ export default function DashboardTab({
                                 <span>{h.asset_name}</span>
                                 {isHUs && (
                                   <span className="badge badge-accent" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
-                                    🇺🇸 US
+                                    US
                                   </span>
                                 )}
                                 {h.is_deposit ? (
