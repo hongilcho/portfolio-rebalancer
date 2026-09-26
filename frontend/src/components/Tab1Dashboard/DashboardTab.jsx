@@ -762,7 +762,7 @@ export default function DashboardTab({
           {displayStockAssets?.map((item) => {
             const isUs = item.market === 'US';
             const isUsdMode = currencyMode === 'USD' && isUs;
-            const isItemProfit = isUsdMode ? ((item.profit_usd || 0) >= 0) : ((item.profit_krw || 0) >= 0);
+            const itemProfit = isUsdMode ? (item.profit_usd || 0) : (item.profit_krw || 0);
             const incRebal = item.include_in_rebalance !== false;
 
             return (
