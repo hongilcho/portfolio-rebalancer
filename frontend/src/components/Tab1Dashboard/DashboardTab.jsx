@@ -22,7 +22,7 @@ import {
   ShieldAlert, 
   ChevronDown, ChevronUp, Edit2, RefreshCw, PieChart 
 } from 'lucide-react';
-import { formatKRW, formatUSD, formatQuantity, formatPercent } from '../../utils/formatters';
+import { formatKRW, formatUSD, formatQuantity, formatPercent, getProfitColor } from '../../utils/formatters';
 import DriftBar from '../common/DriftBar';
 import DonutChart from '../common/DonutChart';
 import EditHoldingsModal from './EditHoldingsModal';
@@ -405,7 +405,7 @@ export default function DashboardTab({
               </div>
               <div className="dual-kpi-sub-row">
                 <span className="dual-kpi-sub-label">외화 평가손익:</span>
-                <span className={`dual-kpi-sub-value ${displayDualKpi.usd.isProfit ? 'text-profit' : 'text-loss'}`}>
+                <span className="dual-kpi-sub-value" style={{ color: getProfitColor(displayDualKpi.usd.total_profit) }}>
                   {formatUSD(displayDualKpi.usd.total_profit, true)} ({formatPercent(displayDualKpi.usd.total_return)})
                 </span>
               </div>
@@ -441,7 +441,7 @@ export default function DashboardTab({
               </div>
               <div className="dual-kpi-sub-row">
                 <span className="dual-kpi-sub-label">원화 평가손익:</span>
-                <span className={`dual-kpi-sub-value ${displayDualKpi.krw.isProfit ? 'text-profit' : 'text-loss'}`}>
+                <span className="dual-kpi-sub-value" style={{ color: getProfitColor(displayDualKpi.krw.total_profit) }}>
                   {formatKRW(displayDualKpi.krw.total_profit, true)} ({formatPercent(displayDualKpi.krw.total_return)})
                 </span>
               </div>
@@ -473,14 +473,14 @@ export default function DashboardTab({
 
           <div className="kpi-card">
             <div className="kpi-title">총 평가 손익 {includeDeposits ? '' : '(예금 제외)'}</div>
-            <div className="kpi-value" style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
-              {isProfit ? '+' : ''}{formatKRW(displayKpi?.total_stock_profit)}
+            <div className="kpi-value" style={{ color: getProfitColor(displayKpi?.total_stock_profit) }}>
+              {(displayKpi?.total_stock_profit || 0) > 0 ? '+' : ''}{formatKRW(displayKpi?.total_stock_profit)}
             </div>
           </div>
 
           <div className="kpi-card">
             <div className="kpi-title">총 수익률 {includeDeposits ? '' : '(예금 제외)'}</div>
-            <div className="kpi-value" style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+            <div className="kpi-value" style={{ color: getProfitColor(displayKpi?.total_stock_return) }}>
               {formatPercent(displayKpi?.total_stock_return)}
             </div>
           </div>
@@ -625,7 +625,8 @@ export default function DashboardTab({
                 {displayStockAssets?.map((item) => {
                   const isUs = item.market === 'US';
                   const isUsdMode = currencyMode === 'USD' && isUs;
-                  const isItemProfit = isUsdMode ? ((item.profit_usd || 0) >= 0) : ((item.profit_krw || 0) >= 0);
+                  const itemProfit = isUsdMode ? (item.profit_usd || 0) : (item.profit_krw || 0);
+                  const itemReturn = isUsdMode ? (item.profit_pct_usd !== undefined ? item.profit_pct_usd : item.profit_pct) : item.profit_pct;
 
                   return (
                     <tr key={item.asset_id}>
@@ -648,11 +649,11 @@ export default function DashboardTab({
                         )}
                       </td>
                       <td>{formatQuantity(item.quantity, item.unit)}</td>
-                      <td style={{ color: isItemProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                        {formatPercent(isUsdMode ? (item.profit_pct_usd !== undefined ? item.profit_pct_usd : item.profit_pct) : item.profit_pct)}
+                      <td style={{ color: getProfitColor(itemReturn), fontWeight: 700 }}>
+                        {formatPercent(itemReturn)}
                       </td>
-                      <td style={{ color: isItemProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                        {isUsdMode ? formatUSD(item.profit_usd, true) : `${isItemProfit ? '+' : ''}${formatKRW(item.profit_krw)}`}
+                      <td style={{ color: getProfitColor(itemProfit), fontWeight: 700 }}>
+                        {isUsdMode ? formatUSD(item.profit_usd, true) : `${itemProfit > 0 ? '+' : ''}${formatKRW(item.profit_krw)}`}
                       </td>
                       <td style={{ fontWeight: 600 }}>
                         {isUsdMode ? formatUSD(item.eval_amount_usd) : formatKRW(item.eval_amount)}
@@ -670,18 +671,38 @@ export default function DashboardTab({
                 <tr className="total-row">
                   <td>{includeDeposits ? '총합계' : '총합계 (예금 제외)'}</td>
                   <td>-</td>
-                  <td style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                    {formatPercent(displayKpi?.total_stock_return)}
-                  </td>
-                  <td style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
+                  <td style={{ fontWeight: 700 }}>
                     {currencyMode === 'USD' ? (
                       <span>
-                        🇺🇸 {formatUSD(displayDualKpi.usd.total_profit, true)}
-                        <span style={{ margin: '0 4px', color: 'var(--text-muted)' }}>|</span>
-                        🇰🇷 {formatKRW(displayDualKpi.krw.total_profit, true)}
+                        <span style={{ color: getProfitColor(displayDualKpi.usd.total_return) }}>
+                          🇺🇸 {formatPercent(displayDualKpi.usd.total_return)}
+                        </span>
+                        <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>|</span>
+                        <span style={{ color: getProfitColor(displayDualKpi.krw.total_return) }}>
+                          🇰🇷 {formatPercent(displayDualKpi.krw.total_return)}
+                        </span>
                       </span>
                     ) : (
-                      `${isProfit ? '+' : ''}${formatKRW(displayKpi?.total_stock_profit)}`
+                      <span style={{ color: getProfitColor(displayKpi?.total_stock_return) }}>
+                        {formatPercent(displayKpi?.total_stock_return)}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ fontWeight: 700 }}>
+                    {currencyMode === 'USD' ? (
+                      <span>
+                        <span style={{ color: getProfitColor(displayDualKpi.usd.total_profit) }}>
+                          🇺🇸 {formatUSD(displayDualKpi.usd.total_profit, true)}
+                        </span>
+                        <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>|</span>
+                        <span style={{ color: getProfitColor(displayDualKpi.krw.total_profit) }}>
+                          🇰🇷 {formatKRW(displayDualKpi.krw.total_profit, true)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span style={{ color: getProfitColor(displayKpi?.total_stock_profit) }}>
+                        {(displayKpi?.total_stock_profit || 0) > 0 ? '+' : ''}{formatKRW(displayKpi?.total_stock_profit)}
+                      </span>
                     )}
                   </td>
                   <td style={{ fontWeight: 700 }}>
@@ -782,11 +803,11 @@ export default function DashboardTab({
                     <span style={{ color: 'var(--text-muted)' }}>·</span>
                     <span>현재 {isUsdMode ? formatUSD(item.current_price_usd) : formatKRW(item.current_price)}</span>
                   </span>
-                  <span className="mobile-card-stat" style={{ color: isItemProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                  <span className="mobile-card-stat" style={{ color: getProfitColor(itemProfit) }}>
                     {isUsdMode ? (
                       `${formatUSD(item.profit_usd, true)} (${formatPercent(item.profit_pct_usd !== undefined ? item.profit_pct_usd : item.profit_pct)})`
                     ) : (
-                      `${isItemProfit ? '+' : ''}${formatKRW(item.profit_krw)} (${formatPercent(item.profit_pct)})`
+                      `${itemProfit > 0 ? '+' : ''}${formatKRW(item.profit_krw)} (${formatPercent(item.profit_pct)})`
                     )}
                   </span>
                 </div>
@@ -959,8 +980,8 @@ export default function DashboardTab({
                       </div>
                       <div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>손익 (수익률)</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 700, color: isAccProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
-                          {isAccProfit ? '+' : ''}{formatKRW(accStockProfit)} ({formatPercent(accStockReturn)})
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700, color: getProfitColor(accStockProfit) }}>
+                          {(accStockProfit || 0) > 0 ? '+' : ''}{formatKRW(accStockProfit)} ({formatPercent(accStockReturn)})
                         </div>
                       </div>
                       <div>
@@ -1102,8 +1123,8 @@ export default function DashboardTab({
                                   <td>{isHUsdMode ? formatUSD(h.avg_price_usd) : formatKRW(h.avg_price)}</td>
                                   <td>{isHUsdMode ? formatUSD(h.current_price_usd) : formatKRW(h.current_price)}</td>
                                   <td style={{ fontWeight: 700 }}>{isHUsdMode ? formatUSD(h.eval_amount_usd) : formatKRW(h.eval_amount)}</td>
-                                  <td style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                                    {isHUsdMode ? formatUSD(h.profit_usd, true) : `${isHProfit ? '+' : ''}${formatKRW(h.profit_krw)}`} ({formatPercent(isHUsdMode ? h.profit_pct_usd : h.profit_pct)})
+                                  <td style={{ color: getProfitColor(isHUsdMode ? h.profit_usd : h.profit_krw), fontWeight: 700 }}>
+                                    {isHUsdMode ? formatUSD(h.profit_usd, true) : `${(h.profit_krw || 0) > 0 ? '+' : ''}${formatKRW(h.profit_krw)}`} ({formatPercent(isHUsdMode ? h.profit_pct_usd : h.profit_pct)})
                                   </td>
                                 </tr>
                               );
@@ -1162,11 +1183,11 @@ export default function DashboardTab({
                                 <span style={{ color: 'var(--text-muted)' }}>·</span>
                                 <span>현재 {isHUsdMode ? formatUSD(h.current_price_usd) : formatKRW(h.current_price)}</span>
                               </span>
-                              <span className="mobile-card-stat" style={{ color: isHProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                              <span className="mobile-card-stat" style={{ color: getProfitColor(isHUsdMode ? h.profit_usd : h.profit_krw) }}>
                                 {isHUsdMode ? (
                                   `${formatUSD(h.profit_usd, true)} (${formatPercent(h.profit_pct_usd !== undefined ? h.profit_pct_usd : h.profit_pct)})`
                                 ) : (
-                                  `${isHProfit ? '+' : ''}${formatKRW(h.profit_krw)} (${formatPercent(h.profit_pct)})`
+                                  `${(h.profit_krw || 0) > 0 ? '+' : ''}${formatKRW(h.profit_krw)} (${formatPercent(h.profit_pct)})`
                                 )}
                               </span>
                             </div>
@@ -1200,6 +1221,7 @@ export default function DashboardTab({
         <EditHoldingsModal
           accounts={accounts}
           assets={assets}
+          usdKrw={dashboardData?.usd_krw || 1350}
           onClose={() => setIsEditModalOpen(false)}
           onSaved={() => {
             setIsEditModalOpen(false);

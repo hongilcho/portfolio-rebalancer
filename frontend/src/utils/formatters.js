@@ -72,3 +72,15 @@ export function formatPercent(val, showSign = true) {
   const sign = showSign && num > 0 ? '+' : '';
   return `${sign}${num.toFixed(1)}%`;
 }
+
+/**
+ * 한국 금융 시장 관례에 맞춘 손익 색상 CSS 변수 반환 (이익: 빨강, 손실: 파랑)
+ * @param {number} val 손익 금액 또는 수익률
+ * @returns {string} CSS color var
+ */
+export function getProfitColor(val) {
+  const num = Number(val);
+  if (isNaN(num) || num === 0) return 'var(--text-secondary)';
+  return num > 0 ? 'var(--color-profit)' : 'var(--color-loss)';
+}
+

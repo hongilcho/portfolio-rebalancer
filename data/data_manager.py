@@ -253,11 +253,14 @@ def _do_init_db_schema(conn, cursor):
             asset_id TEXT NOT NULL,
             quantity REAL DEFAULT 0.0,
             avg_price REAL DEFAULT 0.0,
+            avg_price_usd REAL DEFAULT 0.0,
             FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
             UNIQUE(account_id, asset_id)
         )
     ''')
+    cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS avg_price_usd REAL DEFAULT 0.0")
+
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS trade_history (
@@ -814,8 +817,9 @@ def save_account_holdings(account_id, holdings_data):
             aid = str(item['asset_id'])
             qty = float(item.get('quantity', 0.0))
             avg_p = float(item.get('avg_price', 0.0))
+            avg_p_usd = float(item.get('avg_price_usd', 0.0))
             
-            if qty < 0 or avg_p < 0:
+            if qty < 0 or avg_p < 0 or avg_p_usd < 0:
                 conn.rollback()
                 return False, "수량과 평단가는 0 이상이어야 합니다."
                 
@@ -827,10 +831,10 @@ def save_account_holdings(account_id, holdings_data):
                     cursor.execute("DELETE FROM holdings WHERE id = %s", (row[0],))
             else:
                 if row:
-                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s WHERE id = %s", (qty, avg_p, row[0]))
+                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s, avg_price_usd = %s WHERE id = %s", (qty, avg_p, avg_p_usd, row[0]))
                 else:
                     new_h_id = generate_id()
-                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price) VALUES (%s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p))
+                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd) VALUES (%s, %s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p, avg_p_usd))
                     
                 new_trade_id = generate_id()
                 cursor.execute('''

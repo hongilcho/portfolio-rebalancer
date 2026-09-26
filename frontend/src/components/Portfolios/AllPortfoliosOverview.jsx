@@ -20,7 +20,7 @@ import {
   Layers, ArrowRight, CheckSquare, Square, PieChart
 } from 'lucide-react';
 import { api } from '../../utils/api';
-import { formatKRW, formatUSD, formatPercent } from '../../utils/formatters';
+import { formatKRW, formatUSD, formatPercent, getProfitColor } from '../../utils/formatters';
 import DonutChart from '../common/DonutChart';
 
 let _overviewCache = null;
@@ -239,7 +239,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                   </div>
                   <div className="dual-kpi-sub-row">
                     <span className="dual-kpi-sub-label">외화 평가손익:</span>
-                    <span className={`dual-kpi-sub-value ${(grand?.usd_summary?.stock_profit_usd || 0) >= 0 ? 'text-profit' : 'text-loss'}`}>
+                    <span className="dual-kpi-sub-value" style={{ color: getProfitColor(grand?.usd_summary?.stock_profit_usd) }}>
                       {formatUSD(grand?.usd_summary?.stock_profit_usd, true)} ({formatPercent(grand?.usd_summary?.stock_return_usd)})
                     </span>
                   </div>
@@ -275,7 +275,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                   </div>
                   <div className="dual-kpi-sub-row">
                     <span className="dual-kpi-sub-label">원화 평가손익:</span>
-                    <span className={`dual-kpi-sub-value ${(grand?.krw_summary?.stock_profit_krw || 0) >= 0 ? 'text-profit' : 'text-loss'}`}>
+                    <span className="dual-kpi-sub-value" style={{ color: getProfitColor(grand?.krw_summary?.stock_profit_krw) }}>
                       {formatKRW(grand?.krw_summary?.stock_profit_krw, true)} ({formatPercent(grand?.krw_summary?.stock_return_krw)})
                     </span>
                   </div>
@@ -347,8 +347,8 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
 
             <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
               <div className="kpi-title">📈 통합 총 평가손익 (수익률)</div>
-              <div className="kpi-value" style={{ color: isGrandProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontSize: '1.5rem' }}>
-                {isGrandProfit ? '+' : ''}{formatKRW(grand.total_profit)}
+              <div className="kpi-value" style={{ color: getProfitColor(grand.total_profit), fontSize: '1.5rem' }}>
+                {(grand.total_profit || 0) > 0 ? '+' : ''}{formatKRW(grand.total_profit)}
                 <span style={{ fontSize: '0.95rem', marginLeft: '6px', fontWeight: 600 }}>
                   ({formatPercent(grand.total_profit_pct)})
                 </span>
@@ -534,10 +534,10 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                     </td>
                     <td>{formatKRW(p.total_buy)}</td>
                     <td style={{ fontWeight: 700 }}>{formatKRW(p.total_eval)}</td>
-                    <td style={{ color: isPProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                      {isPProfit ? '+' : ''}{formatKRW(p.total_profit)}
+                    <td style={{ color: getProfitColor(p.total_profit), fontWeight: 700 }}>
+                      {(p.total_profit || 0) > 0 ? '+' : ''}{formatKRW(p.total_profit)}
                     </td>
-                    <td style={{ color: isPProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
+                    <td style={{ color: getProfitColor(p.total_profit_pct), fontWeight: 700 }}>
                       {formatPercent(p.total_profit_pct)}
                     </td>
                     <td style={{ color: 'var(--text-secondary)' }}>
@@ -573,10 +573,10 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                   </td>
                   <td>{formatKRW(crypto.total_buy)}</td>
                   <td style={{ fontWeight: 700 }}>{formatKRW(crypto.total_eval)}</td>
-                  <td style={{ color: (crypto.total_profit || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                    {(crypto.total_profit || 0) >= 0 ? '+' : ''}{formatKRW(crypto.total_profit)}
+                  <td style={{ color: getProfitColor(crypto.total_profit), fontWeight: 700 }}>
+                    {(crypto.total_profit || 0) > 0 ? '+' : ''}{formatKRW(crypto.total_profit)}
                   </td>
-                  <td style={{ color: (crypto.total_profit || 0) >= 0 ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
+                  <td style={{ color: getProfitColor(crypto.total_profit_pct), fontWeight: 700 }}>
                     {formatPercent(crypto.total_profit_pct)}
                   </td>
                   <td style={{ color: 'var(--text-secondary)' }}>
@@ -657,8 +657,9 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                 aggregatedAssets.map((item) => {
                   const isUs = item.market === 'US';
                   const isUsdMode = currencyMode === 'USD' && isUs;
-                  const isProfit = isUsdMode ? ((item.total_profit_usd || 0) >= 0) : ((item.total_profit || 0) >= 0);
                   const isCryptoItem = item.asset_type === 'CRYPTO';
+                  const rowProfit = isUsdMode ? (item.total_profit_usd || 0) : (item.total_profit || 0);
+                  const rowReturn = isUsdMode ? (item.total_profit_pct_usd || 0) : (item.total_profit_pct || 0);
 
                   return (
                     <tr key={item.key}>
@@ -692,11 +693,11 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                       <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
                         {isUsdMode ? formatUSD(item.total_eval_amount_usd) : formatKRW(item.total_eval_amount)}
                       </td>
-                      <td style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                        {isUsdMode ? formatUSD(item.total_profit_usd, true) : `${isProfit ? '+' : ''}${formatKRW(item.total_profit)}`}
+                      <td style={{ color: getProfitColor(rowProfit), fontWeight: 700 }}>
+                        {isUsdMode ? formatUSD(item.total_profit_usd, true) : `${rowProfit > 0 ? '+' : ''}${formatKRW(item.total_profit)}`}
                       </td>
-                      <td style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 700 }}>
-                        {formatPercent(isUsdMode ? item.total_profit_pct_usd : item.total_profit_pct)}
+                      <td style={{ color: getProfitColor(rowReturn), fontWeight: 700 }}>
+                        {formatPercent(rowReturn)}
                       </td>
                       <td style={{ fontWeight: 700 }}>
                         {item.weight_in_grand_total_pct?.toFixed(2)}%

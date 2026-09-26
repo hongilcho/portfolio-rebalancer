@@ -130,3 +130,40 @@ def test_dashboard_summary_usd_metrics(mocker):
     assert us_row["avg_price_usd"] == 200.0
     assert us_row["profit_usd"] == 200.0
     assert us_row["profit_pct_usd"] == 10.0
+
+
+def test_explicit_avg_price_usd_in_dashboard():
+    """DB에 달러 평단가(avg_price_usd)가 직접 저장되어 있을 때 환율 변동과 무관하게 정확한 달러 매수가 및 손익이 계산되는지 검증"""
+    mock_accounts = [{
+        "id": "acc-usd", "account_no": "999-001", "account_alias": "해외", "account_type": "GENERAL",
+        "deposit_krw": 0.0, "deposit_usd": 100.0, "portfolio_id": "p-usd"
+    }]
+    mock_assets = [{
+        "id": "ast-vt", "name": "VT", "ticker": "VT", "market": "US", "is_risk_asset": True,
+        "target_weight": 100.0, "is_active": True, "include_in_rebalance": True, "portfolio_id": "p-usd"
+    }]
+    # avg_price_usd를 직접 $150.0으로 설정 (KRW 평단가는 210,000원이지만 달러 평단가는 $150)
+    mock_holdings = [{
+        "id": "h-vt", "account_id": "acc-usd", "asset_id": "ast-vt", "asset_name": "VT", "ticker": "VT",
+        "market": "US", "quantity": 10.0, "avg_price": 210000.0, "avg_price_usd": 150.0, "is_risk_asset": True
+    }]
+    # 현재가 $160 (환율 1400원일 때 현재가 224,000원)
+    mock_price_map = {"ast-vt": 224000.0}
+
+    res = get_dashboard_summary(
+        portfolio_id="p-usd",
+        accounts=mock_accounts,
+        assets=mock_assets,
+        all_holdings=mock_holdings,
+        price_map=mock_price_map,
+        usd_krw=1400.0
+    )
+
+    us_row = next(r for r in res["stock_assets"] if r["ticker"] == "VT")
+    assert us_row["avg_price_usd"] == 150.0
+    assert us_row["buy_amount_usd"] == 1500.0  # 10주 * $150
+    assert us_row["current_price_usd"] == 160.0  # 224000 / 1400
+    assert us_row["eval_amount_usd"] == 1600.0  # 10주 * $160
+    assert us_row["profit_usd"] == 100.0  # $1600 - $1500 = +$100 (이익)
+    assert round(us_row["profit_pct_usd"], 2) == 6.67
+
