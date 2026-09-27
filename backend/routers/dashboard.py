@@ -17,6 +17,7 @@ from typing import Dict, Any, List, Optional
 
 from data.data_manager import get_overview_batch_data
 from backend.services import market_service
+from logic.dividend_fetcher import calculate_adjusted_holding_prices
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -112,6 +113,7 @@ def get_dashboard_summary(
         holdings_by_acc.setdefault(str(h['account_id']), []).append(h)
     
     # 1. Account-level calculations
+    asset_dict_by_id = {str(a['id']): a for a in assets}
     account_summaries = []
     total_portfolio_eval = 0.0
     
@@ -136,8 +138,12 @@ def get_dashboard_summary(
         holding_details = []
         for h in acc_holdings:
             aid = str(h['asset_id'])
+            asset_meta = asset_dict_by_id.get(aid, {})
             qty = float(h['quantity'])
-            avg_p_krw = float(h['avg_price'])
+
+            # 배당금 단가 차감 (Adjusted Cost Basis) 계산
+            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw)
+            avg_p_krw = adj_info["avg_price"]
             curr_p = float(price_map.get(aid, avg_p_krw if avg_p_krw > 0 else 0))
             
             eval_val = qty * curr_p
@@ -162,23 +168,19 @@ def get_dashboard_summary(
             curr_p_usd = float(price_usd_map.get(aid, 0.0))
             if curr_p_usd <= 0 and usd_krw and usd_krw > 0:
                 curr_p_usd = curr_p / usd_krw
-            stored_avg_usd = float(h.get('avg_price_usd') or 0.0)
-            if stored_avg_usd > 0:
-                avg_p_usd = stored_avg_usd
+
+            if is_us:
+                avg_p_usd = adj_info["avg_price_usd"]
             else:
-                avg_p_usd = (avg_p_krw / usd_krw) if (usd_krw and usd_krw > 0) else 0.0
+                avg_p_usd = 0.0
+
             eval_val_usd = qty * curr_p_usd
             buy_amt_usd = qty * avg_p_usd
             profit_usd = eval_val_usd - buy_amt_usd
             profit_pct_usd = (profit_usd / buy_amt_usd * 100) if buy_amt_usd > 0 else 0.0
 
             # 매입환율 및 환차익/환차손 분해 계산
-            buy_fx_rate = float(h.get('buy_fx_rate') or 0.0)
-            if buy_fx_rate <= 0:
-                if avg_p_usd > 0 and avg_p_krw > 0:
-                    buy_fx_rate = round(avg_p_krw / avg_p_usd, 2)
-                else:
-                    buy_fx_rate = usd_krw
+            buy_fx_rate = adj_info["buy_fx_rate"]
 
             if is_us:
                 fx_profit_krw = buy_amt_usd * (usd_krw - buy_fx_rate)
@@ -223,7 +225,13 @@ def get_dashboard_summary(
                 "start_date": h.get('start_date', ''),
                 "maturity_date": h.get('maturity_date', ''),
                 "tax_rate": float(h.get('tax_rate') if h.get('tax_rate') is not None else 15.4),
-                "lock_rebalance_sell": bool(h.get('lock_rebalance_sell', True) if h.get('lock_rebalance_sell') is not None else True)
+                "lock_rebalance_sell": bool(h.get('lock_rebalance_sell', True) if h.get('lock_rebalance_sell') is not None else True),
+                "is_dividend_cost_deduct": adj_info["is_dividend_cost_deduct"],
+                "original_avg_price": adj_info["original_avg_price"],
+                "original_avg_price_usd": adj_info["original_avg_price_usd"],
+                "cumulative_dividend": adj_info["cumulative_dividend"],
+                "dividend_count": adj_info["dividend_count"],
+                "first_buy_date": adj_info["first_buy_date"]
             })
             
         total_acc_val = total_deposit + stock_eval
@@ -284,6 +292,10 @@ def get_dashboard_summary(
         for h in acc_holdings:
             aid = str(h['asset_id'])
             asset_meta = asset_dict_by_id.get(aid, {})
+            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw)
+            avg_p_krw = adj_info["avg_price"]
+            avg_p_usd = adj_info["avg_price_usd"]
+            
             if aid not in portfolio_assets:
                 portfolio_assets[aid] = {
                     "asset_id": aid,
@@ -295,24 +307,29 @@ def get_dashboard_summary(
                     "buy_amt_krw": 0.0,
                     "buy_amt_usd": 0.0,
                     "eval_amt_krw": 0.0,
-                    "include_in_rebalance": bool(asset_meta.get('include_in_rebalance', True))
+                    "include_in_rebalance": bool(asset_meta.get('include_in_rebalance', True)),
+                    "is_dividend_cost_deduct": adj_info["is_dividend_cost_deduct"],
+                    "original_avg_price": adj_info["original_avg_price"],
+                    "original_avg_price_usd": adj_info["original_avg_price_usd"],
+                    "cumulative_dividend": adj_info["cumulative_dividend"],
+                    "dividend_count": adj_info["dividend_count"],
+                    "first_buy_date": adj_info["first_buy_date"]
                 }
             qty = float(h['quantity'])
-            avg_p_krw = float(h['avg_price'])
             curr_p = float(price_map.get(aid, 0.0))
             if curr_p <= 0:
                 curr_p = avg_p_krw if avg_p_krw > 0 else 0.0
-            
-            stored_avg_usd = float(h.get('avg_price_usd') or 0.0)
-            if stored_avg_usd > 0:
-                avg_p_usd = stored_avg_usd
-            else:
-                avg_p_usd = (avg_p_krw / usd_krw) if (usd_krw and usd_krw > 0) else 0.0
 
             portfolio_assets[aid]['quantity'] += qty
             portfolio_assets[aid]['buy_amt_krw'] += qty * avg_p_krw
             portfolio_assets[aid]['buy_amt_usd'] += qty * avg_p_usd
             portfolio_assets[aid]['eval_amt_krw'] += qty * curr_p
+            if adj_info["is_dividend_cost_deduct"]:
+                portfolio_assets[aid]["original_avg_price"] = adj_info["original_avg_price"]
+                portfolio_assets[aid]["original_avg_price_usd"] = adj_info["original_avg_price_usd"]
+                portfolio_assets[aid]["cumulative_dividend"] = adj_info["cumulative_dividend"]
+                portfolio_assets[aid]["dividend_count"] = adj_info["dividend_count"]
+                portfolio_assets[aid]["first_buy_date"] = adj_info["first_buy_date"]
 
     # Add pure deposit assets directly from assets table
     for a in assets:
@@ -459,7 +476,13 @@ def get_dashboard_summary(
             "maturity_date": a.get('maturity_date', ''),
             "tax_rate": float(a.get('tax_rate') if a.get('tax_rate') is not None else 15.4),
             "lock_rebalance_sell": bool(a.get('lock_rebalance_sell', True) if a.get('lock_rebalance_sell') is not None else True),
-            "account_no": a.get('account_no', '')
+            "account_no": a.get('account_no', ''),
+            "is_dividend_cost_deduct": bool(data.get('is_dividend_cost_deduct', False)),
+            "original_avg_price": data.get('original_avg_price', 0.0),
+            "original_avg_price_usd": data.get('original_avg_price_usd', 0.0),
+            "cumulative_dividend": data.get('cumulative_dividend', 0.0),
+            "dividend_count": data.get('dividend_count', 0),
+            "first_buy_date": data.get('first_buy_date', '')
         })
         
     stock_summary_rows.sort(key=lambda x: (not x['include_in_rebalance'], -x['weight_pct'], -x['eval_amount']))

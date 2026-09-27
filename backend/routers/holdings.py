@@ -13,6 +13,7 @@ from data.data_manager import (
     update_account, get_all_accounts, get_all_assets
 )
 from backend.services import market_service
+from logic.dividend_fetcher import calculate_adjusted_holding_prices
 
 router = APIRouter(prefix="/api/holdings", tags=["holdings"])
 
@@ -23,6 +24,10 @@ class HoldingInputItem(BaseModel):
     avg_price: float = 0.0
     avg_price_usd: Optional[float] = 0.0
     buy_fx_rate: Optional[float] = 0.0
+    original_avg_price: Optional[float] = 0.0
+    original_avg_price_usd: Optional[float] = 0.0
+    first_buy_date: Optional[str] = ""
+    manual_dividend_override: Optional[float] = None
 
 class SaveAccountHoldingsRequest(BaseModel):
     """계좌별 예수금 및 보유 종목 저장 요청 스키마"""
@@ -34,6 +39,17 @@ class SaveAccountHoldingsRequest(BaseModel):
 @router.get("/account/{account_id}")
 def get_account_holdings(account_id: str):
     holdings = get_holdings_by_account(account_id)
+    usd_krw = market_service.usd_krw or 1350.0
+    for h in holdings:
+        adj = calculate_adjusted_holding_prices(h, h, usd_krw)
+        h['original_avg_price'] = adj['original_avg_price']
+        h['original_avg_price_usd'] = adj['original_avg_price_usd']
+        h['adjusted_avg_price'] = adj['avg_price']
+        h['adjusted_avg_price_usd'] = adj['avg_price_usd']
+        h['cumulative_dividend'] = adj['cumulative_dividend']
+        h['dividend_count'] = adj['dividend_count']
+        h['first_buy_date'] = adj['first_buy_date']
+        h['is_dividend_cost_deduct'] = adj['is_dividend_cost_deduct']
     return {"holdings": holdings}
 
 @router.get("/all")
@@ -87,6 +103,18 @@ def save_holdings(req: SaveAccountHoldingsRequest):
             h_dict['avg_price_usd'] = round(h_dict['avg_price'] / usd_krw, 2)
             if not h_dict.get('buy_fx_rate') or float(h_dict.get('buy_fx_rate')) <= 0:
                 h_dict['buy_fx_rate'] = usd_krw
+
+        # 배당차감 자산이거나 original_avg_price가 입력된 경우 상호 보정
+        if float(h_dict.get('original_avg_price') or 0.0) > 0 and float(h_dict.get('avg_price') or 0.0) <= 0:
+            h_dict['avg_price'] = float(h_dict['original_avg_price'])
+        if float(h_dict.get('original_avg_price_usd') or 0.0) > 0 and float(h_dict.get('avg_price_usd') or 0.0) <= 0:
+            h_dict['avg_price_usd'] = float(h_dict['original_avg_price_usd'])
+
+        # 최초 매입단가 기본값 보정
+        if not h_dict.get('original_avg_price') or float(h_dict['original_avg_price']) <= 0:
+            h_dict['original_avg_price'] = h_dict.get('avg_price', 0.0)
+        if not h_dict.get('original_avg_price_usd') or float(h_dict['original_avg_price_usd']) <= 0:
+            h_dict['original_avg_price_usd'] = h_dict.get('avg_price_usd', 0.0)
             
         holdings_data.append(h_dict)
 

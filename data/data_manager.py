@@ -232,6 +232,7 @@ def _do_init_db_schema(conn, cursor):
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS lock_rebalance_sell BOOLEAN DEFAULT TRUE")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS account_no TEXT DEFAULT ''")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS include_in_rebalance BOOLEAN DEFAULT TRUE")
+    cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_dividend_cost_deduct BOOLEAN DEFAULT FALSE")
 
     try:
         cursor.execute('''
@@ -262,6 +263,10 @@ def _do_init_db_schema(conn, cursor):
     ''')
     cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS avg_price_usd REAL DEFAULT 0.0")
     cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS buy_fx_rate REAL DEFAULT 0.0")
+    cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS original_avg_price REAL DEFAULT 0.0")
+    cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS original_avg_price_usd REAL DEFAULT 0.0")
+    cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS first_buy_date TEXT DEFAULT ''")
+    cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS manual_dividend_override REAL DEFAULT NULL")
     try:
         cursor.execute('''
             UPDATE holdings 
@@ -269,8 +274,18 @@ def _do_init_db_schema(conn, cursor):
             WHERE (buy_fx_rate IS NULL OR buy_fx_rate = 0.0) 
               AND avg_price_usd > 0 AND avg_price > 0
         ''')
+        cursor.execute('''
+            UPDATE holdings 
+            SET original_avg_price = avg_price 
+            WHERE (original_avg_price IS NULL OR original_avg_price = 0.0) AND avg_price > 0
+        ''')
+        cursor.execute('''
+            UPDATE holdings 
+            SET original_avg_price_usd = avg_price_usd 
+            WHERE (original_avg_price_usd IS NULL OR original_avg_price_usd = 0.0) AND avg_price_usd > 0
+        ''')
     except Exception as e:
-        print(f"buy_fx_rate migration note: {e}")
+        print(f"buy_fx_rate/original_price migration note: {e}")
 
 
     cursor.execute('''
@@ -643,6 +658,7 @@ def get_all_assets(portfolio_id: str = None):
             r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
             r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
             r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
+            r['is_dividend_cost_deduct'] = bool(r.get('is_dividend_cost_deduct', False))
             rows.append(r)
         return rows
     finally:
@@ -651,7 +667,7 @@ def get_all_assets(portfolio_id: str = None):
 def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_risk_asset=True, is_active=True, notes="", portfolio_id="default",
               is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
               early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None, account_no="",
-              include_in_rebalance=True):
+              include_in_rebalance=True, is_dividend_cost_deduct=False):
     conn = get_connection()
     cursor = conn.cursor()
     new_id = generate_id()
@@ -676,9 +692,9 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
             INSERT INTO assets (
                 id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset, is_active, notes, portfolio_id,
                 is_deposit, deposit_principal, interest_rate, start_date, maturity_date, early_termination_rate, tax_rate, lock_rebalance_sell, account_no,
-                include_in_rebalance
+                include_in_rebalance, is_dividend_cost_deduct
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             new_id, name, ticker.strip().upper(), market, target_weight, allowed_json,
             1 if is_risk_asset else 0, is_active, notes, target_pid,
@@ -686,7 +702,8 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
             str(start_date or ''), str(maturity_date or ''), float(early_termination_rate or 0.0),
             float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell,
             clean_acc_no if is_deposit else '',
-            bool(include_in_rebalance)
+            bool(include_in_rebalance),
+            bool(is_dividend_cost_deduct)
         ))
 
         conn.commit()
@@ -704,7 +721,7 @@ def add_asset(name, ticker, market, target_weight, allowed_accounts=None, is_ris
 def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts, is_risk_asset=True, is_active=True, notes="",
                  is_deposit=False, deposit_principal=0.0, interest_rate=0.0, start_date="", maturity_date="",
                  early_termination_rate=0.0, tax_rate=15.4, lock_rebalance_sell=True, account_id=None, account_no="",
-                 include_in_rebalance=True):
+                 include_in_rebalance=True, is_dividend_cost_deduct=False):
     conn = get_connection()
     cursor = conn.cursor()
     clean_acc_no = (account_no or '').strip()
@@ -726,7 +743,7 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
                 is_risk_asset = %s, is_active = %s, notes = %s,
                 is_deposit = %s, deposit_principal = %s, interest_rate = %s, start_date = %s,
                 maturity_date = %s, early_termination_rate = %s, tax_rate = %s, lock_rebalance_sell = %s,
-                account_no = %s, include_in_rebalance = %s
+                account_no = %s, include_in_rebalance = %s, is_dividend_cost_deduct = %s
             WHERE id = %s
         ''', (
             name, ticker.strip().upper(), market, target_weight, allowed_json,
@@ -736,6 +753,7 @@ def update_asset(asset_id, name, ticker, market, target_weight, allowed_accounts
             float(tax_rate if tax_rate is not None else 15.4), lock_rebalance_sell,
             clean_acc_no if is_deposit else '',
             bool(include_in_rebalance),
+            bool(is_dividend_cost_deduct),
             str(asset_id)
         ))
 
@@ -789,7 +807,8 @@ def get_holdings_by_account(account_id):
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute('''
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
-                   a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell
+                   a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
+                   a.is_dividend_cost_deduct
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
             WHERE h.account_id = %s
@@ -806,6 +825,7 @@ def get_all_holdings():
         cursor.execute('''
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
+                   a.is_dividend_cost_deduct,
                    acc.account_alias, acc.account_type
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
@@ -841,6 +861,21 @@ def save_account_holdings(account_id, holdings_data):
                     avg_p = round(avg_p_usd * buy_fx, 2)
                 elif avg_p > 0:
                     buy_fx = round(avg_p / avg_p_usd, 2)
+
+            original_avg_p = float(item.get('original_avg_price') or 0.0)
+            if original_avg_p <= 0:
+                original_avg_p = avg_p
+            original_avg_p_usd = float(item.get('original_avg_price_usd') or 0.0)
+            if original_avg_p_usd <= 0:
+                original_avg_p_usd = avg_p_usd
+            first_buy_date = str(item.get('first_buy_date') or '').strip()
+            if not first_buy_date:
+                first_buy_date = today_str
+            manual_div = item.get('manual_dividend_override')
+            if manual_div is not None and str(manual_div).strip() != '':
+                manual_div = float(manual_div)
+            else:
+                manual_div = None
                 
             cursor.execute("SELECT id FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
             row = cursor.fetchone()
@@ -850,10 +885,21 @@ def save_account_holdings(account_id, holdings_data):
                     cursor.execute("DELETE FROM holdings WHERE id = %s", (row[0],))
             else:
                 if row:
-                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s WHERE id = %s", (qty, avg_p, avg_p_usd, buy_fx, row[0]))
+                    cursor.execute("""
+                        UPDATE holdings 
+                        SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s,
+                            original_avg_price = %s, original_avg_price_usd = %s, first_buy_date = %s,
+                            manual_dividend_override = %s
+                        WHERE id = %s
+                    """, (qty, avg_p, avg_p_usd, buy_fx, original_avg_p, original_avg_p_usd, first_buy_date, manual_div, row[0]))
                 else:
                     new_h_id = generate_id()
-                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate) VALUES (%s, %s, %s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p, avg_p_usd, buy_fx))
+                    cursor.execute("""
+                        INSERT INTO holdings (
+                            id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate,
+                            original_avg_price, original_avg_price_usd, first_buy_date, manual_dividend_override
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (new_h_id, str(account_id), aid, qty, avg_p, avg_p_usd, buy_fx, original_avg_p, original_avg_p_usd, first_buy_date, manual_div))
                     
                 new_trade_id = generate_id()
                 trade_price = avg_p_usd if avg_p_usd > 0 else avg_p
@@ -1351,6 +1397,7 @@ def get_overview_batch_data() -> Dict[str, Any]:
         'holdings', COALESCE((SELECT json_agg(h) FROM (
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
+                   a.is_dividend_cost_deduct,
                    acc.account_alias, acc.account_type
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
@@ -1388,6 +1435,7 @@ def get_overview_batch_data() -> Dict[str, Any]:
         r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
         r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
         r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
+        r['is_dividend_cost_deduct'] = bool(r.get('is_dividend_cost_deduct', False))
         processed_assets.append(r)
     raw['assets'] = processed_assets
     return raw

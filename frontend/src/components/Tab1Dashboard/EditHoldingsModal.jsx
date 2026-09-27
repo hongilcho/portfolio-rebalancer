@@ -51,11 +51,24 @@ export default function EditHoldingsModal({
               avgUsd = Math.round((avgKrw / buyFx) * 100) / 100;
             }
           }
+          const origKrw = Number(h.original_avg_price > 0 ? h.original_avg_price : avgKrw);
+          let origUsd = Number(h.original_avg_price_usd > 0 ? h.original_avg_price_usd : avgUsd);
+          if (isUs && origUsd <= 0 && origKrw > 0 && buyFx > 0) {
+            origUsd = Math.round((origKrw / buyFx) * 100) / 100;
+          }
           map[String(h.asset_id)] = {
             quantity: Number(h.quantity || 0),
             avg_price: avgKrw,
             avg_price_usd: avgUsd,
-            buy_fx_rate: buyFx
+            buy_fx_rate: buyFx,
+            original_avg_price: origKrw,
+            original_avg_price_usd: origUsd,
+            adjusted_avg_price: Number(h.adjusted_avg_price ?? avgKrw),
+            adjusted_avg_price_usd: Number(h.adjusted_avg_price_usd ?? avgUsd),
+            first_buy_date: h.first_buy_date || '',
+            cumulative_dividend: Number(h.cumulative_dividend || 0),
+            dividend_count: Number(h.dividend_count || 0),
+            is_dividend_cost_deduct: Boolean(h.is_dividend_cost_deduct)
           };
         });
         setHoldingsInputs(map);
@@ -79,6 +92,16 @@ export default function EditHoldingsModal({
     }));
   };
 
+  const handleFirstBuyDateChange = (assetId, dateStr) => {
+    setHoldingsInputs((prev) => ({
+      ...prev,
+      [assetId]: {
+        ...prev[assetId],
+        first_buy_date: dateStr
+      }
+    }));
+  };
+
   const handleAvgPriceUsdChange = (assetId, priceUsd) => {
     const numUsd = parseFloat(priceUsd) || 0;
     const currentBuyFx = Number(holdingsInputs[assetId]?.buy_fx_rate) || effectiveRate;
@@ -89,6 +112,8 @@ export default function EditHoldingsModal({
         ...prev[assetId],
         avg_price_usd: numUsd,
         avg_price: computedKrw,
+        original_avg_price_usd: numUsd,
+        original_avg_price: computedKrw,
         buy_fx_rate: currentBuyFx
       }
     }));
@@ -103,19 +128,24 @@ export default function EditHoldingsModal({
       [assetId]: {
         ...prev[assetId],
         buy_fx_rate: numFx,
-        avg_price: computedKrw
+        avg_price: computedKrw,
+        original_avg_price: computedKrw
       }
     }));
   };
 
   const handleAvgPriceKrwChange = (assetId, priceKrw, isUs = false) => {
     const numKrw = parseFloat(priceKrw) || 0;
+    const currentBuyFx = Number(holdingsInputs[assetId]?.buy_fx_rate) || effectiveRate;
+    const numUsd = isUs && currentBuyFx > 0 ? Math.round((numKrw / currentBuyFx) * 100) / 100 : (holdingsInputs[assetId]?.avg_price_usd || 0);
     setHoldingsInputs((prev) => ({
       ...prev,
       [assetId]: {
         ...prev[assetId],
         avg_price: numKrw,
-        avg_price_usd: isUs && effectiveRate > 0 ? Math.round((numKrw / effectiveRate) * 100) / 100 : (prev[assetId]?.avg_price_usd || 0)
+        original_avg_price: numKrw,
+        avg_price_usd: numUsd,
+        original_avg_price_usd: numUsd
       }
     }));
   };
@@ -131,7 +161,10 @@ export default function EditHoldingsModal({
           quantity: Number(current.quantity || 0),
           avg_price: Number(current.avg_price || 0),
           avg_price_usd: Number(current.avg_price_usd || 0),
-          buy_fx_rate: Number(current.buy_fx_rate || 0)
+          buy_fx_rate: Number(current.buy_fx_rate || 0),
+          original_avg_price: Number(current.original_avg_price ?? current.avg_price ?? 0),
+          original_avg_price_usd: Number(current.original_avg_price_usd ?? current.avg_price_usd ?? 0),
+          first_buy_date: current.first_buy_date || ''
         };
       });
 
@@ -231,18 +264,24 @@ export default function EditHoldingsModal({
               const isUs = ast.market === 'US';
               const isGold = ast.name.includes('금') || ast.ticker === 'M04020000';
               const unit = isGold ? 'g' : '주';
+              const isDividendDeduct = Boolean(ast.is_dividend_cost_deduct || h.is_dividend_cost_deduct);
 
               return (
                 <div key={ast.id} style={{ background: 'var(--bg-card-subtle)', padding: '14px', borderRadius: 'var(--radius-md)', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <div style={{ fontWeight: 700 }}>
-                      {ast.name} 
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginLeft: '6px' }}>
+                    <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                      <span>{ast.name}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                         ({ast.ticker})
                       </span>
                       {isUs && (
-                        <span className="badge badge-accent" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '1px 6px' }}>
+                        <span className="badge badge-accent" style={{ fontSize: '0.72rem', padding: '1px 6px' }}>
                           🇺🇸 미국상장 (USD)
+                        </span>
+                      )}
+                      {isDividendDeduct && (
+                        <span className="badge" style={{ fontSize: '0.72rem', padding: '1px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                          💰 배당차감
                         </span>
                       )}
                     </div>
@@ -251,7 +290,7 @@ export default function EditHoldingsModal({
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: isUs ? 'repeat(auto-fit, minmax(170px, 1fr))' : '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isDividendDeduct ? (isUs ? 'repeat(auto-fit, minmax(140px, 1fr))' : 'repeat(auto-fit, minmax(160px, 1fr))') : (isUs ? 'repeat(auto-fit, minmax(170px, 1fr))' : '1fr 1fr'), gap: '12px' }}>
                     {/* 1. 수량 입력 */}
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="form-label" style={{ fontSize: '0.78rem' }}>
@@ -267,12 +306,28 @@ export default function EditHoldingsModal({
                       />
                     </div>
 
+                    {/* 배당차감 활성화 시: 최초 매수일 입력 */}
+                    {isDividendDeduct && (
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>
+                          최초 매수일 <span className="helper-text">(배당 반영 기준)</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="input-text"
+                          style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                          value={h.first_buy_date || ''}
+                          onChange={(e) => handleFirstBuyDateChange(String(ast.id), e.target.value)}
+                        />
+                      </div>
+                    )}
+
                     {/* 2. 평단가 입력: 미국 상장 자산은 USD($) 및 매입환율(원) 입력, 국내 자산은 KRW(원) 입력 */}
                     {isUs ? (
                       <>
                         <div className="form-group" style={{ margin: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>평균 매입단가 ($ USD)</span>
+                            <span>{isDividendDeduct ? '최초 매수가 ($ USD)' : '평균 매입단가 ($ USD)'}</span>
                             <span className="badge badge-accent" style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
                               달러 직접입력
                             </span>
@@ -283,7 +338,7 @@ export default function EditHoldingsModal({
                               type="number"
                               className="input-number"
                               style={{ paddingLeft: '24px', fontWeight: 700 }}
-                              value={h.avg_price_usd !== undefined && h.avg_price_usd !== null ? h.avg_price_usd : ''}
+                              value={isDividendDeduct ? (h.original_avg_price_usd !== undefined && h.original_avg_price_usd !== null ? h.original_avg_price_usd : '') : (h.avg_price_usd !== undefined && h.avg_price_usd !== null ? h.avg_price_usd : '')}
                               placeholder="0.00"
                               onChange={(e) => handleAvgPriceUsdChange(String(ast.id), e.target.value)}
                               step={0.01}
@@ -317,12 +372,12 @@ export default function EditHoldingsModal({
                     ) : (
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label" style={{ fontSize: '0.78rem' }}>
-                          평균 매입가 (원화) <span className="helper-text">({formatKRW(h.avg_price)})</span>
+                          {isDividendDeduct ? '최초 매수가 (원화)' : '평균 매입가 (원화)'} <span className="helper-text">({formatKRW(isDividendDeduct && h.original_avg_price ? h.original_avg_price : h.avg_price)})</span>
                         </label>
                         <input
                           type="number"
                           className="input-number"
-                          value={h.avg_price}
+                          value={isDividendDeduct && h.original_avg_price !== undefined ? h.original_avg_price : h.avg_price}
                           onChange={(e) => handleAvgPriceKrwChange(String(ast.id), parseFloat(e.target.value) || 0)}
                           step={100}
                           min={0}
@@ -347,8 +402,8 @@ export default function EditHoldingsModal({
                       fontSize: '0.78rem'
                     }}>
                       <div>
-                        <span style={{ color: 'var(--text-muted)' }}>원화 환산 평단가: </span>
-                        <strong style={{ color: 'var(--text-primary)', marginLeft: '4px' }}>{formatKRW(h.avg_price)}</strong>
+                        <span style={{ color: 'var(--text-muted)' }}>원화 환산 매수가: </span>
+                        <strong style={{ color: 'var(--text-primary)', marginLeft: '4px' }}>{formatKRW(isDividendDeduct && h.original_avg_price ? h.original_avg_price : h.avg_price)}</strong>
                       </div>
                       <div>
                         <span style={{ color: 'var(--text-muted)' }}>환율 차손익: </span>
@@ -359,6 +414,46 @@ export default function EditHoldingsModal({
                           {(((effectiveRate - (Number(h.buy_fx_rate) || effectiveRate)) / (Number(h.buy_fx_rate) || effectiveRate)) * 100).toFixed(1)}%)
                         </strong>
                         <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>(현재 {effectiveRate.toLocaleString()}원)</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 배당차감 안내 배너 */}
+                  {isDividendDeduct && (
+                    <div style={{
+                      marginTop: '10px',
+                      background: 'rgba(59, 130, 246, 0.08)',
+                      border: '1px solid rgba(59, 130, 246, 0.25)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '10px 12px',
+                      fontSize: '0.78rem',
+                      lineHeight: 1.45
+                    }}>
+                      <div style={{ fontWeight: 700, color: 'var(--accent-primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>💰 배당금 자동 단가 차감 안내</span>
+                        {h.first_buy_date && (
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>
+                            (기준일: {h.first_buy_date} 이후 배당 반영)
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ color: 'var(--text-secondary)' }}>
+                        최초 매수가 {isUs ? formatUSD(h.original_avg_price_usd || h.avg_price_usd) : formatKRW(h.original_avg_price || h.avg_price)}
+                        {h.cumulative_dividend > 0 ? (
+                          <>
+                            {' ➔ '}
+                            <strong style={{ color: 'var(--text-primary)' }}>
+                              현재 유효단가 {isUs ? formatUSD(h.adjusted_avg_price_usd || h.avg_price_usd) : formatKRW(h.adjusted_avg_price || h.avg_price)}
+                            </strong>
+                            <span style={{ color: 'var(--color-profit, #10b981)', marginLeft: '6px', fontWeight: 600 }}>
+                              (누적 {h.dividend_count || 0}회 배당, -{isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)} 차감)
+                            </span>
+                          </>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>
+                            (기준일 이후 발생한 거래소 공시 배당금이 매수단가에서 자동 차감되어 총손익에 합산됩니다)
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}

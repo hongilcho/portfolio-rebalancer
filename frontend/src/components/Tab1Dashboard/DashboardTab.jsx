@@ -660,6 +660,11 @@ export default function DashboardTab({
                             US
                           </span>
                         )}
+                        {item.is_dividend_cost_deduct && (
+                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                            💰 배당차감
+                          </span>
+                        )}
                         {item.is_deposit && (
                           <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
                             🏦 예금
@@ -688,6 +693,11 @@ export default function DashboardTab({
                       </td>
                       <td>
                         <div>{isUsdMode ? formatUSD(item.avg_price_usd) : formatKRW(item.avg_price)}</div>
+                        {item.is_dividend_cost_deduct && item.cumulative_dividend > 0 && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--color-safe, #10b981)', whiteSpace: 'nowrap' }}>
+                            최초 {isUsdMode || isUs ? formatUSD(item.original_avg_price_usd) : formatKRW(item.original_avg_price)} (배당 -{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)})
+                          </div>
+                        )}
                         {isUs && item.buy_fx_rate > 0 && (
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                             {isUsdMode ? `매입환율: ${formatKRW(item.buy_fx_rate)}` : `$${item.avg_price_usd} (@ ${formatKRW(item.buy_fx_rate)})`}
@@ -809,6 +819,11 @@ export default function DashboardTab({
                         US
                       </span>
                     )}
+                    {item.is_dividend_cost_deduct && (
+                      <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                        💰 배당차감
+                      </span>
+                    )}
                     {item.is_deposit ? (
                       <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
                         🏦 예금 {item.account_no ? `(${item.account_no})` : ''}
@@ -844,6 +859,13 @@ export default function DashboardTab({
                     )}
                   </span>
                 </div>
+
+                {/* Dividend Deduction Info */}
+                {item.is_dividend_cost_deduct && item.cumulative_dividend > 0 && (
+                  <div style={{ fontSize: '0.74rem', color: 'var(--color-safe, #10b981)', marginTop: '2px' }}>
+                    최초단가 {isUsdMode || isUs ? formatUSD(item.original_avg_price_usd) : formatKRW(item.original_avg_price)} (배당 -{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)} 차감)
+                  </div>
+                )}
 
                 {/* US Asset FX Rate & Profit Decomposition */}
                 {isUs && (
@@ -1157,6 +1179,11 @@ export default function DashboardTab({
                                         US
                                       </span>
                                     )}
+                                    {h.is_dividend_cost_deduct && (
+                                      <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                                        💰 배당차감
+                                      </span>
+                                    )}
                                     {h.is_deposit && (
                                       <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
                                         🏦 예금
@@ -1167,6 +1194,11 @@ export default function DashboardTab({
                                   <td>{formatQuantity(h.quantity, h.unit)}</td>
                                   <td>
                                     <div>{isHUsdMode ? formatUSD(h.avg_price_usd) : formatKRW(h.avg_price)}</div>
+                                    {h.is_dividend_cost_deduct && h.cumulative_dividend > 0 && (
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--color-safe, #10b981)', whiteSpace: 'nowrap' }}>
+                                        최초 {isHUsdMode || isHUs ? formatUSD(h.original_avg_price_usd) : formatKRW(h.original_avg_price)} (배당 -{isHUsdMode || isHUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)})
+                                      </div>
+                                    )}
                                     {isHUs && h.buy_fx_rate > 0 && (
                                       <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                                         {isHUsdMode ? `매입환율: ${formatKRW(h.buy_fx_rate)}` : `$${h.avg_price_usd} (@ ${formatKRW(h.buy_fx_rate)})`}
@@ -1220,6 +1252,11 @@ export default function DashboardTab({
                                     US
                                   </span>
                                 )}
+                                {h.is_dividend_cost_deduct && (
+                                  <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                                    💰 배당차감
+                                  </span>
+                                )}
                                 {h.is_deposit ? (
                                   <span className="badge badge-safe" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px' }}>
                                     🏦 예금
@@ -1248,6 +1285,13 @@ export default function DashboardTab({
                                 )}
                               </span>
                             </div>
+
+                            {/* Dividend Deduction Info */}
+                            {h.is_dividend_cost_deduct && h.cumulative_dividend > 0 && (
+                              <div style={{ fontSize: '0.74rem', color: 'var(--color-safe, #10b981)', marginTop: '2px' }}>
+                                최초단가 {isHUsdMode || isHUs ? formatUSD(h.original_avg_price_usd) : formatKRW(h.original_avg_price)} (배당 -{isHUsdMode || isHUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)} 차감)
+                              </div>
+                            )}
                             {isHUs && (
                               <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
                                 <span>매입환율: {formatKRW(h.buy_fx_rate || 0)}</span>

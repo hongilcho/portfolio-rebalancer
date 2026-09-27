@@ -36,6 +36,7 @@ class CreateAssetRequest(BaseModel):
     account_id: Optional[str] = None
     account_no: Optional[str] = ""
     include_in_rebalance: Optional[bool] = True
+    is_dividend_cost_deduct: Optional[bool] = False
 
 class UpdateAssetRequest(BaseModel):
     name: str
@@ -58,6 +59,7 @@ class UpdateAssetRequest(BaseModel):
     account_id: Optional[str] = None
     account_no: Optional[str] = ""
     include_in_rebalance: Optional[bool] = True
+    is_dividend_cost_deduct: Optional[bool] = False
 
 class AssetWeightMappingItem(BaseModel):
     id: str
@@ -80,6 +82,7 @@ class AssetWeightMappingItem(BaseModel):
     account_id: Optional[str] = None
     account_no: Optional[str] = ""
     include_in_rebalance: Optional[bool] = True
+    is_dividend_cost_deduct: Optional[bool] = False
 
 class BatchWeightsRequest(BaseModel):
     items: List[AssetWeightMappingItem]
@@ -114,7 +117,8 @@ def create_asset(req: CreateAssetRequest):
         lock_rebalance_sell=bool(req.lock_rebalance_sell if req.lock_rebalance_sell is not None else True),
         account_id=req.account_id,
         account_no=req.account_no or "",
-        include_in_rebalance=bool(req.include_in_rebalance if req.include_in_rebalance is not None else True)
+        include_in_rebalance=bool(req.include_in_rebalance if req.include_in_rebalance is not None else True),
+        is_dividend_cost_deduct=bool(req.is_dividend_cost_deduct)
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)
@@ -143,7 +147,8 @@ def edit_asset(asset_id: str, req: UpdateAssetRequest):
         lock_rebalance_sell=bool(req.lock_rebalance_sell if req.lock_rebalance_sell is not None else True),
         account_id=req.account_id,
         account_no=req.account_no or "",
-        include_in_rebalance=bool(req.include_in_rebalance if req.include_in_rebalance is not None else True)
+        include_in_rebalance=bool(req.include_in_rebalance if req.include_in_rebalance is not None else True),
+        is_dividend_cost_deduct=bool(req.is_dividend_cost_deduct)
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)

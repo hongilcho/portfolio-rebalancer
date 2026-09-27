@@ -60,7 +60,8 @@ export default function SettingsTab({
     lock_rebalance_sell: true,
     account_id: '',
     account_no: '',
-    include_in_rebalance: true
+    include_in_rebalance: true,
+    is_dividend_cost_deduct: false
   });
 
   const [saving, setSaving] = useState(false);
@@ -174,7 +175,8 @@ export default function SettingsTab({
         tax_rate: Number(assetForm.tax_rate !== undefined ? assetForm.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(assetForm.lock_rebalance_sell !== false),
         account_no: assetForm.account_no ? assetForm.account_no.trim() : '',
-        include_in_rebalance: incRebal
+        include_in_rebalance: incRebal,
+        is_dividend_cost_deduct: Boolean(assetForm.is_dividend_cost_deduct)
       });
       alert('자산이 성공적으로 등록되었습니다.');
       setIsAddAssetOpen(false);
@@ -218,7 +220,8 @@ export default function SettingsTab({
         tax_rate: Number(assetForm.tax_rate !== undefined ? assetForm.tax_rate : 15.4),
         lock_rebalance_sell: Boolean(assetForm.lock_rebalance_sell !== false),
         account_no: assetForm.account_no ? assetForm.account_no.trim() : '',
-        include_in_rebalance: incRebal
+        include_in_rebalance: incRebal,
+        is_dividend_cost_deduct: Boolean(assetForm.is_dividend_cost_deduct)
       });
       alert('자산이 성공적으로 수정되었습니다.');
       setEditAssetTarget(null);
@@ -341,6 +344,11 @@ export default function SettingsTab({
                         {item.include_in_rebalance === false && (
                           <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(156, 163, 175, 0.2)', color: 'var(--text-muted)' }}>
                             비중 제외
+                          </span>
+                        )}
+                        {item.is_dividend_cost_deduct && (
+                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(99, 102, 241, 0.2)', color: '#818CF8' }}>
+                            💰 배당차감
                           </span>
                         )}
                       </td>
@@ -532,7 +540,9 @@ export default function SettingsTab({
                 tax_rate: 15.4,
                 lock_rebalance_sell: true,
                 account_id: accounts?.[0]?.id ? String(accounts[0].id) : '',
-                account_no: ''
+                account_no: '',
+                include_in_rebalance: true,
+                is_dividend_cost_deduct: false
               });
               setIsAddAssetOpen(true);
             }}
@@ -571,6 +581,11 @@ export default function SettingsTab({
                         {ast.include_in_rebalance === false && (
                           <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(156, 163, 175, 0.2)', color: 'var(--text-muted)' }}>
                             비중 제외
+                          </span>
+                        )}
+                        {ast.is_dividend_cost_deduct && (
+                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(99, 102, 241, 0.2)', color: '#818CF8' }}>
+                            💰 배당차감
                           </span>
                         )}
                         {ast.is_deposit && ast.account_no && (
@@ -618,7 +633,8 @@ export default function SettingsTab({
                                 lock_rebalance_sell: ast.lock_rebalance_sell !== undefined ? ast.lock_rebalance_sell : true,
                                 account_id: (ast.allowed_accounts && ast.allowed_accounts.length > 0) ? String(ast.allowed_accounts[0]) : '',
                                 account_no: ast.account_no || '',
-                                include_in_rebalance: ast.include_in_rebalance !== undefined ? Boolean(ast.include_in_rebalance) : true
+                                include_in_rebalance: ast.include_in_rebalance !== undefined ? Boolean(ast.include_in_rebalance) : true,
+                                is_dividend_cost_deduct: Boolean(ast.is_dividend_cost_deduct)
                               });
                             }}
                           >
@@ -1126,7 +1142,7 @@ export default function SettingsTab({
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>
                       <input
                         type="checkbox"
@@ -1144,6 +1160,20 @@ export default function SettingsTab({
                       />
                       활성 종목 (1~3번 탭 표시)
                     </label>
+                  </div>
+
+                  <div style={{ marginBottom: '16px', padding: '10px 12px', background: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      <input
+                        type="checkbox"
+                        checked={assetForm.is_dividend_cost_deduct || false}
+                        onChange={(e) => setAssetForm({ ...assetForm, is_dividend_cost_deduct: e.target.checked })}
+                      />
+                      💰 배당금 자동 단가 차감 (단기채권 · 머니마켓 · 인컴형)
+                    </label>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px', marginLeft: '22px', lineHeight: 1.4 }}>
+                      월/연 배당으로 기준가가 하락(배당락)하는 단기채권·파킹형 ETF(SGOV, 머니마켓 등)의 경우, 배당금을 매수단가에서 자동 차감하여 정확한 실제 투자 누적 손익을 추적합니다.
+                    </div>
                   </div>
 
                   <div className="form-group">
