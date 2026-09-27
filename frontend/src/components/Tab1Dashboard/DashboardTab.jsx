@@ -72,8 +72,10 @@ export default function DashboardTab({
 
   const visibleStockAssets = useMemo(() => {
     return (stock_assets || []).filter((item) => {
-      if (activeAssetIds.has(String(item.asset_id))) return true;
-      return (item.quantity || 0) > 0;
+      // 1번 탭: 비활성화 종목 또는 보유 수량이 0 이하인 자산(예금 제외)은 표에서 제외
+      if (!activeAssetIds.has(String(item.asset_id))) return false;
+      if (item.is_deposit) return true;
+      return (Number(item.quantity) || 0) > 0;
     });
   }, [stock_assets, activeAssetIds]);
 
@@ -664,7 +666,14 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody>
-                {displayStockAssets?.map((item) => {
+                {displayStockAssets?.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
+                      현재 보유 중인 투자 자산이 없습니다. (보유 수량 0주 종목 제외)
+                    </td>
+                  </tr>
+                ) : (
+                  displayStockAssets.map((item) => {
                   const isUs = item.market === 'US';
                   const isUsdMode = currencyMode === 'USD' && isUs;
                   const itemProfit = isUsdMode ? (item.profit_usd || 0) : (item.profit_krw || 0);
@@ -728,59 +737,61 @@ export default function DashboardTab({
                       </td>
                     </tr>
                   );
-                })}
+                }))}
                 {/* Total Row */}
-                <tr className="total-row">
-                  <td>{includeDeposits ? '총합계' : '총합계 (예금 제외)'}</td>
-                  <td>-</td>
-                  <td style={{ fontWeight: 700 }}>
-                    {currencyMode === 'USD' ? (
-                      <span>
-                        <span style={{ color: getProfitColor(displayDualKpi.usd.total_return) }}>
-                          🇺🇸 {formatPercent(displayDualKpi.usd.total_return)}
+                {displayStockAssets?.length > 0 && (
+                  <tr className="total-row">
+                    <td>{includeDeposits ? '총합계' : '총합계 (예금 제외)'}</td>
+                    <td>-</td>
+                    <td style={{ fontWeight: 700 }}>
+                      {currencyMode === 'USD' ? (
+                        <span>
+                          <span style={{ color: getProfitColor(displayDualKpi.usd.total_return) }}>
+                            🇺🇸 {formatPercent(displayDualKpi.usd.total_return)}
+                          </span>
+                          <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>|</span>
+                          <span style={{ color: getProfitColor(displayDualKpi.krw.total_return) }}>
+                            🇰🇷 {formatPercent(displayDualKpi.krw.total_return)}
+                          </span>
                         </span>
-                        <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>|</span>
-                        <span style={{ color: getProfitColor(displayDualKpi.krw.total_return) }}>
-                          🇰🇷 {formatPercent(displayDualKpi.krw.total_return)}
+                      ) : (
+                        <span style={{ color: getProfitColor(displayKpi?.total_stock_return) }}>
+                          {formatPercent(displayKpi?.total_stock_return)}
                         </span>
-                      </span>
-                    ) : (
-                      <span style={{ color: getProfitColor(displayKpi?.total_stock_return) }}>
-                        {formatPercent(displayKpi?.total_stock_return)}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ fontWeight: 700 }}>
-                    {currencyMode === 'USD' ? (
-                      <span>
-                        <span style={{ color: getProfitColor(displayDualKpi.usd.total_profit) }}>
-                          🇺🇸 {formatUSD(displayDualKpi.usd.total_profit, true)}
+                      )}
+                    </td>
+                    <td style={{ fontWeight: 700 }}>
+                      {currencyMode === 'USD' ? (
+                        <span>
+                          <span style={{ color: getProfitColor(displayDualKpi.usd.total_profit) }}>
+                            🇺🇸 {formatUSD(displayDualKpi.usd.total_profit, true)}
+                          </span>
+                          <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>|</span>
+                          <span style={{ color: getProfitColor(displayDualKpi.krw.total_profit) }}>
+                            🇰🇷 {formatKRW(displayDualKpi.krw.total_profit, true)}
+                          </span>
                         </span>
-                        <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>|</span>
-                        <span style={{ color: getProfitColor(displayDualKpi.krw.total_profit) }}>
-                          🇰🇷 {formatKRW(displayDualKpi.krw.total_profit, true)}
+                      ) : (
+                        <span style={{ color: getProfitColor(displayKpi?.total_stock_profit) }}>
+                          {(displayKpi?.total_stock_profit || 0) > 0 ? '+' : ''}{formatKRW(displayKpi?.total_stock_profit)}
                         </span>
-                      </span>
-                    ) : (
-                      <span style={{ color: getProfitColor(displayKpi?.total_stock_profit) }}>
-                        {(displayKpi?.total_stock_profit || 0) > 0 ? '+' : ''}{formatKRW(displayKpi?.total_stock_profit)}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ fontWeight: 700 }}>
-                    {currencyMode === 'USD' ? (
-                      <span>
-                        🇺🇸 {formatUSD(displayDualKpi.usd.total_eval)}
-                        <span style={{ margin: '0 4px', color: 'var(--text-muted)' }}>|</span>
-                        🇰🇷 {formatKRW(displayDualKpi.krw.total_eval)}
-                      </span>
-                    ) : (
-                      formatKRW(displayKpi?.total_stock_eval)
-                    )}
-                  </td>
-                  <td>-</td>
-                  <td>-</td>
-                </tr>
+                      )}
+                    </td>
+                    <td style={{ fontWeight: 700 }}>
+                      {currencyMode === 'USD' ? (
+                        <span>
+                          🇺🇸 {formatUSD(displayDualKpi.usd.total_eval)}
+                          <span style={{ margin: '0 4px', color: 'var(--text-muted)' }}>|</span>
+                          🇰🇷 {formatKRW(displayDualKpi.krw.total_eval)}
+                        </span>
+                      ) : (
+                        formatKRW(displayKpi?.total_stock_eval)
+                      )}
+                    </td>
+                    <td>-</td>
+                    <td>-</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -800,20 +811,28 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody>
-                {weightDriftAssets?.map((item) => (
-                  <tr key={item.asset_id}>
-                    <td style={{ fontWeight: 600 }}>{item.name}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 600 }}>
-                      {item.weight_pct.toFixed(1)}%
-                    </td>
-                    <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                      {item.target_weight_pct.toFixed(1)}%
-                    </td>
-                    <td>
-                      <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
+                {weightDriftAssets?.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                      현재 보유 중인 자산이 없습니다. (보유 수량 0주 종목 제외)
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  weightDriftAssets.map((item) => (
+                    <tr key={item.asset_id}>
+                      <td style={{ fontWeight: 600 }}>{item.name}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>
+                        {item.weight_pct.toFixed(1)}%
+                      </td>
+                      <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        {item.target_weight_pct.toFixed(1)}%
+                      </td>
+                      <td>
+                        <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -821,7 +840,12 @@ export default function DashboardTab({
 
         {/* 📱 MOBILE RESPONSIVE CARDS (Screen <= 768px) */}
         <div className="mobile-view">
-          {displayStockAssets?.map((item) => {
+          {displayStockAssets?.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--text-muted)', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', margin: '10px 0' }}>
+              현재 보유 중인 투자 자산이 없습니다. (보유 수량 0주 종목 제외)
+            </div>
+          ) : (
+            displayStockAssets.map((item) => {
             const isUs = item.market === 'US';
             const isUsdMode = currencyMode === 'USD' && isUs;
             const itemProfit = isUsdMode ? (item.profit_usd || 0) : (item.profit_krw || 0);
@@ -914,7 +938,7 @@ export default function DashboardTab({
                 )}
               </div>
             );
-          })}
+          }))}
         </div>
       </div>
 

@@ -395,8 +395,12 @@ def get_dashboard_summary(
             "include_in_rebalance": include_in_rebal
         })
         
-        # If asset is inactive and has no holdings, do not display in Dashboard Tab 1
-        if not is_active and data['quantity'] <= 0:
+        is_deposit = bool(a.get('is_deposit', False))
+        
+        # 1번 탭 대시보드 현황: 비활성화 종목 또는 실제 보유 수량이 0 이하인 자산(예금 제외)은 표에서 제외
+        if not is_deposit and data['quantity'] <= 0:
+            continue
+        if not is_active:
             continue
         
         profit_krw = data['eval_amt_krw'] - data['buy_amt_krw']
@@ -413,7 +417,6 @@ def get_dashboard_summary(
             target_w = 0.0
             drift_pct = 0.0
             
-        is_deposit = bool(a.get('is_deposit', False))
         is_gold = "금" in data['name'] or data.get('ticker') == 'M04020000'
         unit_str = "건" if is_deposit else ("g" if is_gold else "주")
         
