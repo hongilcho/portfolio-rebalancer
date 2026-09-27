@@ -37,9 +37,20 @@ export default function EditHoldingsModal({
     setLoading(true);
     api.getAccountHoldings(acc.id)
       .then((res) => {
-        const map = {};
+        const existingMap = {};
         (res.holdings || []).forEach((h) => {
-          const isUs = h.market === 'US';
+          existingMap[String(h.asset_id)] = h;
+        });
+
+        const map = {};
+        const accAllowed = assets.filter((ast) => 
+          (ast.allowed_accounts || []).map(String).includes(String(acc.id))
+        );
+
+        accAllowed.forEach((ast) => {
+          const aid = String(ast.id);
+          const h = existingMap[aid] || {};
+          const isUs = ast.market === 'US';
           const avgKrw = Number(h.avg_price || 0);
           let avgUsd = Number(h.avg_price_usd || 0);
           let buyFx = Number(h.buy_fx_rate || 0);
@@ -56,7 +67,17 @@ export default function EditHoldingsModal({
           if (isUs && origUsd <= 0 && origKrw > 0 && buyFx > 0) {
             origUsd = Math.round((origKrw / buyFx) * 100) / 100;
           }
-          map[String(h.asset_id)] = {
+
+          const tickerUpper = (ast.ticker || h.ticker || '').toUpperCase();
+          const nameLower = (ast.name || h.asset_name || '').toLowerCase();
+          const isKnownIncome = 
+            Boolean(ast.is_dividend_cost_deduct || h.is_dividend_cost_deduct) ||
+            ['SGOV', 'BIL', 'SHV', '488770', '453650'].includes(tickerUpper) ||
+            nameLower.includes('머니마켓') || 
+            nameLower.includes('단기채') ||
+            nameLower.includes('단기자금');
+
+          map[aid] = {
             quantity: Number(h.quantity || 0),
             avg_price: avgKrw,
             avg_price_usd: avgUsd,
@@ -65,17 +86,17 @@ export default function EditHoldingsModal({
             original_avg_price_usd: origUsd,
             adjusted_avg_price: Number(h.adjusted_avg_price ?? avgKrw),
             adjusted_avg_price_usd: Number(h.adjusted_avg_price_usd ?? avgUsd),
-            first_buy_date: h.first_buy_date || '',
+            first_buy_date: h.first_buy_date || new Date().toISOString().split('T')[0],
             cumulative_dividend: Number(h.cumulative_dividend || 0),
             dividend_count: Number(h.dividend_count || 0),
-            is_dividend_cost_deduct: Boolean(h.is_dividend_cost_deduct)
+            is_dividend_cost_deduct: isKnownIncome
           };
         });
         setHoldingsInputs(map);
       })
       .catch((err) => console.error(err))
       .finally(() => setLoading(false));
-  }, [selectedAccId, accounts, effectiveRate]);
+  }, [selectedAccId, accounts, effectiveRate, assets]);
 
   // Filter allowed assets for this account
   const allowedAssets = assets.filter((ast) => 
@@ -88,6 +109,16 @@ export default function EditHoldingsModal({
       [assetId]: {
         ...prev[assetId],
         quantity: qty
+      }
+    }));
+  };
+
+  const handleToggleDividendDeduct = (assetId, isChecked) => {
+    setHoldingsInputs((prev) => ({
+      ...prev,
+      [assetId]: {
+        ...prev[assetId],
+        is_dividend_cost_deduct: isChecked
       }
     }));
   };
@@ -164,7 +195,8 @@ export default function EditHoldingsModal({
           buy_fx_rate: Number(current.buy_fx_rate || 0),
           original_avg_price: Number(current.original_avg_price ?? current.avg_price ?? 0),
           original_avg_price_usd: Number(current.original_avg_price_usd ?? current.avg_price_usd ?? 0),
-          first_buy_date: current.first_buy_date || ''
+          first_buy_date: current.first_buy_date || new Date().toISOString().split('T')[0],
+          is_dividend_cost_deduct: Boolean(current.is_dividend_cost_deduct)
         };
       });
 
@@ -264,11 +296,11 @@ export default function EditHoldingsModal({
               const isUs = ast.market === 'US';
               const isGold = ast.name.includes('금') || ast.ticker === 'M04020000';
               const unit = isGold ? 'g' : '주';
-              const isDividendDeduct = Boolean(ast.is_dividend_cost_deduct || h.is_dividend_cost_deduct);
+              const isDividendDeduct = Boolean(h.is_dividend_cost_deduct ?? ast.is_dividend_cost_deduct);
 
               return (
                 <div key={ast.id} style={{ background: 'var(--bg-card-subtle)', padding: '14px', borderRadius: 'var(--radius-md)', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                       <span>{ast.name}</span>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
@@ -279,15 +311,33 @@ export default function EditHoldingsModal({
                           🇺🇸 미국상장 (USD)
                         </span>
                       )}
-                      {isDividendDeduct && (
-                        <span className="badge" style={{ fontSize: '0.72rem', padding: '1px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                          💰 배당차감
-                        </span>
-                      )}
                     </div>
-                    <span className={`badge ${ast.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
-                      {ast.is_risk_asset ? '🔴 위험자산' : '🟢 안전자산'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: isDividendDeduct ? '1px solid #3b82f6' : '1px solid var(--border-color)',
+                        background: isDividendDeduct ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-surface)',
+                        color: isDividendDeduct ? '#3b82f6' : 'var(--text-muted)'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={isDividendDeduct}
+                          onChange={(e) => handleToggleDividendDeduct(String(ast.id), e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        💰 배당 단가 차감
+                      </label>
+                      <span className={`badge ${ast.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
+                        {ast.is_risk_asset ? '🔴 위험자산' : '🟢 안전자산'}
+                      </span>
+                    </div>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: isDividendDeduct ? (isUs ? 'repeat(auto-fit, minmax(140px, 1fr))' : 'repeat(auto-fit, minmax(160px, 1fr))') : (isUs ? 'repeat(auto-fit, minmax(170px, 1fr))' : '1fr 1fr'), gap: '12px' }}>
@@ -309,14 +359,14 @@ export default function EditHoldingsModal({
                     {/* 배당차감 활성화 시: 최초 매수일 입력 */}
                     {isDividendDeduct && (
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.78rem' }}>
-                          최초 매수일 <span className="helper-text">(배당 반영 기준)</span>
+                        <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                          📅 최초 매수일 <span className="helper-text">(배당 반영 기준)</span>
                         </label>
                         <input
                           type="date"
                           className="input-text"
-                          style={{ padding: '6px 10px', fontSize: '0.85rem' }}
-                          value={h.first_buy_date || ''}
+                          style={{ padding: '6px 10px', fontSize: '0.85rem', fontWeight: 600, border: '1px solid var(--accent-primary)' }}
+                          value={h.first_buy_date || new Date().toISOString().split('T')[0]}
                           onChange={(e) => handleFirstBuyDateChange(String(ast.id), e.target.value)}
                         />
                       </div>

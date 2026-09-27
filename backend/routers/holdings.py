@@ -28,6 +28,7 @@ class HoldingInputItem(BaseModel):
     original_avg_price_usd: Optional[float] = 0.0
     first_buy_date: Optional[str] = ""
     manual_dividend_override: Optional[float] = None
+    is_dividend_cost_deduct: Optional[bool] = None
 
 class SaveAccountHoldingsRequest(BaseModel):
     """계좌별 예수금 및 보유 종목 저장 요청 스키마"""

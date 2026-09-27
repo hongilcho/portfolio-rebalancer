@@ -876,6 +876,9 @@ def save_account_holdings(account_id, holdings_data):
                 manual_div = float(manual_div)
             else:
                 manual_div = None
+
+            if 'is_dividend_cost_deduct' in item and item['is_dividend_cost_deduct'] is not None:
+                cursor.execute("UPDATE assets SET is_dividend_cost_deduct = %s WHERE id = %s", (bool(item['is_dividend_cost_deduct']), aid))
                 
             cursor.execute("SELECT id FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
             row = cursor.fetchone()
