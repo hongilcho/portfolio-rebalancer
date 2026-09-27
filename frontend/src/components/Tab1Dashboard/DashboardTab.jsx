@@ -206,13 +206,32 @@ export default function DashboardTab({
       return '대체투자';
     }
 
-    // 3. 채권 (미국10년국채액티브, 미국30년국채액티브 등)
+    // 3. 채권 (미국10년국채액티브, 미국30년국채액티브, SGOV, 머니마켓, 단기채 등)
     if (
       name.includes('국채') || 
       name.includes('채권') || 
       name.includes('bond') ||
+      name.includes('treasury') ||
+      name.includes('머니마켓') ||
+      name.includes('단기자금') ||
+      name.includes('단기채') ||
+      name.includes('kofr') ||
+      name.includes('cd금리') ||
+      name.includes('money market') ||
+      name.includes('fixed income') ||
       ticker === '0085P0' ||
-      ticker === '476760'
+      ticker === '476760' ||
+      ticker === 'SGOV' ||
+      ticker === 'BIL' ||
+      ticker === 'SHV' ||
+      ticker === 'TLT' ||
+      ticker === 'IEF' ||
+      ticker === 'SHY' ||
+      ticker === 'BND' ||
+      ticker === 'AGG' ||
+      ticker === '488770' ||
+      ticker === '453650' ||
+      (item.is_dividend_cost_deduct && !name.includes('주식') && !name.includes('stock'))
     ) {
       return '채권';
     }
