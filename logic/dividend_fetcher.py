@@ -79,13 +79,30 @@ def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
             pass
         return []
 
-def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float = 1380.0) -> Dict[str, Any]:
+def get_dividend_tax_rate(account_type: str, market: str) -> float:
+    """
+    계좌 유형 및 시장 구분에 따른 배당소득세 원천징수세율을 반환합니다.
+    - 절세/비과세 계좌 (ISA, IRP, 연금저축): 0.0% (비과세 또는 인출 시까지 과세이연)
+    - 일반 과세 계좌 (종합매매, 위탁, 일반, CMA 등):
+      - 국내 시장(KR): 15.4% (배당소득세 14% + 지방소득세 1.4%)
+      - 미국 시장(US): 15.0% (한미 조세협약 미국 원천징수 15.0%)
+    """
+    acc_clean = (account_type or '').strip().upper()
+    if any(k in acc_clean for k in ['ISA', 'IRP', '연금', 'PENSION']):
+        return 0.0
+    if market == 'US':
+        return 0.150
+    return 0.154
+
+def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float = 1380.0, account_type: str = '') -> Dict[str, Any]:
     """
     개별 보유 종목의 배당금 단가 차감(Adjusted Cost Basis)을 계산합니다.
     
     자산에 `is_dividend_cost_deduct`가 활성화되어 있으면,
-    보유 시작일(`first_buy_date`) 이후 발생한 실제 공시 배당금을 합산하여
-    원래 매입단가(`original_avg_price`)에서 차감한 유효 매입단가(`avg_price`)를 반환합니다.
+    보유 시작일(`first_buy_date`) 이후 발생한 실제 공시 배당금에서
+    계좌 유형별 배당소득세(일반계좌 15.4%/미국 15%, 절세계좌 0%)를 원천징수한
+    '세후 실지급 배당금'을 원래 매입단가(`original_avg_price`)에서 차감한
+    유효 매입단가(`avg_price`)를 반환합니다.
     """
     is_deduct = bool(asset.get('is_dividend_cost_deduct', False))
     market = asset.get('market', 'KR')
@@ -102,6 +119,10 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
         else:
             buy_fx_rate = usd_krw
 
+    # 계좌 유형 및 세율 결정
+    effective_acc_type = holding.get('account_type') or account_type or ''
+    tax_rate = get_dividend_tax_rate(effective_acc_type, market)
+
     if not is_deduct:
         return {
             "avg_price": orig_krw,
@@ -109,10 +130,15 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
             "original_avg_price": orig_krw,
             "original_avg_price_usd": orig_usd,
             "cumulative_dividend": 0.0,
+            "gross_cumulative_dividend": 0.0,
+            "tax_rate": tax_rate,
+            "tax_amount": 0.0,
+            "is_tax_deducted": False,
             "dividend_count": 0,
             "first_buy_date": first_buy_date,
             "is_dividend_cost_deduct": False,
-            "buy_fx_rate": buy_fx_rate
+            "buy_fx_rate": buy_fx_rate,
+            "account_type": effective_acc_type
         }
 
     ticker = asset.get('ticker', '')
@@ -124,12 +150,16 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
     else:
         qualifying = []
 
+    gross_cum_div = sum(d['amount'] for d in qualifying)
+    tax_amount = round(gross_cum_div * tax_rate, 4 if is_us else 1)
+    net_cum_div = max(0.0, gross_cum_div - tax_amount)
+
     # 수동 배당금 보정이 있는 경우 우선 반영
     manual_override = holding.get('manual_dividend_override')
     if manual_override is not None and float(manual_override) >= 0:
         cum_div = float(manual_override)
     else:
-        cum_div = sum(d['amount'] for d in qualifying)
+        cum_div = net_cum_div
 
     if is_us:
         adjusted_usd = max(0.01, orig_usd - cum_div) if orig_usd > 0 else 0.0
@@ -143,9 +173,14 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
         "avg_price_usd": round(adjusted_usd, 2),
         "original_avg_price": orig_krw,
         "original_avg_price_usd": round(orig_usd, 2),
-        "cumulative_dividend": round(cum_div, 4),
+        "cumulative_dividend": round(cum_div, 4 if is_us else 1),
+        "gross_cumulative_dividend": round(gross_cum_div, 4 if is_us else 1),
+        "tax_rate": tax_rate,
+        "tax_amount": round(tax_amount, 4 if is_us else 1),
+        "is_tax_deducted": tax_rate > 0,
         "dividend_count": len(qualifying),
         "first_buy_date": first_buy_date,
         "is_dividend_cost_deduct": True,
-        "buy_fx_rate": buy_fx_rate
+        "buy_fx_rate": buy_fx_rate,
+        "account_type": effective_acc_type
     }

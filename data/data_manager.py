@@ -808,9 +808,11 @@ def get_holdings_by_account(account_id):
         cursor.execute('''
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
-                   a.is_dividend_cost_deduct
+                   a.is_dividend_cost_deduct,
+                   acc.account_type, acc.account_alias
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
+            JOIN accounts acc ON h.account_id = acc.id
             WHERE h.account_id = %s
         ''', (str(account_id),))
         rows = cursor.fetchall()

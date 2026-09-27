@@ -141,8 +141,8 @@ def get_dashboard_summary(
             asset_meta = asset_dict_by_id.get(aid, {})
             qty = float(h['quantity'])
 
-            # 배당금 단가 차감 (Adjusted Cost Basis) 계산
-            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw)
+            # 배당금 단가 차감 (Adjusted Cost Basis) 계산 (계좌 과세유형별 세후 배당 반영)
+            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw, account_type=acc_type)
             avg_p_krw = adj_info["avg_price"]
             curr_p = float(price_map.get(aid, avg_p_krw if avg_p_krw > 0 else 0))
             
@@ -230,6 +230,10 @@ def get_dashboard_summary(
                 "original_avg_price": adj_info["original_avg_price"],
                 "original_avg_price_usd": adj_info["original_avg_price_usd"],
                 "cumulative_dividend": adj_info["cumulative_dividend"],
+                "gross_cumulative_dividend": adj_info.get("gross_cumulative_dividend", 0.0),
+                "dividend_tax_rate": adj_info.get("tax_rate", 0.0),
+                "dividend_tax_amount": adj_info.get("tax_amount", 0.0),
+                "is_tax_deducted": adj_info.get("is_tax_deducted", False),
                 "dividend_count": adj_info["dividend_count"],
                 "first_buy_date": adj_info["first_buy_date"]
             })
@@ -292,7 +296,8 @@ def get_dashboard_summary(
         for h in acc_holdings:
             aid = str(h['asset_id'])
             asset_meta = asset_dict_by_id.get(aid, {})
-            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw)
+            acc_type = acc.get('account_type', '')
+            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw, account_type=acc_type)
             avg_p_krw = adj_info["avg_price"]
             avg_p_usd = adj_info["avg_price_usd"]
             
@@ -312,6 +317,10 @@ def get_dashboard_summary(
                     "original_avg_price": adj_info["original_avg_price"],
                     "original_avg_price_usd": adj_info["original_avg_price_usd"],
                     "cumulative_dividend": adj_info["cumulative_dividend"],
+                    "gross_cumulative_dividend": adj_info.get("gross_cumulative_dividend", 0.0),
+                    "dividend_tax_rate": adj_info.get("tax_rate", 0.0),
+                    "dividend_tax_amount": adj_info.get("tax_amount", 0.0),
+                    "is_tax_deducted": adj_info.get("is_tax_deducted", False),
                     "dividend_count": adj_info["dividend_count"],
                     "first_buy_date": adj_info["first_buy_date"]
                 }
@@ -328,6 +337,10 @@ def get_dashboard_summary(
                 portfolio_assets[aid]["original_avg_price"] = adj_info["original_avg_price"]
                 portfolio_assets[aid]["original_avg_price_usd"] = adj_info["original_avg_price_usd"]
                 portfolio_assets[aid]["cumulative_dividend"] = adj_info["cumulative_dividend"]
+                portfolio_assets[aid]["gross_cumulative_dividend"] = adj_info.get("gross_cumulative_dividend", 0.0)
+                portfolio_assets[aid]["dividend_tax_rate"] = adj_info.get("tax_rate", 0.0)
+                portfolio_assets[aid]["dividend_tax_amount"] = adj_info.get("tax_amount", 0.0)
+                portfolio_assets[aid]["is_tax_deducted"] = adj_info.get("is_tax_deducted", False)
                 portfolio_assets[aid]["dividend_count"] = adj_info["dividend_count"]
                 portfolio_assets[aid]["first_buy_date"] = adj_info["first_buy_date"]
 
@@ -481,6 +494,10 @@ def get_dashboard_summary(
             "original_avg_price": data.get('original_avg_price', 0.0),
             "original_avg_price_usd": data.get('original_avg_price_usd', 0.0),
             "cumulative_dividend": data.get('cumulative_dividend', 0.0),
+            "gross_cumulative_dividend": data.get('gross_cumulative_dividend', 0.0),
+            "dividend_tax_rate": data.get('dividend_tax_rate', 0.0),
+            "dividend_tax_amount": data.get('dividend_tax_amount', 0.0),
+            "is_tax_deducted": bool(data.get('is_tax_deducted', False)),
             "dividend_count": data.get('dividend_count', 0),
             "first_buy_date": data.get('first_buy_date', '')
         })

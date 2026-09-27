@@ -42,12 +42,16 @@ def get_account_holdings(account_id: str):
     holdings = get_holdings_by_account(account_id)
     usd_krw = market_service.usd_krw or 1350.0
     for h in holdings:
-        adj = calculate_adjusted_holding_prices(h, h, usd_krw)
+        adj = calculate_adjusted_holding_prices(h, h, usd_krw, account_type=h.get('account_type', ''))
         h['original_avg_price'] = adj['original_avg_price']
         h['original_avg_price_usd'] = adj['original_avg_price_usd']
         h['adjusted_avg_price'] = adj['avg_price']
         h['adjusted_avg_price_usd'] = adj['avg_price_usd']
         h['cumulative_dividend'] = adj['cumulative_dividend']
+        h['gross_cumulative_dividend'] = adj['gross_cumulative_dividend']
+        h['dividend_tax_rate'] = adj['tax_rate']
+        h['dividend_tax_amount'] = adj['tax_amount']
+        h['is_tax_deducted'] = adj['is_tax_deducted']
         h['dividend_count'] = adj['dividend_count']
         h['first_buy_date'] = adj['first_buy_date']
         h['is_dividend_cost_deduct'] = adj['is_dividend_cost_deduct']

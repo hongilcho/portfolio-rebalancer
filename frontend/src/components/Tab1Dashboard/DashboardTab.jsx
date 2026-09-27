@@ -714,7 +714,7 @@ export default function DashboardTab({
                         <div>{isUsdMode ? formatUSD(item.avg_price_usd) : formatKRW(item.avg_price)}</div>
                         {item.is_dividend_cost_deduct && item.cumulative_dividend > 0 && (
                           <div style={{ fontSize: '0.72rem', color: 'var(--color-safe, #10b981)', whiteSpace: 'nowrap' }}>
-                            최초 {isUsdMode || isUs ? formatUSD(item.original_avg_price_usd) : formatKRW(item.original_avg_price)} (배당 -{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)})
+                            최초 {isUsdMode || isUs ? formatUSD(item.original_avg_price_usd) : formatKRW(item.original_avg_price)} ({item.is_tax_deducted ? '세후 배당 -' : '배당 -'}{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)})
                           </div>
                         )}
                         {isUs && item.buy_fx_rate > 0 && (
@@ -882,7 +882,7 @@ export default function DashboardTab({
                 {/* Dividend Deduction Info */}
                 {item.is_dividend_cost_deduct && item.cumulative_dividend > 0 && (
                   <div style={{ fontSize: '0.74rem', color: 'var(--color-safe, #10b981)', marginTop: '2px' }}>
-                    최초단가 {isUsdMode || isUs ? formatUSD(item.original_avg_price_usd) : formatKRW(item.original_avg_price)} (배당 -{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)} 차감)
+                    최초단가 {isUsdMode || isUs ? formatUSD(item.original_avg_price_usd) : formatKRW(item.original_avg_price)} ({item.is_tax_deducted ? '세후 배당 -' : '배당 -'}{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)} 차감)
                   </div>
                 )}
 

@@ -496,12 +496,12 @@ export default function EditHoldingsModal({
                               현재 유효단가 {isUs ? formatUSD(h.adjusted_avg_price_usd || h.avg_price_usd) : formatKRW(h.adjusted_avg_price || h.avg_price)}
                             </strong>
                             <span style={{ color: 'var(--color-profit, #10b981)', marginLeft: '6px', fontWeight: 600 }}>
-                              (누적 {h.dividend_count || 0}회 배당, -{isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)} 차감)
+                              (누적 {h.dividend_count || 0}회 배당, {h.is_tax_deducted ? `세후 -${isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)} 차감, 배당세 ${(Number(h.dividend_tax_rate) * 100).toFixed(1)}% 반영` : `-${isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)} 차감 (비과세/과세이연)`})
                             </span>
                           </>
                         ) : (
                           <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>
-                            (기준일 이후 발생한 거래소 공시 배당금이 매수단가에서 자동 차감되어 총손익에 합산됩니다)
+                            (기준일 이후 발생한 공시 배당금이 세금 반영 후 매수단가에서 자동 차감되어 총손익에 합산됩니다)
                           </span>
                         )}
                       </div>
