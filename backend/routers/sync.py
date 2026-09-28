@@ -20,7 +20,7 @@ def sync_namuh_accounts():
     (API 연동을 지원하지 않는 ISA, IRP, 연금저축계좌는 스킵)
     """
     accounts = get_all_accounts()
-    skip_types = ['ISA', 'IRP', '연금저축계좌']
+    skip_types = ['ISA', 'IRP', '연금저축계좌', '연금', 'PENSION']
     
     synced_accounts = []
     errors = []
@@ -33,19 +33,22 @@ def sync_namuh_accounts():
         if not acc_no or acc_type in skip_types:
             continue
             
-        if acc_type == '금현물':
-            api_data, err_msg = nh_api_client.fetch_gold_account_balance(acc_no)
-        else:
-            api_data, err_msg = nh_api_client.fetch_full_account_balance(acc_no)
-            
-        if api_data:
-            success, msg = sync_account_with_api(acc['id'], api_data)
-            if success:
-                synced_accounts.append(acc_alias)
+        try:
+            if acc_type == '금현물':
+                api_data, err_msg = nh_api_client.fetch_gold_account_balance(acc_no)
             else:
-                errors.append(f"[{acc_alias}] {msg}")
-        else:
-            errors.append(f"[{acc_alias}] API 오류: {err_msg or '잔고 조회 실패'}")
+                api_data, err_msg = nh_api_client.fetch_full_account_balance(acc_no)
+                
+            if api_data:
+                success, msg = sync_account_with_api(acc['id'], api_data)
+                if success:
+                    synced_accounts.append(acc_alias)
+                else:
+                    errors.append(f"[{acc_alias}] {msg}")
+            else:
+                errors.append(f"[{acc_alias}] API 오류: {err_msg or '잔고 조회 실패'}")
+        except Exception as e:
+            errors.append(f"[{acc_alias}] 동기화 오류: {str(e)}")
             
     market_service.invalidate_price_cache()
     

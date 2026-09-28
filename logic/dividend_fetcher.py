@@ -108,8 +108,10 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
     market = asset.get('market', 'KR')
     is_us = (market == 'US')
 
-    orig_krw = float(holding.get('original_avg_price') or holding.get('avg_price') or 0.0)
-    orig_usd = float(holding.get('original_avg_price_usd') or holding.get('avg_price_usd') or 0.0)
+    curr_krw = float(holding.get('avg_price') or 0.0)
+    curr_usd = float(holding.get('avg_price_usd') or 0.0)
+    orig_krw = float(holding.get('original_avg_price') or curr_krw)
+    orig_usd = float(holding.get('original_avg_price_usd') or curr_usd)
     first_buy_date = str(holding.get('first_buy_date') or '').strip()
     buy_fx_rate = float(holding.get('buy_fx_rate') or 0.0)
     
@@ -125,10 +127,10 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
 
     if not is_deduct:
         return {
-            "avg_price": orig_krw,
-            "avg_price_usd": orig_usd,
-            "original_avg_price": orig_krw,
-            "original_avg_price_usd": orig_usd,
+            "avg_price": curr_krw,
+            "avg_price_usd": curr_usd,
+            "original_avg_price": curr_krw,
+            "original_avg_price_usd": curr_usd,
             "cumulative_dividend": 0.0,
             "gross_cumulative_dividend": 0.0,
             "tax_rate": tax_rate,

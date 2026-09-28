@@ -77,7 +77,7 @@ class NamuhAPIClient:
             }
             
             try:
-                res = requests.post(url, headers=headers, data=body, timeout=3, verify=False)
+                res = requests.post(url, headers=headers, data=body, timeout=10, verify=False)
                 if res.status_code != 200:
                     print(f"Namuh API Token Error Details: {res.text}")
                     # 호출 제한(429/403 등) 시 60초간 재요청 방지하여 대체 경로(Naver/yfinance) 즉시 진행
@@ -223,9 +223,9 @@ class NamuhAPIClient:
             res.raise_for_status()
             data = res.json()
             
-            # 예수금 (dca)
+            # 예수금 (D+2 추정예수금 nxt2_dd_dca 우선 반영)
             out_0 = data.get("Output_0", {})
-            deposit = float(out_0.get("dca", 0))
+            deposit = float(out_0.get("nxt2_dd_dca") if out_0.get("nxt2_dd_dca") is not None else out_0.get("dca", 0))
             
             # 금 잔고
             out_1 = data.get("Output_1", [])
@@ -272,7 +272,7 @@ class NamuhAPIClient:
         """
         token = self.get_access_token()
         if not token:
-            return None
+            return None, "토큰 발급 실패"
             
         url = f"{self.base_url}/krstock/inquiry/v1/balance"
         headers = {
@@ -296,9 +296,9 @@ class NamuhAPIClient:
             res.raise_for_status()
             data = res.json()
             
-            # 예수금 (dca)
+            # 예수금 (D+2 추정예수금 nxt2_dd_dca 우선 반영)
             out_0 = data.get("Output_0", {})
-            deposit = float(out_0.get("dca", 0))
+            deposit = float(out_0.get("nxt2_dd_dca") if out_0.get("nxt2_dd_dca") is not None else out_0.get("dca", 0))
             
             # 주식 잔고
             out_1 = data.get("Output_1", [])

@@ -968,17 +968,27 @@ def sync_account_with_api(account_id, api_data):
                 cursor.execute("SELECT id FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
                 row = cursor.fetchone()
                 if row:
-                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s WHERE id = %s", (qty, avg_p, row[0]))
+                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s, original_avg_price = %s WHERE id = %s", (qty, avg_p, avg_p, row[0]))
                 else:
                     new_h_id = generate_id()
-                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price) VALUES (%s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p))
+                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, original_avg_price) VALUES (%s, %s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p, avg_p))
                     
-                # Also log an INIT trade to trade_history to reflect the manual sync
-                new_t_id = generate_id()
+                # Upsert INIT trade to trade_history to reflect the sync without creating endless duplicates
                 cursor.execute('''
-                    INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ''', (new_t_id, today_str, str(account_id), aid, 'INIT', qty, avg_p))
+                    SELECT id FROM trade_history 
+                    WHERE account_id = %s AND asset_id = %s AND trade_type = 'INIT' AND trade_date = %s
+                ''', (str(account_id), aid, today_str))
+                init_row = cursor.fetchone()
+                if init_row:
+                    cursor.execute('''
+                        UPDATE trade_history SET quantity = %s, price = %s WHERE id = %s
+                    ''', (qty, avg_p, init_row[0]))
+                else:
+                    new_t_id = generate_id()
+                    cursor.execute('''
+                        INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ''', (new_t_id, today_str, str(account_id), aid, 'INIT', qty, avg_p))
                 
         # 5. Delete holdings that are no longer in the account (protecting deposits)
         cursor.execute("SELECT id FROM assets WHERE is_deposit = TRUE")
@@ -1127,11 +1137,19 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price,
                     new_avg_usd = 0.0
                     new_buy_fx = 0.0
                     
-            cursor.execute('''
-                UPDATE holdings
-                SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s
-                WHERE account_id = %s AND asset_id = %s
-            ''', (new_qty, new_avg_price, new_avg_usd, new_buy_fx, str(account_id), str(asset_id)))
+            if trade_type in ('BUY', 'INIT'):
+                cursor.execute('''
+                    UPDATE holdings
+                    SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s,
+                        original_avg_price = %s, original_avg_price_usd = %s
+                    WHERE account_id = %s AND asset_id = %s
+                ''', (new_qty, new_avg_price, new_avg_usd, new_buy_fx, new_avg_price, new_avg_usd, str(account_id), str(asset_id)))
+            else:
+                cursor.execute('''
+                    UPDATE holdings
+                    SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s
+                    WHERE account_id = %s AND asset_id = %s
+                ''', (new_qty, new_avg_price, new_avg_usd, new_buy_fx, str(account_id), str(asset_id)))
             
         else:
             if trade_type in ('BUY', 'INIT'):
@@ -1145,9 +1163,9 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price,
                     new_avg_usd = 0.0
                     new_buy_fx = 0.0
                 cursor.execute('''
-                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ''', (new_h_id, str(account_id), str(asset_id), quantity, new_avg_price, new_avg_usd, new_buy_fx))
+                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate, original_avg_price, original_avg_price_usd)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (new_h_id, str(account_id), str(asset_id), quantity, new_avg_price, new_avg_usd, new_buy_fx, new_avg_price, new_avg_usd))
             else:
                 conn.rollback()
                 return False, "매도할 보유 잔고가 없습니다."
@@ -1206,7 +1224,7 @@ def delete_trade(trade_id):
             FROM trade_history t
             JOIN assets a ON t.asset_id = a.id
             WHERE t.account_id = %s AND t.asset_id = %s 
-            ORDER BY t.trade_date ASC, t.id ASC
+            ORDER BY t.trade_date ASC, CASE WHEN t.trade_type = 'INIT' THEN 0 ELSE 1 END, t.id ASC
         ''', (account_id, asset_id))
         
         remaining_trades = cursor.fetchall()
@@ -1266,14 +1284,16 @@ def delete_trade(trade_id):
                     
         if new_qty > 0:
             cursor.execute('''
-                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate, original_avg_price, original_avg_price_usd)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(account_id, asset_id) DO UPDATE SET
                     quantity = EXCLUDED.quantity,
                     avg_price = EXCLUDED.avg_price,
                     avg_price_usd = EXCLUDED.avg_price_usd,
-                    buy_fx_rate = EXCLUDED.buy_fx_rate
-            ''', (generate_id(), account_id, asset_id, new_qty, new_avg_price, new_avg_usd, new_buy_fx))
+                    buy_fx_rate = EXCLUDED.buy_fx_rate,
+                    original_avg_price = EXCLUDED.avg_price,
+                    original_avg_price_usd = EXCLUDED.avg_price_usd
+            ''', (generate_id(), account_id, asset_id, new_qty, new_avg_price, new_avg_usd, new_buy_fx, new_avg_price, new_avg_usd))
         else:
             cursor.execute('''
                 DELETE FROM holdings 
