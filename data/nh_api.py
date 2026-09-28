@@ -300,22 +300,41 @@ class NamuhAPIClient:
             out_0 = data.get("Output_0", {})
             deposit = float(out_0.get("nxt2_dd_dca") if out_0.get("nxt2_dd_dca") is not None else out_0.get("dca", 0))
             
-            # 주식 잔고
+            # 주식 잔고 및 CMA 오토스윕(발행어음/RP) 현금성 자산 처리
             out_1 = data.get("Output_1", [])
             holdings = []
+            cma_sweep_cash = 0.0
             for item in out_1:
-                # 종목명, 종목코드, 수량(rsdl_qty: 체결기준 잔고수량 우선), 평단가(phs_pr), 현재가(now_pr)
+                ticker = item.get("iem_cd", "")
+                name = item.get("iem_nm", "")
+                
+                # CMA 발행어음/RP 등 야간 자동스윕 현금성 자산 감지 (예: NHKRCMA030, "CMA 어음", "CMA RP")
+                if ticker.startswith("NHKRCMA") or ticker.startswith("RP") or "CMA" in name:
+                    # 평가금액(eal_amt) 또는 잔고수량(rsdl_qty)을 현금 예수금으로 합산
+                    cma_amt = float(item.get("eal_amt") or item.get("rsdl_qty") or 0.0)
+                    cma_sweep_cash += cma_amt
+                    continue
+
+                # 일반 주식: 종목명, 종목코드, 수량(rsdl_qty: 체결기준 잔고수량 우선), 평단가(phs_pr), 현재가(now_pr)
                 qty = float(item.get("rsdl_qty") if item.get("rsdl_qty") is not None else item.get("itg_bnc_qty", 0))
                 if qty > 0:
                     holdings.append({
-                        "ticker": item.get("iem_cd", ""),
-                        "name": item.get("iem_nm", ""),
+                        "ticker": ticker,
+                        "name": name,
                         "quantity": qty,
                         "avg_price": float(item.get("phs_pr", 0)),
                         "current_price": float(item.get("now_pr", 0))
                     })
                     
-                # return tuple
+            deposit += cma_sweep_cash
+            
+            # Fallback: 일반 주식 보유가 없는 경우 인출가능금액(drn_pbl_amt)을 최소 보장
+            # (야간 오토스윕 시점 차이 등으로 인한 CMA/수시입출금 잔액 증발 방지)
+            if not holdings:
+                drn_pbl = float(out_0.get("drn_pbl_amt", 0.0))
+                if drn_pbl > deposit:
+                    deposit = drn_pbl
+                    
             return {
                 "deposit_krw": deposit,
                 "holdings": holdings

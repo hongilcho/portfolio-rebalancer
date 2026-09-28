@@ -205,6 +205,11 @@ def _do_init_db_schema(conn, cursor):
     cursor.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_limit_exhausted BOOLEAN DEFAULT FALSE")
     cursor.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS portfolio_id TEXT DEFAULT 'default' REFERENCES portfolios(id)")
     cursor.execute("UPDATE accounts SET portfolio_id = 'default' WHERE portfolio_id IS NULL")
+    try:
+        cursor.execute("ALTER TABLE accounts ALTER COLUMN deposit_krw TYPE DOUBLE PRECISION")
+        cursor.execute("ALTER TABLE accounts ALTER COLUMN deposit_usd TYPE DOUBLE PRECISION")
+    except Exception:
+        pass
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS assets (
@@ -267,6 +272,12 @@ def _do_init_db_schema(conn, cursor):
     cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS original_avg_price_usd REAL DEFAULT 0.0")
     cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS first_buy_date TEXT DEFAULT ''")
     cursor.execute("ALTER TABLE holdings ADD COLUMN IF NOT EXISTS manual_dividend_override REAL DEFAULT NULL")
+    try:
+        cursor.execute("ALTER TABLE holdings ALTER COLUMN quantity TYPE DOUBLE PRECISION")
+        cursor.execute("ALTER TABLE holdings ALTER COLUMN avg_price TYPE DOUBLE PRECISION")
+        cursor.execute("ALTER TABLE holdings ALTER COLUMN original_avg_price TYPE DOUBLE PRECISION")
+    except Exception:
+        pass
     try:
         cursor.execute('''
             UPDATE holdings 
