@@ -34,8 +34,13 @@ def sync_namuh_accounts():
             continue
             
         try:
+            import time
+            time.sleep(0.3) # NH API 초당 요청 제한(Rate Limit) 방지
+            
             if acc_type == '금현물':
                 api_data, err_msg = nh_api_client.fetch_gold_account_balance(acc_no)
+            elif acc_type == 'CMA':
+                api_data, err_msg = nh_api_client.fetch_account_balance(acc_no)
             else:
                 api_data, err_msg = nh_api_client.fetch_full_account_balance(acc_no)
                 

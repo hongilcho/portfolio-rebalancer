@@ -963,15 +963,20 @@ def sync_account_with_api(account_id, api_data):
                 incoming_asset_ids.add(aid)
                 qty = float(h['quantity'])
                 avg_p = float(h['avg_price'])
+                avg_p_usd = float(h.get('avg_price_usd', 0.0))
+                buy_fx = float(h.get('buy_fx_rate', 0.0))
                 
                 # Check if exists
                 cursor.execute("SELECT id FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
                 row = cursor.fetchone()
                 if row:
-                    cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s, original_avg_price = %s WHERE id = %s", (qty, avg_p, avg_p, row[0]))
+                    if avg_p_usd > 0:
+                        cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s, original_avg_price = %s, avg_price_usd = %s, original_avg_price_usd = %s, buy_fx_rate = %s WHERE id = %s", (qty, avg_p, avg_p, avg_p_usd, avg_p_usd, buy_fx, row[0]))
+                    else:
+                        cursor.execute("UPDATE holdings SET quantity = %s, avg_price = %s, original_avg_price = %s WHERE id = %s", (qty, avg_p, avg_p, row[0]))
                 else:
                     new_h_id = generate_id()
-                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, original_avg_price) VALUES (%s, %s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p, avg_p))
+                    cursor.execute("INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, original_avg_price, avg_price_usd, original_avg_price_usd, buy_fx_rate) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (new_h_id, str(account_id), aid, qty, avg_p, avg_p, avg_p_usd, avg_p_usd, buy_fx))
                     
                 # Upsert INIT trade to trade_history to reflect the sync without creating endless duplicates
                 cursor.execute('''

@@ -231,8 +231,8 @@ class NamuhAPIClient:
             out_1 = data.get("Output_1", [])
             holdings = []
             for item in out_1:
-                # 종목명, 종목코드, 수량(itg_bnc_qty), 평단가(phs_pr), 현재가(now_pr)
-                qty = float(item.get("itg_bnc_qty", 0))
+                # 종목명, 종목코드, 수량(rsdl_qty: 체결기준 잔고수량 우선), 평단가(phs_pr), 현재가(now_pr)
+                qty = float(item.get("rsdl_qty") if item.get("rsdl_qty") is not None else item.get("itg_bnc_qty", 0))
                 if qty > 0:
                     holdings.append({
                         "ticker": item.get("iem_cd", ""),
@@ -304,8 +304,8 @@ class NamuhAPIClient:
             out_1 = data.get("Output_1", [])
             holdings = []
             for item in out_1:
-                # 종목명, 종목코드, 수량(itg_bnc_qty), 평단가(phs_pr), 현재가(now_pr)
-                qty = float(item.get("itg_bnc_qty", 0))
+                # 종목명, 종목코드, 수량(rsdl_qty: 체결기준 잔고수량 우선), 평단가(phs_pr), 현재가(now_pr)
+                qty = float(item.get("rsdl_qty") if item.get("rsdl_qty") is not None else item.get("itg_bnc_qty", 0))
                 if qty > 0:
                     holdings.append({
                         "ticker": item.get("iem_cd", ""),
@@ -364,12 +364,12 @@ class NamuhAPIClient:
             res.raise_for_status()
             data = res.json()
             
-            # 예수금 (원화 예수금 krw_dca, 외화 예수금 fc_dca)
+            # 예수금 (외화 예수금 fc_dca + 미결제정산금액 fc_ny_stl_xcl_amt로 체결기준 반영)
+            # 주의: Output_0의 krw_dca는 별도 원화가 아니라 외화예수금(fc_dca)의 환율 환산 평가액이므로 원화예수금으로 취급하지 않음
             out_0 = data.get("Output_0", {})
-            deposit_krw = float(out_0.get("krw_dca", 0))
-            deposit_usd = float(out_0.get("fc_dca", 0))
+            deposit_usd = float(out_0.get("fc_dca", 0)) + float(out_0.get("fc_ny_stl_xcl_amt", 0))
             
-            # 해외주식 잔고 (원화 평단가 phs_uit_pr, 원화 현재가 end_pr)
+            # 해외주식 잔고 (체결기준 cns_bse_bnc_qty, 원화/외화 평단가 및 매입환율)
             out_1 = data.get("Output_1", [])
             holdings = []
             for item in out_1:
@@ -380,11 +380,14 @@ class NamuhAPIClient:
                         "name": item.get("iem_nm", ""),
                         "quantity": qty,
                         "avg_price": float(item.get("phs_uit_pr", 0)),
-                        "current_price": float(item.get("end_pr", 0))
+                        "current_price": float(item.get("end_pr", 0)),
+                        "avg_price_usd": float(item.get("fc_phs_uit_pr", 0)),
+                        "current_price_usd": float(item.get("fc_sec_end_pr", 0)),
+                        "buy_fx_rate": float(item.get("phs_xcg_rt", 0)),
+                        "currency": item.get("cur_cd", "USD")
                     })
                     
             return {
-                "deposit_krw": deposit_krw,
                 "deposit_usd": deposit_usd,
                 "holdings": holdings
             }, None
@@ -412,8 +415,8 @@ class NamuhAPIClient:
             
         ov_data, ov_err = self.fetch_overseas_account_balance(account_no)
         if ov_data:
-            # 병합
-            dom_data["deposit_krw"] = dom_data.get("deposit_krw", 0.0) + ov_data.get("deposit_krw", 0.0)
+            # 병합: 원화 예수금은 국내 잔고 API(dom_data)의 순수 원화 예수금(D+2 추정예수금)만 유지하여
+            # 해외 API의 외화 환산액(krw_dca)으로 인한 원화/외화 예수금 이중 합산 방지
             dom_data["deposit_usd"] = ov_data.get("deposit_usd", 0.0)
             dom_data["holdings"].extend(ov_data.get("holdings", []))
         else:
