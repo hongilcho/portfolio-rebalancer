@@ -17,6 +17,23 @@ from data.data_manager import get_market_cache, save_market_cache
 _dividend_memory_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 CACHE_TTL = 86400.0  # 24시간 캐시
 
+# 특정 공시/배당락일에 대해 증권사 실지급액과 외부 API(yfinance) 간 차이가 있는 경우의 보정 테이블
+DIVIDEND_OVERRIDES: Dict[Tuple[str, str], float] = {
+    # (ticker, ex_date): corrected_amount
+    ("476760", "2026-07-30"): 26.0,  # ACE 미국30년국채액티브: 실지급 주당 26원
+}
+
+def _apply_dividend_overrides(ticker: str, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    clean_ticker = (ticker or '').strip().upper()
+    res = []
+    for r in records:
+        key = (clean_ticker, r['date'])
+        if key in DIVIDEND_OVERRIDES:
+            res.append({"date": r['date'], "amount": DIVIDEND_OVERRIDES[key]})
+        else:
+            res.append(r)
+    return res
+
 def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
     """
     종목의 거래소 공식 배당/분배금 이력을 수집하여 반환합니다.
@@ -33,14 +50,15 @@ def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
     if cache_key in _dividend_memory_cache:
         cached_time, records = _dividend_memory_cache[cache_key]
         if now - cached_time < CACHE_TTL:
-            return records
+            return _apply_dividend_overrides(clean_ticker, records)
 
     # 2. PostgreSQL 지속성 캐시 확인
     try:
         db_cache, age = get_market_cache(cache_key)
         if db_cache and isinstance(db_cache, list) and age < CACHE_TTL:
-            _dividend_memory_cache[cache_key] = (now - age, db_cache)
-            return db_cache
+            corrected_cache = _apply_dividend_overrides(clean_ticker, db_cache)
+            _dividend_memory_cache[cache_key] = (now - age, corrected_cache)
+            return corrected_cache
     except Exception as e:
         print(f"Notice: Failed to read dividend DB cache for {cache_key}: {e}")
 
@@ -64,6 +82,8 @@ def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
                 records.append({"date": dt_str, "amount": round(float(amt), 4)})
             records.sort(key=lambda x: x["date"])
 
+        records = _apply_dividend_overrides(clean_ticker, records)
+
         # 캐시 저장
         _dividend_memory_cache[cache_key] = (now, records)
         save_market_cache(cache_key, records)
@@ -74,7 +94,7 @@ def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
         try:
             old_cache, _ = get_market_cache(cache_key)
             if old_cache and isinstance(old_cache, list):
-                return old_cache
+                return _apply_dividend_overrides(clean_ticker, old_cache)
         except Exception:
             pass
         return []
