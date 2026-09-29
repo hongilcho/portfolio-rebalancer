@@ -38,6 +38,7 @@ def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = Fa
     all_accounts = batch_data.get("accounts", [])
     all_assets = batch_data.get("assets", [])
     all_holdings = batch_data.get("holdings", [])
+    all_trades = batch_data.get("trade_history", [])
 
     p_accounts = [a for a in all_accounts if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
     p_assets = [a for a in all_assets if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
@@ -52,7 +53,8 @@ def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = Fa
         assets=p_assets,
         all_holdings=all_holdings,
         price_map=price_map,
-        usd_krw=usd_krw
+        usd_krw=usd_krw,
+        all_trades=all_trades
     )
 
     p_asset_ids = {str(a["id"]) for a in p_assets}
@@ -80,7 +82,8 @@ def get_dashboard_summary(
     assets: Optional[List[Dict[str, Any]]] = None,
     all_holdings: Optional[List[Dict[str, Any]]] = None,
     price_map: Optional[Dict[str, float]] = None,
-    usd_krw: Optional[float] = None
+    usd_krw: Optional[float] = None,
+    all_trades: Optional[List[Dict[str, Any]]] = None
 ):
     """
     포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
@@ -93,6 +96,8 @@ def get_dashboard_summary(
         all_assets = batch_data.get("assets", [])
         if all_holdings is None:
             all_holdings = batch_data.get("holdings", [])
+        if all_trades is None:
+            all_trades = batch_data.get("trade_history", [])
         if accounts is None:
             accounts = [a for a in all_accounts if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
         if assets is None:
@@ -107,6 +112,11 @@ def get_dashboard_summary(
         usd_krw = market_service.usd_krw
 
     price_usd_map = {str(item['id']): float(item.get('price_usd') or 0.0) for item in (price_data or [])}
+
+    trades_by_holding: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    if all_trades:
+        for t in all_trades:
+            trades_by_holding.setdefault((str(t.get('account_id', '')), str(t.get('asset_id', ''))), []).append(t)
 
     holdings_by_acc: Dict[str, List[Dict[str, Any]]] = {}
     for h in all_holdings:
@@ -140,9 +150,10 @@ def get_dashboard_summary(
             aid = str(h['asset_id'])
             asset_meta = asset_dict_by_id.get(aid, {})
             qty = float(h['quantity'])
+            h_trades = trades_by_holding.get((acc_id, aid))
 
-            # 배당금 단가 차감 (Adjusted Cost Basis) 계산 (계좌 과세유형별 세후 배당 반영)
-            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw, account_type=acc_type)
+            # 배당금 단가 차감 (Adjusted Cost Basis) 계산 (계좌 과세유형별 세후 배당 반영 및 정밀 시계열 수량 추적)
+            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw, account_type=acc_type, trades=h_trades)
             avg_p_krw = adj_info["avg_price"]
             curr_p = float(price_map.get(aid, avg_p_krw if avg_p_krw > 0 else 0))
             
@@ -179,16 +190,27 @@ def get_dashboard_summary(
             eval_profit_usd = eval_val_usd - buy_amt_usd
             eval_profit_pct_usd = (eval_profit_usd / buy_amt_usd * 100) if buy_amt_usd > 0 else 0.0
 
-            # 배당금 집계 (Total Return)
-            cum_div_unit = float(adj_info.get("cumulative_dividend", 0.0))
+            # 배당금 집계 (Total Return - 정밀 시계열 수량 기반)
+            if "total_dividend_profit" in adj_info:
+                if is_us:
+                    div_profit_usd = float(adj_info["total_dividend_profit"])
+                    div_profit_krw = div_profit_usd * usd_krw
+                else:
+                    div_profit_krw = float(adj_info["total_dividend_profit"])
+                    div_profit_usd = (div_profit_krw / usd_krw) if usd_krw > 0 else 0.0
+            else:
+                cum_div_unit = float(adj_info.get("cumulative_dividend", 0.0))
+                if is_us:
+                    div_profit_usd = qty * cum_div_unit
+                    div_profit_krw = div_profit_usd * usd_krw
+                else:
+                    div_profit_krw = qty * cum_div_unit
+                    div_profit_usd = (div_profit_krw / usd_krw) if usd_krw > 0 else 0.0
+
             if is_us:
-                div_profit_usd = qty * cum_div_unit
-                div_profit_krw = div_profit_usd * usd_krw
                 total_profit_usd = eval_profit_usd + div_profit_usd
                 total_profit_pct_usd = (total_profit_usd / buy_amt_usd * 100) if buy_amt_usd > 0 else 0.0
             else:
-                div_profit_krw = qty * cum_div_unit
-                div_profit_usd = (div_profit_krw / usd_krw) if usd_krw > 0 else 0.0
                 total_profit_usd = 0.0
                 total_profit_pct_usd = 0.0
 
@@ -227,6 +249,7 @@ def get_dashboard_summary(
                 "eval_profit_pct": round(eval_profit_pct, 2),
                 "dividend_profit_krw": round(div_profit_krw, 0),
                 "dividend_profit_usd": round(div_profit_usd, 2),
+                "dividend_details": adj_info.get("dividend_details", []),
                 "total_profit_krw": round(total_profit_krw, 0),
                 "total_profit_pct": round(total_profit_pct, 2),
                 "avg_price_usd": round(avg_p_usd, 2) if is_us else 0.0,
@@ -331,7 +354,8 @@ def get_dashboard_summary(
             aid = str(h['asset_id'])
             asset_meta = asset_dict_by_id.get(aid, {})
             acc_type = acc.get('account_type', '')
-            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw, account_type=acc_type)
+            h_trades = trades_by_holding.get((str(acc['id']), aid))
+            adj_info = calculate_adjusted_holding_prices(h, asset_meta, usd_krw, account_type=acc_type, trades=h_trades)
             avg_p_krw = adj_info["avg_price"]
             avg_p_usd = adj_info["avg_price_usd"]
             
@@ -370,17 +394,26 @@ def get_dashboard_summary(
             portfolio_assets[aid]['buy_amt_usd'] += qty * avg_p_usd
             portfolio_assets[aid]['eval_amt_krw'] += qty * curr_p
             
-            # 배당금 집계 (계좌별 세금 및 수량 반영 누적)
-            c_div = float(adj_info.get("cumulative_dividend", 0.0))
+            # 배당금 집계 (계좌별 세금 및 시계열 수량 반영 누적)
             is_us_h = (h.get('market') == 'US')
-            if is_us_h:
-                d_usd = qty * c_div
-                portfolio_assets[aid]['dividend_usd'] += d_usd
-                portfolio_assets[aid]['dividend_krw'] += d_usd * usd_krw
+            if "total_dividend_profit" in adj_info:
+                if is_us_h:
+                    d_usd = float(adj_info["total_dividend_profit"])
+                    d_krw = d_usd * usd_krw
+                else:
+                    d_krw = float(adj_info["total_dividend_profit"])
+                    d_usd = (d_krw / usd_krw) if usd_krw > 0 else 0.0
             else:
-                d_krw = qty * c_div
-                portfolio_assets[aid]['dividend_krw'] += d_krw
-                portfolio_assets[aid]['dividend_usd'] += (d_krw / usd_krw) if usd_krw > 0 else 0.0
+                c_div = float(adj_info.get("cumulative_dividend", 0.0))
+                if is_us_h:
+                    d_usd = qty * c_div
+                    d_krw = d_usd * usd_krw
+                else:
+                    d_krw = qty * c_div
+                    d_usd = (d_krw / usd_krw) if usd_krw > 0 else 0.0
+
+            portfolio_assets[aid]['dividend_usd'] += d_usd
+            portfolio_assets[aid]['dividend_krw'] += d_krw
 
     # Add pure deposit assets directly from assets table
     for a in assets:

@@ -1475,7 +1475,8 @@ def get_overview_batch_data() -> Dict[str, Any]:
             JOIN assets a ON h.asset_id = a.id
             JOIN accounts acc ON h.account_id = acc.id
         ) h), '[]'::json),
-        'crypto_holdings', COALESCE((SELECT json_agg(c) FROM crypto_holdings c), '[]'::json)
+        'crypto_holdings', COALESCE((SELECT json_agg(c) FROM crypto_holdings c), '[]'::json),
+        'trade_history', COALESCE((SELECT json_agg(t ORDER BY t.trade_date ASC, t.id ASC) FROM trade_history t), '[]'::json)
     );
     """
     conn = get_connection()

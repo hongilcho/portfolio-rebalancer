@@ -77,6 +77,7 @@ export default function EditHoldingsModal({
             original_avg_price_usd: origUsd,
             first_buy_date: h.first_buy_date || '',
             cumulative_dividend: Number(h.cumulative_dividend || 0),
+            total_dividend_profit: Number(h.total_dividend_profit || 0),
             dividend_count: Number(h.dividend_count || 0),
             is_dividend_cost_deduct: false
           };
@@ -422,11 +423,15 @@ export default function EditHoldingsModal({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                       <div style={{ fontWeight: 600, color: 'var(--color-safe)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span>💰 배당금 자동 집계 (Total Return)</span>
-                        {h.cumulative_dividend > 0 && (
+                        {h.total_dividend_profit > 0 ? (
+                          <span style={{ fontWeight: 700 }}>
+                            · 누적 {h.dividend_count || 0}회 배당 (총 +{isUs ? formatUSD(h.total_dividend_profit) : formatKRW(h.total_dividend_profit)} 수령 / 주당 +{isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)})
+                          </span>
+                        ) : h.cumulative_dividend > 0 ? (
                           <span style={{ fontWeight: 700 }}>
                             · 누적 {h.dividend_count || 0}회 배당 (주당 +{isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)})
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>배당 산정 시작일:</span>

@@ -10,8 +10,9 @@ from pydantic import BaseModel
 from typing import List, Optional
 from data.data_manager import (
     get_holdings_by_account, get_all_holdings, save_account_holdings,
-    update_account, get_all_accounts, get_all_assets
+    update_account, get_all_accounts, get_all_assets, get_connection
 )
+from psycopg2.extras import RealDictCursor
 from backend.services import market_service
 from logic.dividend_fetcher import calculate_adjusted_holding_prices
 
@@ -41,13 +42,35 @@ class SaveAccountHoldingsRequest(BaseModel):
 def get_account_holdings(account_id: str):
     holdings = get_holdings_by_account(account_id)
     usd_krw = market_service.usd_krw or 1350.0
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT trade_date, trade_type, quantity, asset_id, id
+            FROM trade_history
+            WHERE account_id = %s
+            ORDER BY trade_date ASC, id ASC
+        """, (str(account_id),))
+        account_trades = cur.fetchall()
+    finally:
+        conn.close()
+
+    trades_by_asset = {}
+    for t in account_trades:
+        trades_by_asset.setdefault(str(t['asset_id']), []).append(dict(t))
+
     for h in holdings:
-        adj = calculate_adjusted_holding_prices(h, h, usd_krw, account_type=h.get('account_type', ''))
+        aid = str(h['asset_id'])
+        h_trades = trades_by_asset.get(aid, [])
+        adj = calculate_adjusted_holding_prices(h, h, usd_krw, account_type=h.get('account_type', ''), trades=h_trades)
         h['original_avg_price'] = adj['original_avg_price']
         h['original_avg_price_usd'] = adj['original_avg_price_usd']
         h['adjusted_avg_price'] = adj['avg_price']
         h['adjusted_avg_price_usd'] = adj['avg_price_usd']
         h['cumulative_dividend'] = adj['cumulative_dividend']
+        h['total_dividend_profit'] = adj.get('total_dividend_profit', 0.0)
+        h['dividend_details'] = adj.get('dividend_details', [])
         h['gross_cumulative_dividend'] = adj['gross_cumulative_dividend']
         h['dividend_tax_rate'] = adj['tax_rate']
         h['dividend_tax_amount'] = adj['tax_amount']
