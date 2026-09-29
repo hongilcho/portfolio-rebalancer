@@ -174,7 +174,7 @@ export default function EditHoldingsModal({
           buy_fx_rate: Number(current.buy_fx_rate || 0),
           original_avg_price: Number(current.original_avg_price ?? current.avg_price ?? 0),
           original_avg_price_usd: Number(current.original_avg_price_usd ?? current.avg_price_usd ?? 0),
-          first_buy_date: current.first_buy_date || new Date().toISOString().split('T')[0],
+          first_buy_date: current.first_buy_date || '',
           is_dividend_cost_deduct: Boolean(current.is_dividend_cost_deduct)
         };
       });

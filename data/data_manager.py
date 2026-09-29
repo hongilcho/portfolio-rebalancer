@@ -820,7 +820,22 @@ def get_holdings_by_account(account_id):
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
                    a.is_dividend_cost_deduct,
-                   acc.account_type, acc.account_alias
+                   acc.account_type, acc.account_alias,
+                   (
+                       SELECT 
+                           CASE 
+                               WHEN EXISTS (
+                                   SELECT 1 FROM trade_history t0 
+                                   WHERE t0.account_id = h.account_id 
+                                     AND t0.asset_id = h.asset_id 
+                                     AND t0.trade_date <= '2000-01-01'
+                               ) THEN '2026-07-01'
+                               ELSE MIN(t.trade_date)
+                           END
+                       FROM trade_history t 
+                       WHERE t.account_id = h.account_id 
+                         AND t.asset_id = h.asset_id
+                   ) as min_trade_date
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
             JOIN accounts acc ON h.account_id = acc.id
@@ -881,9 +896,13 @@ def save_account_holdings(account_id, holdings_data):
             original_avg_p_usd = float(item.get('original_avg_price_usd') or 0.0)
             if original_avg_p_usd <= 0:
                 original_avg_p_usd = avg_p_usd
+            cursor.execute("SELECT id, first_buy_date FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
+            row = cursor.fetchone()
+
             first_buy_date = str(item.get('first_buy_date') or '').strip()
-            if not first_buy_date:
-                first_buy_date = today_str
+            if not first_buy_date and row and row[1]:
+                first_buy_date = str(row[1]).strip()
+
             manual_div = item.get('manual_dividend_override')
             if manual_div is not None and str(manual_div).strip() != '':
                 manual_div = float(manual_div)
@@ -892,9 +911,6 @@ def save_account_holdings(account_id, holdings_data):
 
             if 'is_dividend_cost_deduct' in item and item['is_dividend_cost_deduct'] is not None:
                 cursor.execute("UPDATE assets SET is_dividend_cost_deduct = %s WHERE id = %s", (bool(item['is_dividend_cost_deduct']), aid))
-                
-            cursor.execute("SELECT id FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), aid))
-            row = cursor.fetchone()
             
             if qty <= 0:
                 if row:
@@ -1441,11 +1457,19 @@ def get_overview_batch_data() -> Dict[str, Any]:
                    a.is_dividend_cost_deduct,
                    acc.account_alias, acc.account_type,
                    (
-                       SELECT MIN(t.trade_date) 
+                       SELECT 
+                           CASE 
+                               WHEN EXISTS (
+                                   SELECT 1 FROM trade_history t0 
+                                   WHERE t0.account_id = h.account_id 
+                                     AND t0.asset_id = h.asset_id 
+                                     AND t0.trade_date <= '2000-01-01'
+                               ) THEN '2026-07-01'
+                               ELSE MIN(t.trade_date)
+                           END
                        FROM trade_history t 
                        WHERE t.account_id = h.account_id 
-                         AND t.asset_id = h.asset_id 
-                         AND t.trade_date > '2000-01-01'
+                         AND t.asset_id = h.asset_id
                    ) as min_trade_date
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
