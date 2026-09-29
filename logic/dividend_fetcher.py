@@ -96,15 +96,15 @@ def get_dividend_tax_rate(account_type: str, market: str) -> float:
 
 def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float = 1380.0, account_type: str = '') -> Dict[str, Any]:
     """
-    개별 보유 종목의 배당금 단가 차감(Adjusted Cost Basis)을 계산합니다.
+    개별 보유 종목의 배당금(Dividend Income)을 자동으로 산출하고 MTS 순수 매입단가를 보존합니다.
     
-    자산에 `is_dividend_cost_deduct`가 활성화되어 있으면,
-    보유 시작일(`first_buy_date`) 이후 발생한 실제 공시 배당금에서
-    계좌 유형별 배당소득세(일반계좌 15.4%/미국 15%, 절세계좌 0%)를 원천징수한
-    '세후 실지급 배당금'을 원래 매입단가(`original_avg_price`)에서 차감한
-    유효 매입단가(`avg_price`)를 반환합니다.
+    1. 평단가(`avg_price`, `avg_price_usd`)는 증권사 MTS 원본 매입단가를 100% 그대로 보존합니다.
+       (인위적인 평단가 차감을 하지 않으므로 적립식 매수 및 증권사 대조가 항상 정확함)
+    2. 모든 배당 지급 자산에 대해 보유 시작일(`first_buy_date` 또는 거래내역 `min_trade_date`) 이후
+       발생한 거래소 공식 배당금을 yfinance로부터 자동 수집합니다.
+    3. 계좌 과세 유형(일반계좌 15.4%/미국 15%, ISA/IRP/연금저축 0% 비과세/과세이연)에 따른
+       세후 실지급 배당금을 자동 계산하여 반환합니다.
     """
-    is_deduct = bool(asset.get('is_dividend_cost_deduct', False))
     market = asset.get('market', 'KR')
     is_us = (market == 'US')
 
@@ -112,9 +112,15 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
     curr_usd = float(holding.get('avg_price_usd') or 0.0)
     orig_krw = float(holding.get('original_avg_price') or curr_krw)
     orig_usd = float(holding.get('original_avg_price_usd') or curr_usd)
-    first_buy_date = str(holding.get('first_buy_date') or '').strip()
-    buy_fx_rate = float(holding.get('buy_fx_rate') or 0.0)
     
+    # 기준일(first_buy_date) 우선순위: 수동 설정값 -> trade_history의 최초 매수일
+    first_buy_date = str(holding.get('first_buy_date') or '').strip()
+    if not first_buy_date or first_buy_date <= '2000-01-01':
+        min_td = str(holding.get('min_trade_date') or '').strip()
+        if min_td and min_td > '2000-01-01':
+            first_buy_date = min_td
+
+    buy_fx_rate = float(holding.get('buy_fx_rate') or 0.0)
     if buy_fx_rate <= 0:
         if orig_usd > 0 and orig_krw > 0:
             buy_fx_rate = round(orig_krw / orig_usd, 2)
@@ -125,26 +131,13 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
     effective_acc_type = holding.get('account_type') or account_type or ''
     tax_rate = get_dividend_tax_rate(effective_acc_type, market)
 
-    if not is_deduct:
-        return {
-            "avg_price": curr_krw,
-            "avg_price_usd": curr_usd,
-            "original_avg_price": curr_krw,
-            "original_avg_price_usd": curr_usd,
-            "cumulative_dividend": 0.0,
-            "gross_cumulative_dividend": 0.0,
-            "tax_rate": tax_rate,
-            "tax_amount": 0.0,
-            "is_tax_deducted": False,
-            "dividend_count": 0,
-            "first_buy_date": first_buy_date,
-            "is_dividend_cost_deduct": False,
-            "buy_fx_rate": buy_fx_rate,
-            "account_type": effective_acc_type
-        }
+    ticker = (asset.get('ticker') or '').strip()
+    is_gold = ('금' in asset.get('name', '') or ticker == 'M04020000')
+    is_deposit = bool(asset.get('is_deposit', False))
 
-    ticker = asset.get('ticker', '')
-    div_records = fetch_dividend_history(ticker, market)
+    div_records = []
+    if not is_gold and not is_deposit and ticker and ticker not in ['없음', '-']:
+        div_records = fetch_dividend_history(ticker, market)
 
     # first_buy_date 이후의 배당만 필터링
     if first_buy_date:
@@ -163,18 +156,15 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
     else:
         cum_div = net_cum_div
 
-    if is_us:
-        adjusted_usd = max(0.01, orig_usd - cum_div) if orig_usd > 0 else 0.0
-        adjusted_krw = round(adjusted_usd * buy_fx_rate, 2)
-    else:
-        adjusted_krw = max(1.0, orig_krw - cum_div) if orig_krw > 0 else 0.0
-        adjusted_usd = round(adjusted_krw / usd_krw, 2) if usd_krw > 0 else 0.0
+    # MTS 순수 매입단가를 100% 보존
+    final_avg_krw = orig_krw if orig_krw > 0 else curr_krw
+    final_avg_usd = orig_usd if orig_usd > 0 else curr_usd
 
     return {
-        "avg_price": adjusted_krw,
-        "avg_price_usd": round(adjusted_usd, 2),
-        "original_avg_price": orig_krw,
-        "original_avg_price_usd": round(orig_usd, 2),
+        "avg_price": final_avg_krw,
+        "avg_price_usd": round(final_avg_usd, 2),
+        "original_avg_price": final_avg_krw,
+        "original_avg_price_usd": round(final_avg_usd, 2),
         "cumulative_dividend": round(cum_div, 4 if is_us else 1),
         "gross_cumulative_dividend": round(gross_cum_div, 4 if is_us else 1),
         "tax_rate": tax_rate,
@@ -182,7 +172,7 @@ def calculate_adjusted_holding_prices(holding: dict, asset: dict, usd_krw: float
         "is_tax_deducted": tax_rate > 0,
         "dividend_count": len(qualifying),
         "first_buy_date": first_buy_date,
-        "is_dividend_cost_deduct": True,
+        "is_dividend_cost_deduct": False,  # 구 배당차감 비활성화 -> Total Return 일원화
         "buy_fx_rate": buy_fx_rate,
         "account_type": effective_acc_type
     }

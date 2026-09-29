@@ -157,8 +157,8 @@ def get_dashboard_summary(
             else:
                 safe_stock_eval += eval_val
                 
-            profit_krw = eval_val - buy_amt
-            profit_pct = (profit_krw / buy_amt * 100) if buy_amt > 0 else 0.0
+            eval_profit_krw = eval_val - buy_amt
+            eval_profit_pct = (eval_profit_krw / buy_amt * 100) if buy_amt > 0 else 0.0
             
             is_deposit = bool(h.get('is_deposit', False))
             is_gold = "금" in h.get('asset_name', '') or h.get('ticker') == 'M04020000'
@@ -176,8 +176,24 @@ def get_dashboard_summary(
 
             eval_val_usd = qty * curr_p_usd
             buy_amt_usd = qty * avg_p_usd
-            profit_usd = eval_val_usd - buy_amt_usd
-            profit_pct_usd = (profit_usd / buy_amt_usd * 100) if buy_amt_usd > 0 else 0.0
+            eval_profit_usd = eval_val_usd - buy_amt_usd
+            eval_profit_pct_usd = (eval_profit_usd / buy_amt_usd * 100) if buy_amt_usd > 0 else 0.0
+
+            # 배당금 집계 (Total Return)
+            cum_div_unit = float(adj_info.get("cumulative_dividend", 0.0))
+            if is_us:
+                div_profit_usd = qty * cum_div_unit
+                div_profit_krw = div_profit_usd * usd_krw
+                total_profit_usd = eval_profit_usd + div_profit_usd
+                total_profit_pct_usd = (total_profit_usd / buy_amt_usd * 100) if buy_amt_usd > 0 else 0.0
+            else:
+                div_profit_krw = qty * cum_div_unit
+                div_profit_usd = (div_profit_krw / usd_krw) if usd_krw > 0 else 0.0
+                total_profit_usd = 0.0
+                total_profit_pct_usd = 0.0
+
+            total_profit_krw = eval_profit_krw + div_profit_krw
+            total_profit_pct = (total_profit_krw / buy_amt * 100) if buy_amt > 0 else 0.0
 
             # 매입환율 및 환차익/환차손 분해 계산
             buy_fx_rate = adj_info["buy_fx_rate"]
@@ -185,13 +201,13 @@ def get_dashboard_summary(
             if is_us:
                 fx_profit_krw = buy_amt_usd * (usd_krw - buy_fx_rate)
                 fx_profit_pct = ((usd_krw - buy_fx_rate) / buy_fx_rate * 100) if buy_fx_rate > 0 else 0.0
-                pure_stock_profit_krw = profit_usd * usd_krw
-                pure_stock_profit_pct = profit_pct_usd
+                pure_stock_profit_krw = eval_profit_usd * usd_krw
+                pure_stock_profit_pct = eval_profit_pct_usd
             else:
                 fx_profit_krw = 0.0
                 fx_profit_pct = 0.0
-                pure_stock_profit_krw = profit_krw
-                pure_stock_profit_pct = profit_pct
+                pure_stock_profit_krw = eval_profit_krw
+                pure_stock_profit_pct = eval_profit_pct
 
             holding_details.append({
                 "asset_id": h['asset_id'],
@@ -205,14 +221,24 @@ def get_dashboard_summary(
                 "current_price": curr_p,
                 "eval_amount": eval_val,
                 "buy_amount": buy_amt,
-                "profit_krw": profit_krw,
-                "profit_pct": profit_pct,
+                "profit_krw": round(total_profit_krw, 0),
+                "profit_pct": round(total_profit_pct, 2),
+                "eval_profit_krw": round(eval_profit_krw, 0),
+                "eval_profit_pct": round(eval_profit_pct, 2),
+                "dividend_profit_krw": round(div_profit_krw, 0),
+                "dividend_profit_usd": round(div_profit_usd, 2),
+                "total_profit_krw": round(total_profit_krw, 0),
+                "total_profit_pct": round(total_profit_pct, 2),
                 "avg_price_usd": round(avg_p_usd, 2) if is_us else 0.0,
                 "current_price_usd": round(curr_p_usd, 2) if is_us else 0.0,
                 "eval_amount_usd": round(eval_val_usd, 2) if is_us else 0.0,
                 "buy_amount_usd": round(buy_amt_usd, 2) if is_us else 0.0,
-                "profit_usd": round(profit_usd, 2) if is_us else 0.0,
-                "profit_pct_usd": round(profit_pct_usd, 2) if is_us else 0.0,
+                "profit_usd": round(total_profit_usd if is_us else 0.0, 2),
+                "profit_pct_usd": round(total_profit_pct_usd if is_us else 0.0, 2),
+                "eval_profit_usd": round(eval_profit_usd, 2) if is_us else 0.0,
+                "eval_profit_pct_usd": round(eval_profit_pct_usd, 2) if is_us else 0.0,
+                "total_profit_usd": round(total_profit_usd, 2) if is_us else 0.0,
+                "total_profit_pct_usd": round(total_profit_pct_usd, 2) if is_us else 0.0,
                 "buy_fx_rate": round(buy_fx_rate, 2) if is_us else 0.0,
                 "fx_profit_krw": round(fx_profit_krw, 0) if is_us else 0.0,
                 "fx_profit_pct": round(fx_profit_pct, 2) if is_us else 0.0,
@@ -226,9 +252,9 @@ def get_dashboard_summary(
                 "maturity_date": h.get('maturity_date', ''),
                 "tax_rate": float(h.get('tax_rate') if h.get('tax_rate') is not None else 15.4),
                 "lock_rebalance_sell": bool(h.get('lock_rebalance_sell', True) if h.get('lock_rebalance_sell') is not None else True),
-                "is_dividend_cost_deduct": adj_info["is_dividend_cost_deduct"],
-                "original_avg_price": adj_info["original_avg_price"],
-                "original_avg_price_usd": adj_info["original_avg_price_usd"],
+                "is_dividend_cost_deduct": False,
+                "original_avg_price": avg_p_krw,
+                "original_avg_price_usd": avg_p_usd,
                 "cumulative_dividend": adj_info["cumulative_dividend"],
                 "gross_cumulative_dividend": adj_info.get("gross_cumulative_dividend", 0.0),
                 "dividend_tax_rate": adj_info.get("tax_rate", 0.0),
@@ -254,8 +280,11 @@ def get_dashboard_summary(
         tax_limit_pct = 1.0 if is_limit_exhausted else raw_tax_pct
         can_exhaust_limit = bool((annual_limit > 0 and raw_annual_pct >= 0.96) or (tax_limit > 0 and raw_tax_pct >= 0.96) or is_limit_exhausted)
         
-        acc_profit_krw = stock_eval - stock_buy_total
-        acc_profit_pct = (acc_profit_krw / stock_buy_total * 100) if stock_buy_total > 0 else 0.0
+        acc_eval_profit_krw = stock_eval - stock_buy_total
+        acc_eval_profit_pct = (acc_eval_profit_krw / stock_buy_total * 100) if stock_buy_total > 0 else 0.0
+        acc_div_profit_krw = sum(h.get('dividend_profit_krw', 0.0) for h in holding_details)
+        acc_total_profit_krw = acc_eval_profit_krw + acc_div_profit_krw
+        acc_total_profit_pct = (acc_total_profit_krw / stock_buy_total * 100) if stock_buy_total > 0 else 0.0
         
         account_summaries.append({
             "id": acc_id,
@@ -268,8 +297,13 @@ def get_dashboard_summary(
             "stock_eval": stock_eval,
             "stock_buy_total": stock_buy_total,
             "total_val": total_acc_val,
-            "profit_krw": acc_profit_krw,
-            "profit_pct": acc_profit_pct,
+            "profit_krw": acc_total_profit_krw,
+            "profit_pct": acc_total_profit_pct,
+            "eval_profit_krw": acc_eval_profit_krw,
+            "eval_profit_pct": acc_eval_profit_pct,
+            "dividend_profit_krw": acc_div_profit_krw,
+            "total_profit_krw": acc_total_profit_krw,
+            "total_profit_pct": acc_total_profit_pct,
             "risk_eval": risk_stock_eval,
             "safe_eval": safe_stock_eval,
             "risk_pct": risk_pct,
@@ -312,10 +346,12 @@ def get_dashboard_summary(
                     "buy_amt_krw": 0.0,
                     "buy_amt_usd": 0.0,
                     "eval_amt_krw": 0.0,
+                    "dividend_krw": 0.0,
+                    "dividend_usd": 0.0,
                     "include_in_rebalance": bool(asset_meta.get('include_in_rebalance', True)),
-                    "is_dividend_cost_deduct": adj_info["is_dividend_cost_deduct"],
-                    "original_avg_price": adj_info["original_avg_price"],
-                    "original_avg_price_usd": adj_info["original_avg_price_usd"],
+                    "is_dividend_cost_deduct": False,
+                    "original_avg_price": avg_p_krw,
+                    "original_avg_price_usd": avg_p_usd,
                     "cumulative_dividend": adj_info["cumulative_dividend"],
                     "gross_cumulative_dividend": adj_info.get("gross_cumulative_dividend", 0.0),
                     "dividend_tax_rate": adj_info.get("tax_rate", 0.0),
@@ -333,16 +369,18 @@ def get_dashboard_summary(
             portfolio_assets[aid]['buy_amt_krw'] += qty * avg_p_krw
             portfolio_assets[aid]['buy_amt_usd'] += qty * avg_p_usd
             portfolio_assets[aid]['eval_amt_krw'] += qty * curr_p
-            if adj_info["is_dividend_cost_deduct"]:
-                portfolio_assets[aid]["original_avg_price"] = adj_info["original_avg_price"]
-                portfolio_assets[aid]["original_avg_price_usd"] = adj_info["original_avg_price_usd"]
-                portfolio_assets[aid]["cumulative_dividend"] = adj_info["cumulative_dividend"]
-                portfolio_assets[aid]["gross_cumulative_dividend"] = adj_info.get("gross_cumulative_dividend", 0.0)
-                portfolio_assets[aid]["dividend_tax_rate"] = adj_info.get("tax_rate", 0.0)
-                portfolio_assets[aid]["dividend_tax_amount"] = adj_info.get("tax_amount", 0.0)
-                portfolio_assets[aid]["is_tax_deducted"] = adj_info.get("is_tax_deducted", False)
-                portfolio_assets[aid]["dividend_count"] = adj_info["dividend_count"]
-                portfolio_assets[aid]["first_buy_date"] = adj_info["first_buy_date"]
+            
+            # 배당금 집계 (계좌별 세금 및 수량 반영 누적)
+            c_div = float(adj_info.get("cumulative_dividend", 0.0))
+            is_us_h = (h.get('market') == 'US')
+            if is_us_h:
+                d_usd = qty * c_div
+                portfolio_assets[aid]['dividend_usd'] += d_usd
+                portfolio_assets[aid]['dividend_krw'] += d_usd * usd_krw
+            else:
+                d_krw = qty * c_div
+                portfolio_assets[aid]['dividend_krw'] += d_krw
+                portfolio_assets[aid]['dividend_usd'] += (d_krw / usd_krw) if usd_krw > 0 else 0.0
 
     # Add pure deposit assets directly from assets table
     for a in assets:
@@ -360,6 +398,8 @@ def get_dashboard_summary(
                     "quantity": 1.0,
                     "buy_amt_krw": principal,
                     "eval_amt_krw": curr_p,
+                    "dividend_krw": 0.0,
+                    "dividend_usd": 0.0,
                     "is_deposit": True,
                     "account_no": a.get('account_no', ''),
                     "maturity_date": a.get('maturity_date', ''),
@@ -370,7 +410,9 @@ def get_dashboard_summary(
     total_stock_eval = sum(d['eval_amt_krw'] for d in portfolio_assets.values() if d['quantity'] > 0)
     rebalance_stock_eval = sum(d['eval_amt_krw'] for d in portfolio_assets.values() if d['quantity'] > 0 and d.get('include_in_rebalance', True))
     total_stock_buy = sum(d['buy_amt_krw'] for d in portfolio_assets.values() if d['quantity'] > 0)
-    total_stock_profit = total_stock_eval - total_stock_buy
+    total_eval_profit = total_stock_eval - total_stock_buy
+    total_dividend_profit = sum(d.get('dividend_krw', 0.0) for d in portfolio_assets.values() if d['quantity'] > 0)
+    total_stock_profit = total_eval_profit + total_dividend_profit
     total_stock_return = (total_stock_profit / total_stock_buy * 100) if total_stock_buy > 0 else 0.0
     total_portfolio_eval = total_krw_cash + (total_usd_cash * usd_krw) + total_stock_eval
 
@@ -403,8 +445,13 @@ def get_dashboard_summary(
         if not is_active:
             continue
         
-        profit_krw = data['eval_amt_krw'] - data['buy_amt_krw']
-        profit_pct = (profit_krw / data['buy_amt_krw'] * 100) if data['buy_amt_krw'] > 0 else 0.0
+        eval_profit_krw = data['eval_amt_krw'] - data['buy_amt_krw']
+        eval_profit_pct = (eval_profit_krw / data['buy_amt_krw'] * 100) if data['buy_amt_krw'] > 0 else 0.0
+        div_profit_krw = data.get('dividend_krw', 0.0)
+        div_profit_usd = data.get('dividend_usd', 0.0)
+        
+        total_profit_krw = eval_profit_krw + div_profit_krw
+        total_profit_pct = (total_profit_krw / data['buy_amt_krw'] * 100) if data['buy_amt_krw'] > 0 else 0.0
         
         if include_in_rebal:
             weight_pct = (data['eval_amt_krw'] / rebalance_stock_eval * 100) if rebalance_stock_eval > 0 else 0.0
@@ -441,19 +488,21 @@ def get_dashboard_summary(
             weighted_buy_fx = usd_krw
 
         eval_amount_usd = data['quantity'] * curr_price_usd
-        profit_usd = eval_amount_usd - buy_amount_usd
-        profit_pct_usd = (profit_usd / buy_amount_usd * 100) if buy_amount_usd > 0 else 0.0
+        eval_profit_usd = eval_amount_usd - buy_amount_usd
+        eval_profit_pct_usd = (eval_profit_usd / buy_amount_usd * 100) if buy_amount_usd > 0 else 0.0
+        total_profit_usd = eval_profit_usd + div_profit_usd
+        total_profit_pct_usd = (total_profit_usd / buy_amount_usd * 100) if buy_amount_usd > 0 else 0.0
 
         if is_us:
             fx_profit_krw = buy_amount_usd * (usd_krw - weighted_buy_fx)
             fx_profit_pct = ((usd_krw - weighted_buy_fx) / weighted_buy_fx * 100) if weighted_buy_fx > 0 else 0.0
-            pure_stock_profit_krw = profit_usd * usd_krw
-            pure_stock_profit_pct = profit_pct_usd
+            pure_stock_profit_krw = eval_profit_usd * usd_krw
+            pure_stock_profit_pct = eval_profit_pct_usd
         else:
             fx_profit_krw = 0.0
             fx_profit_pct = 0.0
-            pure_stock_profit_krw = profit_krw
-            pure_stock_profit_pct = profit_pct
+            pure_stock_profit_krw = eval_profit_krw
+            pure_stock_profit_pct = eval_profit_pct
 
         stock_summary_rows.append({
             "asset_id": aid,
@@ -468,14 +517,24 @@ def get_dashboard_summary(
             "current_price": curr_price_val,
             "eval_amount": data['eval_amt_krw'],
             "buy_amount": data['buy_amt_krw'],
-            "profit_krw": profit_krw,
-            "profit_pct": profit_pct,
+            "profit_krw": round(total_profit_krw, 0),
+            "profit_pct": round(total_profit_pct, 2),
+            "eval_profit_krw": round(eval_profit_krw, 0),
+            "eval_profit_pct": round(eval_profit_pct, 2),
+            "dividend_profit_krw": round(div_profit_krw, 0),
+            "dividend_profit_usd": round(div_profit_usd, 2),
+            "total_profit_krw": round(total_profit_krw, 0),
+            "total_profit_pct": round(total_profit_pct, 2),
             "avg_price_usd": round(avg_price_usd, 2) if is_us else 0.0,
             "current_price_usd": round(curr_price_usd, 2) if is_us else 0.0,
             "eval_amount_usd": round(eval_amount_usd, 2) if is_us else 0.0,
             "buy_amount_usd": round(buy_amount_usd, 2) if is_us else 0.0,
-            "profit_usd": round(profit_usd, 2) if is_us else 0.0,
-            "profit_pct_usd": round(profit_pct_usd, 2) if is_us else 0.0,
+            "profit_usd": round(total_profit_usd, 2) if is_us else 0.0,
+            "profit_pct_usd": round(total_profit_pct_usd, 2) if is_us else 0.0,
+            "eval_profit_usd": round(eval_profit_usd, 2) if is_us else 0.0,
+            "eval_profit_pct_usd": round(eval_profit_pct_usd, 2) if is_us else 0.0,
+            "total_profit_usd": round(total_profit_usd, 2) if is_us else 0.0,
+            "total_profit_pct_usd": round(total_profit_pct_usd, 2) if is_us else 0.0,
             "buy_fx_rate": round(weighted_buy_fx, 2) if is_us else 0.0,
             "fx_profit_krw": round(fx_profit_krw, 0) if is_us else 0.0,
             "fx_profit_pct": round(fx_profit_pct, 2) if is_us else 0.0,
@@ -493,9 +552,9 @@ def get_dashboard_summary(
             "tax_rate": float(a.get('tax_rate') if a.get('tax_rate') is not None else 15.4),
             "lock_rebalance_sell": bool(a.get('lock_rebalance_sell', True) if a.get('lock_rebalance_sell') is not None else True),
             "account_no": a.get('account_no', ''),
-            "is_dividend_cost_deduct": bool(data.get('is_dividend_cost_deduct', False)),
-            "original_avg_price": data.get('original_avg_price', 0.0),
-            "original_avg_price_usd": data.get('original_avg_price_usd', 0.0),
+            "is_dividend_cost_deduct": False,
+            "original_avg_price": calc_avg_price,
+            "original_avg_price_usd": round(avg_price_usd, 2) if is_us else 0.0,
             "cumulative_dividend": data.get('cumulative_dividend', 0.0),
             "gross_cumulative_dividend": data.get('gross_cumulative_dividend', 0.0),
             "dividend_tax_rate": data.get('dividend_tax_rate', 0.0),
@@ -520,7 +579,10 @@ def get_dashboard_summary(
     us_stock_rows = [r for r in stock_summary_rows if r.get('market') == 'US' and r.get('quantity', 0) > 0]
     total_stock_eval_usd = sum(r['eval_amount_usd'] for r in us_stock_rows)
     total_stock_buy_usd = sum(r['buy_amount_usd'] for r in us_stock_rows)
-    total_stock_profit_usd = total_stock_eval_usd - total_stock_buy_usd
+    total_dividend_usd = sum(r.get('dividend_profit_usd', 0.0) for r in us_stock_rows)
+    total_stock_eval_profit_usd = total_stock_eval_usd - total_stock_buy_usd
+    total_stock_eval_return_usd = (total_stock_eval_profit_usd / total_stock_buy_usd * 100) if total_stock_buy_usd > 0 else 0.0
+    total_stock_profit_usd = total_stock_eval_profit_usd + total_dividend_usd
     total_stock_return_usd = (total_stock_profit_usd / total_stock_buy_usd * 100) if total_stock_buy_usd > 0 else 0.0
     
     total_fx_profit_krw = sum(r.get('fx_profit_krw', 0.0) for r in us_stock_rows)
@@ -531,7 +593,10 @@ def get_dashboard_summary(
     kr_stock_rows = [r for r in stock_summary_rows if r.get('market') != 'US' and r.get('quantity', 0) > 0]
     total_stock_eval_krw_only = sum(r['eval_amount'] for r in kr_stock_rows)
     total_stock_buy_krw_only = sum(r['buy_amount'] for r in kr_stock_rows)
-    total_stock_profit_krw_only = total_stock_eval_krw_only - total_stock_buy_krw_only
+    krw_dividend_krw = sum(r.get('dividend_profit_krw', 0.0) for r in kr_stock_rows)
+    total_stock_eval_profit_krw_only = total_stock_eval_krw_only - total_stock_buy_krw_only
+    total_stock_eval_return_krw_only = (total_stock_eval_profit_krw_only / total_stock_buy_krw_only * 100) if total_stock_buy_krw_only > 0 else 0.0
+    total_stock_profit_krw_only = total_stock_eval_profit_krw_only + krw_dividend_krw
     total_stock_return_krw_only = (total_stock_profit_krw_only / total_stock_buy_krw_only * 100) if total_stock_buy_krw_only > 0 else 0.0
     
     return {
@@ -539,12 +604,18 @@ def get_dashboard_summary(
             "total_stock_buy": total_stock_buy,
             "total_stock_eval": total_stock_eval,
             "rebalance_stock_eval": rebalance_stock_eval,
-            "total_stock_profit": total_stock_profit,
-            "total_stock_return": total_stock_return,
+            "total_eval_profit": round(total_eval_profit, 0),
+            "total_eval_return": round((total_eval_profit / total_stock_buy * 100) if total_stock_buy > 0 else 0.0, 2),
+            "total_dividend_profit": round(total_dividend_profit, 0),
+            "total_stock_profit": round(total_stock_profit, 0),
+            "total_stock_return": round(total_stock_return, 2),
             "total_portfolio_eval": total_portfolio_eval,
             "usd_summary": {
                 "stock_eval_usd": round(total_stock_eval_usd, 2),
                 "stock_buy_usd": round(total_stock_buy_usd, 2),
+                "stock_eval_profit_usd": round(total_stock_eval_profit_usd, 2),
+                "stock_eval_return_usd": round(total_stock_eval_return_usd, 2),
+                "stock_dividend_usd": round(total_dividend_usd, 2),
                 "stock_profit_usd": round(total_stock_profit_usd, 2),
                 "stock_return_usd": round(total_stock_return_usd, 2),
                 "cash_usd": round(total_usd_cash, 2),
@@ -558,6 +629,9 @@ def get_dashboard_summary(
             "krw_summary": {
                 "stock_eval_krw": round(total_stock_eval_krw_only, 0),
                 "stock_buy_krw": round(total_stock_buy_krw_only, 0),
+                "stock_eval_profit_krw": round(total_stock_eval_profit_krw_only, 0),
+                "stock_eval_return_krw": round(total_stock_eval_return_krw_only, 2),
+                "stock_dividend_krw": round(krw_dividend_krw, 0),
                 "stock_profit_krw": round(total_stock_profit_krw_only, 0),
                 "stock_return_krw": round(total_stock_return_krw_only, 2),
                 "cash_krw": round(total_krw_cash, 0),

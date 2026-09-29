@@ -583,11 +583,6 @@ export default function SettingsTab({
                             비중 제외
                           </span>
                         )}
-                        {ast.is_dividend_cost_deduct && (
-                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(99, 102, 241, 0.2)', color: '#818CF8' }}>
-                            💰 배당차감
-                          </span>
-                        )}
                         {ast.is_deposit && ast.account_no && (
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400, marginTop: '2px' }}>
                             계좌: {ast.account_no}
@@ -1162,17 +1157,12 @@ export default function SettingsTab({
                     </label>
                   </div>
 
-                  <div style={{ marginBottom: '16px', padding: '10px 12px', background: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={assetForm.is_dividend_cost_deduct || false}
-                        onChange={(e) => setAssetForm({ ...assetForm, is_dividend_cost_deduct: e.target.checked })}
-                      />
-                      💰 배당금 자동 단가 차감 (단기채권 · 머니마켓 · 인컴형)
-                    </label>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px', marginLeft: '22px', lineHeight: 1.4 }}>
-                      월/연 배당으로 기준가가 하락(배당락)하는 단기채권·파킹형 ETF(SGOV, 머니마켓 등)의 경우, 배당금을 매수단가에서 자동 차감하여 정확한 실제 투자 누적 손익을 추적합니다.
+                  <div style={{ marginBottom: '16px', padding: '10px 12px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-safe)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>💰 자동 배당 및 총수익(Total Return) 추적</span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.45 }}>
+                      모든 종목의 배당 데이터가 자동으로 집계되어 손익 및 수익률에 Total Return으로 반영됩니다. 나무 MTS의 매입단가는 원본 그대로 100% 보존됩니다.
                     </div>
                   </div>
 

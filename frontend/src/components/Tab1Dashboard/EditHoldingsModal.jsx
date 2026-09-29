@@ -68,15 +68,6 @@ export default function EditHoldingsModal({
             origUsd = Math.round((origKrw / buyFx) * 100) / 100;
           }
 
-          const tickerUpper = (ast.ticker || h.ticker || '').toUpperCase();
-          const nameLower = (ast.name || h.asset_name || '').toLowerCase();
-          const isKnownIncome = 
-            Boolean(ast.is_dividend_cost_deduct || h.is_dividend_cost_deduct) ||
-            ['SGOV', 'BIL', 'SHV', '488770', '453650'].includes(tickerUpper) ||
-            nameLower.includes('머니마켓') || 
-            nameLower.includes('단기채') ||
-            nameLower.includes('단기자금');
-
           map[aid] = {
             quantity: Number(h.quantity || 0),
             avg_price: avgKrw,
@@ -84,12 +75,10 @@ export default function EditHoldingsModal({
             buy_fx_rate: buyFx,
             original_avg_price: origKrw,
             original_avg_price_usd: origUsd,
-            adjusted_avg_price: Number(h.adjusted_avg_price ?? avgKrw),
-            adjusted_avg_price_usd: Number(h.adjusted_avg_price_usd ?? avgUsd),
-            first_buy_date: h.first_buy_date || new Date().toISOString().split('T')[0],
+            first_buy_date: h.first_buy_date || '',
             cumulative_dividend: Number(h.cumulative_dividend || 0),
             dividend_count: Number(h.dividend_count || 0),
-            is_dividend_cost_deduct: isKnownIncome
+            is_dividend_cost_deduct: false
           };
         });
         setHoldingsInputs(map);
@@ -109,16 +98,6 @@ export default function EditHoldingsModal({
       [assetId]: {
         ...prev[assetId],
         quantity: qty
-      }
-    }));
-  };
-
-  const handleToggleDividendDeduct = (assetId, isChecked) => {
-    setHoldingsInputs((prev) => ({
-      ...prev,
-      [assetId]: {
-        ...prev[assetId],
-        is_dividend_cost_deduct: isChecked
       }
     }));
   };
@@ -296,7 +275,6 @@ export default function EditHoldingsModal({
               const isUs = ast.market === 'US';
               const isGold = ast.name.includes('금') || ast.ticker === 'M04020000';
               const unit = isGold ? 'g' : '주';
-              const isDividendDeduct = Boolean(h.is_dividend_cost_deduct ?? ast.is_dividend_cost_deduct);
 
               return (
                 <div key={ast.id} style={{ background: 'var(--bg-card-subtle)', padding: '14px', borderRadius: 'var(--radius-md)', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
@@ -313,34 +291,13 @@ export default function EditHoldingsModal({
                       )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <label style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.78rem',
-                        fontWeight: 600,
-                        padding: '3px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                        border: isDividendDeduct ? '1px solid #3b82f6' : '1px solid var(--border-color)',
-                        background: isDividendDeduct ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-surface)',
-                        color: isDividendDeduct ? '#3b82f6' : 'var(--text-muted)'
-                      }}>
-                        <input
-                          type="checkbox"
-                          checked={isDividendDeduct}
-                          onChange={(e) => handleToggleDividendDeduct(String(ast.id), e.target.checked)}
-                          style={{ cursor: 'pointer' }}
-                        />
-                        💰 배당 단가 차감
-                      </label>
                       <span className={`badge ${ast.is_risk_asset ? 'badge-risk' : 'badge-safe'}`}>
                         {ast.is_risk_asset ? '🔴 위험자산' : '🟢 안전자산'}
                       </span>
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: isDividendDeduct ? (isUs ? 'repeat(auto-fit, minmax(140px, 1fr))' : 'repeat(auto-fit, minmax(160px, 1fr))') : (isUs ? 'repeat(auto-fit, minmax(170px, 1fr))' : '1fr 1fr'), gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isUs ? 'repeat(auto-fit, minmax(160px, 1fr))' : '1fr 1fr', gap: '12px' }}>
                     {/* 1. 수량 입력 */}
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="form-label" style={{ fontSize: '0.78rem' }}>
@@ -356,28 +313,12 @@ export default function EditHoldingsModal({
                       />
                     </div>
 
-                    {/* 배당차감 활성화 시: 최초 매수일 입력 */}
-                    {isDividendDeduct && (
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                          📅 최초 매수일 <span className="helper-text">(배당 반영 기준)</span>
-                        </label>
-                        <input
-                          type="date"
-                          className="input-text"
-                          style={{ padding: '6px 10px', fontSize: '0.85rem', fontWeight: 600, border: '1px solid var(--accent-primary)' }}
-                          value={h.first_buy_date || new Date().toISOString().split('T')[0]}
-                          onChange={(e) => handleFirstBuyDateChange(String(ast.id), e.target.value)}
-                        />
-                      </div>
-                    )}
-
                     {/* 2. 평단가 입력: 미국 상장 자산은 USD($) 및 매입환율(원) 입력, 국내 자산은 KRW(원) 입력 */}
                     {isUs ? (
                       <>
                         <div className="form-group" style={{ margin: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>{isDividendDeduct ? '최초 매수가 ($ USD)' : '평균 매입단가 ($ USD)'}</span>
+                            <span>평균 매입단가 ($ USD)</span>
                             <span className="badge badge-accent" style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
                               달러 직접입력
                             </span>
@@ -388,7 +329,7 @@ export default function EditHoldingsModal({
                               type="number"
                               className="input-number"
                               style={{ paddingLeft: '24px', fontWeight: 700 }}
-                              value={isDividendDeduct ? (h.original_avg_price_usd !== undefined && h.original_avg_price_usd !== null ? h.original_avg_price_usd : '') : (h.avg_price_usd !== undefined && h.avg_price_usd !== null ? h.avg_price_usd : '')}
+                              value={h.avg_price_usd !== undefined && h.avg_price_usd !== null ? h.avg_price_usd : ''}
                               placeholder="0.00"
                               onChange={(e) => handleAvgPriceUsdChange(String(ast.id), e.target.value)}
                               step={0.01}
@@ -422,12 +363,12 @@ export default function EditHoldingsModal({
                     ) : (
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label" style={{ fontSize: '0.78rem' }}>
-                          {isDividendDeduct ? '최초 매수가 (원화)' : '평균 매입가 (원화)'} <span className="helper-text">({formatKRW(isDividendDeduct && h.original_avg_price ? h.original_avg_price : h.avg_price)})</span>
+                          평균 매입가 (원화) <span className="helper-text">({formatKRW(h.avg_price)})</span>
                         </label>
                         <input
                           type="number"
                           className="input-number"
-                          value={isDividendDeduct && h.original_avg_price !== undefined ? h.original_avg_price : h.avg_price}
+                          value={h.avg_price !== undefined ? h.avg_price : ''}
                           onChange={(e) => handleAvgPriceKrwChange(String(ast.id), parseFloat(e.target.value) || 0)}
                           step={100}
                           min={0}
@@ -453,7 +394,7 @@ export default function EditHoldingsModal({
                     }}>
                       <div>
                         <span style={{ color: 'var(--text-muted)' }}>원화 환산 매수가: </span>
-                        <strong style={{ color: 'var(--text-primary)', marginLeft: '4px' }}>{formatKRW(isDividendDeduct && h.original_avg_price ? h.original_avg_price : h.avg_price)}</strong>
+                        <strong style={{ color: 'var(--text-primary)', marginLeft: '4px' }}>{formatKRW(h.avg_price)}</strong>
                       </div>
                       <div>
                         <span style={{ color: 'var(--text-muted)' }}>환율 차손익: </span>
@@ -468,45 +409,37 @@ export default function EditHoldingsModal({
                     </div>
                   )}
 
-                  {/* 배당차감 안내 배너 */}
-                  {isDividendDeduct && (
-                    <div style={{
-                      marginTop: '10px',
-                      background: 'rgba(59, 130, 246, 0.08)',
-                      border: '1px solid rgba(59, 130, 246, 0.25)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '10px 12px',
-                      fontSize: '0.78rem',
-                      lineHeight: 1.45
-                    }}>
-                      <div style={{ fontWeight: 700, color: 'var(--accent-primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>💰 배당금 자동 단가 차감 안내</span>
-                        {h.first_buy_date && (
-                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>
-                            (기준일: {h.first_buy_date} 이후 배당 반영)
+                  {/* 자동 배당 집계 및 배당 시작일 설정 배너 */}
+                  <div style={{
+                    marginTop: '10px',
+                    background: 'rgba(16, 185, 129, 0.08)',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '8px 12px',
+                    fontSize: '0.78rem',
+                    lineHeight: 1.45
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--color-safe)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>💰 배당금 자동 집계 (Total Return)</span>
+                        {h.cumulative_dividend > 0 && (
+                          <span style={{ fontWeight: 700 }}>
+                            · 누적 {h.dividend_count || 0}회 배당 (주당 +{isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)})
                           </span>
                         )}
                       </div>
-                      <div style={{ color: 'var(--text-secondary)' }}>
-                        최초 매수가 {isUs ? formatUSD(h.original_avg_price_usd || h.avg_price_usd) : formatKRW(h.original_avg_price || h.avg_price)}
-                        {h.cumulative_dividend > 0 ? (
-                          <>
-                            {' ➔ '}
-                            <strong style={{ color: 'var(--text-primary)' }}>
-                              현재 유효단가 {isUs ? formatUSD(h.adjusted_avg_price_usd || h.avg_price_usd) : formatKRW(h.adjusted_avg_price || h.avg_price)}
-                            </strong>
-                            <span style={{ color: 'var(--color-profit, #10b981)', marginLeft: '6px', fontWeight: 600 }}>
-                              (누적 {h.dividend_count || 0}회 배당, {h.is_tax_deducted ? `세후 -${isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)} 차감, 배당세 ${(Number(h.dividend_tax_rate) * 100).toFixed(1)}% 반영` : `-${isUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)} 차감 (비과세/과세이연)`})
-                            </span>
-                          </>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>
-                            (기준일 이후 발생한 공시 배당금이 세금 반영 후 매수단가에서 자동 차감되어 총손익에 합산됩니다)
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>배당 산정 시작일:</span>
+                        <input
+                          type="date"
+                          className="input-text"
+                          style={{ padding: '2px 6px', fontSize: '0.78rem', border: '1px solid var(--border-color)', borderRadius: '4px', width: '130px' }}
+                          value={h.first_buy_date || ''}
+                          onChange={(e) => handleFirstBuyDateChange(String(ast.id), e.target.value)}
+                        />
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}

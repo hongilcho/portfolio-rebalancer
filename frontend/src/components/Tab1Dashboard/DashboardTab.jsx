@@ -87,15 +87,22 @@ export default function DashboardTab({
 
   // 예금 포함/제외에 따른 동적 KPI 재계산
   const displayKpi = useMemo(() => {
+    if (!kpi) return null;
     if (includeDeposits) return kpi;
     const totalBuy = displayStockAssets.reduce((sum, item) => sum + (Number(item.buy_amount) || 0), 0);
     const totalEval = displayStockAssets.reduce((sum, item) => sum + (Number(item.eval_amount) || 0), 0);
-    const totalProfit = totalEval - totalBuy;
+    const totalEvalProfit = totalEval - totalBuy;
+    const totalDividendProfit = displayStockAssets.reduce((sum, item) => sum + (Number(item.dividend_profit_krw) || 0), 0);
+    const totalProfit = totalEvalProfit + totalDividendProfit;
     const totalReturn = totalBuy > 0 ? (totalProfit / totalBuy * 100) : 0;
+    const totalEvalReturn = totalBuy > 0 ? (totalEvalProfit / totalBuy * 100) : 0;
     return {
       ...kpi,
       total_stock_buy: totalBuy,
       total_stock_eval: totalEval,
+      total_eval_profit: totalEvalProfit,
+      total_eval_return: totalEvalReturn,
+      total_dividend_profit: totalDividendProfit,
       total_stock_profit: totalProfit,
       total_stock_return: totalReturn
     };
@@ -107,8 +114,11 @@ export default function DashboardTab({
     const usStocks = (displayStockAssets || []).filter(item => item.market === 'US');
     const usStockEval = usStocks.reduce((sum, item) => sum + (Number(item.eval_amount_usd) || 0), 0);
     const usStockBuy = usStocks.reduce((sum, item) => sum + (Number(item.buy_amount_usd) || 0), 0);
-    const usStockProfit = usStockEval - usStockBuy;
+    const usStockEvalProfit = usStockEval - usStockBuy;
+    const usStockDividend = usStocks.reduce((sum, item) => sum + (Number(item.dividend_profit_usd) || 0), 0);
+    const usStockProfit = usStockEvalProfit + usStockDividend;
     const usStockReturn = usStockBuy > 0 ? (usStockProfit / usStockBuy * 100) : 0;
+    const usStockEvalReturn = usStockBuy > 0 ? (usStockEvalProfit / usStockBuy * 100) : 0;
     const usCash = Number(cash_assets?.usd_cash) || 0;
 
     const totalFxProfitKrw = usStocks.reduce((sum, item) => sum + (Number(item.fx_profit_krw) || 0), 0);
@@ -121,8 +131,11 @@ export default function DashboardTab({
     const krStocks = (displayStockAssets || []).filter(item => item.market !== 'US');
     const krStockEval = krStocks.reduce((sum, item) => sum + (Number(item.eval_amount) || 0), 0);
     const krStockBuy = krStocks.reduce((sum, item) => sum + (Number(item.buy_amount) || 0), 0);
-    const krStockProfit = krStockEval - krStockBuy;
+    const krStockEvalProfit = krStockEval - krStockBuy;
+    const krStockDividend = krStocks.reduce((sum, item) => sum + (Number(item.dividend_profit_krw) || 0), 0);
+    const krStockProfit = krStockEvalProfit + krStockDividend;
     const krStockReturn = krStockBuy > 0 ? (krStockProfit / krStockBuy * 100) : 0;
+    const krStockEvalReturn = krStockBuy > 0 ? (krStockEvalProfit / krStockBuy * 100) : 0;
     const krCash = Number(cash_assets?.krw_cash) || 0;
 
     return {
@@ -131,6 +144,9 @@ export default function DashboardTab({
         total_buy: usStockBuy,
         total_profit: usStockProfit,
         total_return: usStockReturn,
+        eval_profit: usStockEvalProfit,
+        eval_return: usStockEvalReturn,
+        dividend_profit: usStockDividend,
         cash: usCash,
         isProfit: usStockProfit >= 0,
         total_fx_profit_krw: totalFxProfitKrw,
@@ -143,6 +159,9 @@ export default function DashboardTab({
         total_buy: krStockBuy,
         total_profit: krStockProfit,
         total_return: krStockReturn,
+        eval_profit: krStockEvalProfit,
+        eval_return: krStockEvalReturn,
+        dividend_profit: krStockDividend,
         cash: krCash,
         isProfit: krStockProfit >= 0
       }
@@ -232,8 +251,7 @@ export default function DashboardTab({
       ticker === 'BND' ||
       ticker === 'AGG' ||
       ticker === '488770' ||
-      ticker === '453650' ||
-      (item.is_dividend_cost_deduct && !name.includes('주식') && !name.includes('stock'))
+      ticker === '453650'
     ) {
       return '채권';
     }
@@ -435,11 +453,19 @@ export default function DashboardTab({
                 {formatUSD(displayDualKpi.usd.total_eval)}
               </div>
               <div className="dual-kpi-sub-row">
-                <span className="dual-kpi-sub-label">외화 평가손익:</span>
+                <span className="dual-kpi-sub-label">외화 총손익(TR):</span>
                 <span className="dual-kpi-sub-value" style={{ color: getProfitColor(displayDualKpi.usd.total_profit) }}>
                   {formatUSD(displayDualKpi.usd.total_profit, true)} ({formatPercent(displayDualKpi.usd.total_return)})
                 </span>
               </div>
+              {displayDualKpi.usd.dividend_profit > 0 && (
+                <div className="dual-kpi-sub-row" style={{ marginTop: '2px', fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                  <span className="dual-kpi-sub-label">↳ 시세 / 배당:</span>
+                  <span className="dual-kpi-sub-value">
+                    {formatUSD(displayDualKpi.usd.eval_profit, true)} / +{formatUSD(displayDualKpi.usd.dividend_profit)}
+                  </span>
+                </div>
+              )}
               {displayDualKpi.usd.total_buy > 0 && (
                 <div className="dual-kpi-sub-row" style={{ marginTop: '4px', fontSize: '0.78rem' }}>
                   <span className="dual-kpi-sub-label">💱 환차익(원화):</span>
@@ -484,11 +510,19 @@ export default function DashboardTab({
                 {formatKRW(displayDualKpi.krw.total_eval)}
               </div>
               <div className="dual-kpi-sub-row">
-                <span className="dual-kpi-sub-label">원화 평가손익:</span>
+                <span className="dual-kpi-sub-label">원화 총손익(TR):</span>
                 <span className="dual-kpi-sub-value" style={{ color: getProfitColor(displayDualKpi.krw.total_profit) }}>
                   {formatKRW(displayDualKpi.krw.total_profit, true)} ({formatPercent(displayDualKpi.krw.total_return)})
                 </span>
               </div>
+              {displayDualKpi.krw.dividend_profit > 0 && (
+                <div className="dual-kpi-sub-row" style={{ marginTop: '2px', fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                  <span className="dual-kpi-sub-label">↳ 시세 / 배당:</span>
+                  <span className="dual-kpi-sub-value">
+                    {formatKRW(displayDualKpi.krw.eval_profit, true)} / +{formatKRW(displayDualKpi.krw.dividend_profit)}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="dual-kpi-footer">
               <div className="dual-kpi-footer-item">
@@ -516,17 +550,27 @@ export default function DashboardTab({
           </div>
 
           <div className="kpi-card">
-            <div className="kpi-title">총 평가 손익 {includeDeposits ? '' : '(예금 제외)'}</div>
+            <div className="kpi-title">총 손익 (Total Return) {includeDeposits ? '' : '(예금 제외)'}</div>
             <div className="kpi-value" style={{ color: getProfitColor(displayKpi?.total_stock_profit) }}>
               {(displayKpi?.total_stock_profit || 0) > 0 ? '+' : ''}{formatKRW(displayKpi?.total_stock_profit)}
             </div>
+            {displayKpi?.total_dividend_profit > 0 && (
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                시세 {formatKRW(displayKpi?.total_eval_profit, true)} | 배당 +{formatKRW(displayKpi?.total_dividend_profit)}
+              </div>
+            )}
           </div>
 
           <div className="kpi-card">
-            <div className="kpi-title">총 수익률 {includeDeposits ? '' : '(예금 제외)'}</div>
+            <div className="kpi-title">총 수익률 (Total Return) {includeDeposits ? '' : '(예금 제외)'}</div>
             <div className="kpi-value" style={{ color: getProfitColor(displayKpi?.total_stock_return) }}>
               {formatPercent(displayKpi?.total_stock_return)}
             </div>
+            {displayKpi?.total_dividend_profit > 0 && (
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                시세수익률 {formatPercent(displayKpi?.total_eval_return)}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -688,9 +732,9 @@ export default function DashboardTab({
                             US
                           </span>
                         )}
-                        {item.is_dividend_cost_deduct && (
-                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                            💰 배당차감
+                        {(item.dividend_profit_krw > 0 || item.dividend_profit_usd > 0) && (
+                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(16, 185, 129, 0.12)', color: 'var(--color-safe)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                            💰 배당반영
                           </span>
                         )}
                         {item.is_deposit && (
@@ -706,14 +750,27 @@ export default function DashboardTab({
                       </td>
                       <td>{formatQuantity(item.quantity, item.unit)}</td>
                       <td style={{ color: getProfitColor(itemReturn), fontWeight: 700 }}>
-                        {formatPercent(itemReturn)}
+                        <div>{formatPercent(itemReturn)}</div>
+                        {(item.dividend_profit_krw > 0 || item.dividend_profit_usd > 0) && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
+                            시세 {formatPercent(isUsdMode ? item.eval_profit_pct_usd : item.eval_profit_pct)}
+                          </div>
+                        )}
                       </td>
                       <td style={{ color: getProfitColor(itemProfit), fontWeight: 700 }}>
                         <div>{isUsdMode ? formatUSD(item.profit_usd, true) : `${itemProfit > 0 ? '+' : ''}${formatKRW(item.profit_krw)}`}</div>
-                        {isUs && (
+                        {(item.dividend_profit_krw > 0 || item.dividend_profit_usd > 0) ? (
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
-                            주가 {isUsdMode ? formatUSD(item.profit_usd, true) : formatKRW(item.pure_stock_profit_krw, true)} / 환차 {formatKRW(item.fx_profit_krw, true)}
+                            {isUsdMode 
+                              ? `시세 ${formatUSD(item.eval_profit_usd, true)} / 배당 +${formatUSD(item.dividend_profit_usd)}`
+                              : `시세 ${formatKRW(item.eval_profit_krw, true)} / 배당 +${formatKRW(item.dividend_profit_krw)}`}
                           </div>
+                        ) : (
+                          isUs && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
+                              주가 {isUsdMode ? formatUSD(item.profit_usd, true) : formatKRW(item.pure_stock_profit_krw, true)} / 환차 {formatKRW(item.fx_profit_krw, true)}
+                            </div>
+                          )
                         )}
                       </td>
                       <td style={{ fontWeight: 600 }}>
@@ -721,9 +778,9 @@ export default function DashboardTab({
                       </td>
                       <td>
                         <div>{isUsdMode ? formatUSD(item.avg_price_usd) : formatKRW(item.avg_price)}</div>
-                        {item.is_dividend_cost_deduct && item.cumulative_dividend > 0 && (
+                        {item.cumulative_dividend > 0 && (
                           <div style={{ fontSize: '0.72rem', color: 'var(--color-safe, #10b981)', whiteSpace: 'nowrap' }}>
-                            최초 {isUsdMode || isUs ? formatUSD(item.original_avg_price_usd) : formatKRW(item.original_avg_price)} ({item.is_tax_deducted ? '세후 배당 -' : '배당 -'}{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)})
+                            누적배당: +{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)}/주
                           </div>
                         )}
                         {isUs && item.buy_fx_rate > 0 && (
@@ -862,9 +919,9 @@ export default function DashboardTab({
                         US
                       </span>
                     )}
-                    {item.is_dividend_cost_deduct && (
-                      <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                        💰 배당차감
+                    {(item.dividend_profit_krw > 0 || item.dividend_profit_usd > 0) && (
+                      <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(16, 185, 129, 0.12)', color: 'var(--color-safe)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                        💰 배당반영
                       </span>
                     )}
                     {item.is_deposit ? (
@@ -903,10 +960,16 @@ export default function DashboardTab({
                   </span>
                 </div>
 
-                {/* Dividend Deduction Info */}
-                {item.is_dividend_cost_deduct && item.cumulative_dividend > 0 && (
-                  <div style={{ fontSize: '0.74rem', color: 'var(--color-safe, #10b981)', marginTop: '2px' }}>
-                    최초단가 {isUsdMode || isUs ? formatUSD(item.original_avg_price_usd) : formatKRW(item.original_avg_price)} ({item.is_tax_deducted ? '세후 배당 -' : '배당 -'}{isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)} 차감)
+                {/* Dividend Details Info */}
+                {(item.dividend_profit_krw > 0 || item.dividend_profit_usd > 0) && (
+                  <div style={{ fontSize: '0.74rem', color: 'var(--color-safe, #10b981)', marginTop: '2px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                    <span>
+                      배당수익: +{isUsdMode || isUs ? formatUSD(item.dividend_profit_usd) : formatKRW(item.dividend_profit_krw)}
+                      {item.cumulative_dividend > 0 && ` (주당 +${isUsdMode || isUs ? formatUSD(item.cumulative_dividend) : formatKRW(item.cumulative_dividend)})`}
+                    </span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      시세손익: {isUsdMode ? formatUSD(item.eval_profit_usd, true) : formatKRW(item.eval_profit_krw, true)}
+                    </span>
                   </div>
                 )}
 
@@ -1089,10 +1152,15 @@ export default function DashboardTab({
                         <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatKRW(acc.stock_eval)}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>손익 (수익률)</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>총손익 (수익률)</div>
                         <div style={{ fontSize: '1.15rem', fontWeight: 700, color: getProfitColor(accStockProfit) }}>
                           {(accStockProfit || 0) > 0 ? '+' : ''}{formatKRW(accStockProfit)} ({formatPercent(accStockReturn)})
                         </div>
+                        {acc.dividend_profit_krw > 0 && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            시세 {formatKRW(acc.eval_profit_krw, true)} | 배당 +{formatKRW(acc.dividend_profit_krw)}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>💵 보유 예수금</div>
@@ -1222,9 +1290,9 @@ export default function DashboardTab({
                                         US
                                       </span>
                                     )}
-                                    {h.is_dividend_cost_deduct && (
-                                      <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                                        💰 배당차감
+                                    {(h.dividend_profit_krw > 0 || h.dividend_profit_usd > 0) && (
+                                      <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(16, 185, 129, 0.12)', color: 'var(--color-safe)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                                        💰 배당반영
                                       </span>
                                     )}
                                     {h.is_deposit && (
@@ -1237,9 +1305,9 @@ export default function DashboardTab({
                                   <td>{formatQuantity(h.quantity, h.unit)}</td>
                                   <td>
                                     <div>{isHUsdMode ? formatUSD(h.avg_price_usd) : formatKRW(h.avg_price)}</div>
-                                    {h.is_dividend_cost_deduct && h.cumulative_dividend > 0 && (
+                                    {h.cumulative_dividend > 0 && (
                                       <div style={{ fontSize: '0.72rem', color: 'var(--color-safe, #10b981)', whiteSpace: 'nowrap' }}>
-                                        최초 {isHUsdMode || isHUs ? formatUSD(h.original_avg_price_usd) : formatKRW(h.original_avg_price)} (배당 -{isHUsdMode || isHUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)})
+                                        누적배당: +{isHUsdMode || isHUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)}/주
                                       </div>
                                     )}
                                     {isHUs && h.buy_fx_rate > 0 && (
@@ -1252,10 +1320,18 @@ export default function DashboardTab({
                                   <td style={{ fontWeight: 700 }}>{isHUsdMode ? formatUSD(h.eval_amount_usd) : formatKRW(h.eval_amount)}</td>
                                   <td style={{ color: getProfitColor(isHUsdMode ? h.profit_usd : h.profit_krw), fontWeight: 700 }}>
                                     <div>{isHUsdMode ? formatUSD(h.profit_usd, true) : `${(h.profit_krw || 0) > 0 ? '+' : ''}${formatKRW(h.profit_krw)}`} ({formatPercent(isHUsdMode ? h.profit_pct_usd : h.profit_pct)})</div>
-                                    {isHUs && (
+                                    {(h.dividend_profit_krw > 0 || h.dividend_profit_usd > 0) ? (
                                       <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
-                                        주가 {isHUsdMode ? formatUSD(h.profit_usd, true) : formatKRW(h.pure_stock_profit_krw, true)} / 환차 {formatKRW(h.fx_profit_krw, true)}
+                                        {isHUsdMode 
+                                          ? `시세 ${formatUSD(h.eval_profit_usd, true)} / 배당 +${formatUSD(h.dividend_profit_usd)}`
+                                          : `시세 ${formatKRW(h.eval_profit_krw, true)} / 배당 +${formatKRW(h.dividend_profit_krw)}`}
                                       </div>
+                                    ) : (
+                                      isHUs && (
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
+                                          주가 {isHUsdMode ? formatUSD(h.profit_usd, true) : formatKRW(h.pure_stock_profit_krw, true)} / 환차 {formatKRW(h.fx_profit_krw, true)}
+                                        </div>
+                                      )
                                     )}
                                   </td>
                                 </tr>
@@ -1295,9 +1371,9 @@ export default function DashboardTab({
                                     US
                                   </span>
                                 )}
-                                {h.is_dividend_cost_deduct && (
-                                  <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                                    💰 배당차감
+                                {(h.dividend_profit_krw > 0 || h.dividend_profit_usd > 0) && (
+                                  <span className="badge" style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '2px 6px', background: 'rgba(16, 185, 129, 0.12)', color: 'var(--color-safe)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                                    💰 배당반영
                                   </span>
                                 )}
                                 {h.is_deposit ? (
@@ -1329,10 +1405,16 @@ export default function DashboardTab({
                               </span>
                             </div>
 
-                            {/* Dividend Deduction Info */}
-                            {h.is_dividend_cost_deduct && h.cumulative_dividend > 0 && (
-                              <div style={{ fontSize: '0.74rem', color: 'var(--color-safe, #10b981)', marginTop: '2px' }}>
-                                최초단가 {isHUsdMode || isHUs ? formatUSD(h.original_avg_price_usd) : formatKRW(h.original_avg_price)} (배당 -{isHUsdMode || isHUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)} 차감)
+                            {/* Dividend Details Info */}
+                            {(h.dividend_profit_krw > 0 || h.dividend_profit_usd > 0) && (
+                              <div style={{ fontSize: '0.74rem', color: 'var(--color-safe, #10b981)', marginTop: '2px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                                <span>
+                                  배당수익: +{isHUsdMode || isHUs ? formatUSD(h.dividend_profit_usd) : formatKRW(h.dividend_profit_krw)}
+                                  {h.cumulative_dividend > 0 && ` (주당 +${isHUsdMode || isHUs ? formatUSD(h.cumulative_dividend) : formatKRW(h.cumulative_dividend)})`}
+                                </span>
+                                <span style={{ color: 'var(--text-secondary)' }}>
+                                  시세손익: {isHUsdMode ? formatUSD(h.eval_profit_usd, true) : formatKRW(h.eval_profit_krw, true)}
+                                </span>
                               </div>
                             )}
                             {isHUs && (

@@ -1439,7 +1439,14 @@ def get_overview_batch_data() -> Dict[str, Any]:
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
                    a.is_dividend_cost_deduct,
-                   acc.account_alias, acc.account_type
+                   acc.account_alias, acc.account_type,
+                   (
+                       SELECT MIN(t.trade_date) 
+                       FROM trade_history t 
+                       WHERE t.account_id = h.account_id 
+                         AND t.asset_id = h.asset_id 
+                         AND t.trade_date > '2000-01-01'
+                   ) as min_trade_date
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
             JOIN accounts acc ON h.account_id = acc.id
