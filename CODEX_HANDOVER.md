@@ -143,8 +143,17 @@ portfolio-rebalancer/
 │   │       └── formatters.js  # 통화(KRW/USD), 백분율, 날짜 포맷 함수
 │   └── package.json
 │
+├── docs/
+│   ├── DEPLOYMENT_GUIDE.md # Render, Vercel, NH API 배포 및 접속 조건 가이드
+│   └── BRANCH_MANAGEMENT_STRATEGY.md # 깃 브랜치 전략
+│
+├── scripts/
+│   ├── seed_dev_db.sql     # 최신 DDL 스키마 및 가짜(Mock) 샘플 데이터 SQL
+│   └── seed_dev_db.py      # 파이썬 DB 시딩 러너
+│
 ├── tests/                  # Pytest 기반 종합 테스트 스위트 (36개 테스트)
 ├── start_dev.bat           # 윈도우 원클릭 서버 실행 스크립트
+├── .env.example            # 환경 변수 템플릿 (필수/선택 명시)
 ├── PROJECT_STRUCTURE.md    # 아키텍처 상세 명세서
 └── CODEX_HANDOVER.md       # (본 문서) 인수인계 가이드
 ```
