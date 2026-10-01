@@ -3,7 +3,8 @@
 다계좌(일반, ISA, 연금저축, IRP, 정기예금 등) 및 다중 포트폴리오 기반의 자산 배분 관리 및 스마트 리밸런싱 계산 시스템입니다.  
 초고속 실시간 시세 연동(네이버 금융 JSON API 1순위, NH투자증권 Namuh PLUG API, 업비트) 및 목표 비중 기반의 최적 매수/매도/이체 플랜을 자동으로 도출합니다.
 
-> 📖 **자세한 시스템 구조 및 모듈별 명세**: [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)를 참고해 주세요.
+> 📖 **자세한 시스템 구조 및 모듈별 명세**: [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)를 참고해 주세요.  
+> 🤖 **Codex 및 AI 개발 인수인계 가이드**: [CODEX_HANDOVER.md](CODEX_HANDOVER.md)를 참고해 주세요.
 
 ---
 
