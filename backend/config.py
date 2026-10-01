@@ -37,20 +37,12 @@ def load_config():
         except Exception as e:
             print(f"Error loading secrets.toml: {e}")
 
-    def clean_val(val):
-        if not val:
-            return ""
-        s = str(val).strip()
-        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
-            s = s[1:-1].strip()
-        return s
-
-    supabase_url = clean_val(os.getenv("SUPABASE_URL") or secrets.get("SUPABASE_URL", ""))
-    app_password = clean_val(os.getenv("APP_PASSWORD") or secrets.get("APP_PASSWORD", "1234")) or "1234"
+    supabase_url = os.getenv("SUPABASE_URL") or secrets.get("SUPABASE_URL", "")
+    app_password = os.getenv("APP_PASSWORD") or str(secrets.get("APP_PASSWORD", "1234"))
     
     nh_sec = secrets.get("nh_api", {})
-    namuh_app_key = clean_val(os.getenv("NAMUH_APP_KEY") or nh_sec.get("app_key", ""))
-    namuh_app_secret = clean_val(os.getenv("NAMUH_APP_SECRET") or nh_sec.get("app_secret", ""))
+    namuh_app_key = os.getenv("NAMUH_APP_KEY") or nh_sec.get("app_key", "")
+    namuh_app_secret = os.getenv("NAMUH_APP_SECRET") or nh_sec.get("app_secret", "")
 
     return supabase_url, app_password, namuh_app_key, namuh_app_secret
 

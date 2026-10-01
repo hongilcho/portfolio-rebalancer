@@ -26,10 +26,8 @@ class NamuhAPIClient:
     인증 토큰 발급, 시세 조회, 계좌 잔고 동기화 기능을 제공합니다.
     """
     def __init__(self):
-        raw_key = os.getenv("NAMUH_APP_KEY") or NAMUH_APP_KEY or ""
-        raw_secret = os.getenv("NAMUH_APP_SECRET") or NAMUH_APP_SECRET or ""
-        self.app_key = str(raw_key).strip().strip('"').strip("'")
-        self.app_secret = str(raw_secret).strip().strip('"').strip("'")
+        self.app_key = os.getenv("NAMUH_APP_KEY") or NAMUH_APP_KEY
+        self.app_secret = os.getenv("NAMUH_APP_SECRET") or NAMUH_APP_SECRET
             
         self.base_url = "https://api.nhplug.com:8443" 
         self.access_token = None
