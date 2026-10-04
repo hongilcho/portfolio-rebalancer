@@ -81,8 +81,8 @@ def get_account_holdings(account_id: str):
     return {"holdings": holdings}
 
 @router.get("/all")
-def get_all_holdings_list():
-    holdings = get_all_holdings()
+def get_all_holdings_list(portfolio_id: Optional[str] = None):
+    holdings = get_all_holdings(portfolio_id=portfolio_id)
     return {"holdings": holdings}
 
 @router.post("/save")

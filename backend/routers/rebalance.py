@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from backend.services import market_service
 from data.data_manager import (
-    get_all_assets, get_all_accounts, get_holdings_by_account, apply_transfer_plan
+    get_rebalance_batch_data, apply_transfer_plan
 )
 from logic.rebalance_calculator import calculate_rebalancing_plan, compute_realized_summary
 
@@ -32,8 +32,9 @@ def calculate_plan(req: CalculateRebalanceRequest):
     지정된 포트폴리오와 시나리오에 따라 최적의 매매 및 계좌 간 현금 이체 계획을 계산합니다.
     """
     pid = req.portfolio_id or "default"
-    assets = get_all_assets(portfolio_id=pid)
-    accounts = get_all_accounts(portfolio_id=pid)
+    batch = get_rebalance_batch_data(pid)
+    assets = batch['assets']
+    accounts = batch['accounts']
     
     if not assets or not accounts:
         raise HTTPException(status_code=400, detail="자산과 계좌를 먼저 등록해주세요.")
@@ -44,9 +45,7 @@ def calculate_plan(req: CalculateRebalanceRequest):
     total_krw_cash = sum(float(a['deposit_krw']) for a in accounts if a['account_type'] != 'CMA')
     
     # Aggregate raw holdings
-    holdings_raw = []
-    for a in accounts:
-        holdings_raw.extend(get_holdings_by_account(a['id']))
+    holdings_raw = batch['holdings']
         
     portfolio_assets = {}
     for h in holdings_raw:

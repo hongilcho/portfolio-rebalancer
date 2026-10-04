@@ -1,0 +1,832 @@
+{
+  "NEW_CASH_0": {
+    "success": true,
+    "message": "리밸런싱 계산 완료",
+    "trade_plan": [
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "type": "BUY",
+        "qty": 30,
+        "price": 10000.0,
+        "total_krw": 300000.0
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "type": "BUY",
+        "qty": 3,
+        "price": 140000.0,
+        "total_krw": 420000.0
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "type": "BUY",
+        "qty": 8,
+        "price": 10000.0,
+        "total_krw": 80000.0
+      }
+    ],
+    "transfer_plan": [],
+    "simulated_assets": [
+      {
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "projected_val": 2400000.0,
+        "current_qty": 30.0,
+        "qty_diff": 0.0,
+        "target_weight": 40,
+        "include_in_rebalance": true,
+        "projected_weight": 52.40174672489083,
+        "drift": 12.401746724890828
+      },
+      {
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "projected_val": 1120000.0,
+        "current_qty": 5.0,
+        "qty_diff": 3.0,
+        "target_weight": 30,
+        "include_in_rebalance": true,
+        "projected_weight": 24.45414847161572,
+        "drift": -5.545851528384279
+      },
+      {
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "projected_val": 530000.0,
+        "current_qty": 15.0,
+        "qty_diff": 38.0,
+        "target_weight": 20,
+        "include_in_rebalance": true,
+        "projected_weight": 11.572052401746726,
+        "drift": -8.427947598253274
+      },
+      {
+        "asset_id": "deposit",
+        "asset_name": "예금",
+        "projected_val": 510000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 10,
+        "include_in_rebalance": true,
+        "projected_weight": 11.135371179039302,
+        "drift": 1.1353711790393017
+      },
+      {
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "projected_val": 20000.0,
+        "current_qty": 2.0,
+        "qty_diff": 0.0,
+        "target_weight": 0,
+        "include_in_rebalance": true,
+        "projected_weight": 0.43668122270742354,
+        "drift": 0.43668122270742354
+      },
+      {
+        "asset_id": "excluded",
+        "asset_name": "비중 제외",
+        "projected_val": 110000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 0.0,
+        "include_in_rebalance": false,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      }
+    ],
+    "total_sim": 4580000.0,
+    "scale_max": 43.4,
+    "realized_summary": {
+      "has_sell": false,
+      "sell_count": 0,
+      "total_sell_amount": 0,
+      "total_cost_basis": 0,
+      "total_realized_profit": 0,
+      "total_realized_return_pct": 0.0
+    }
+  },
+  "NEW_CASH_200000": {
+    "success": true,
+    "message": "리밸런싱 계산 완료",
+    "trade_plan": [
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "type": "BUY",
+        "qty": 50,
+        "price": 10000.0,
+        "total_krw": 500000.0
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "type": "BUY",
+        "qty": 3,
+        "price": 140000.0,
+        "total_krw": 420000.0
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "type": "BUY",
+        "qty": 8,
+        "price": 10000.0,
+        "total_krw": 80000.0
+      }
+    ],
+    "transfer_plan": [
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "type": "DEPOSIT",
+        "amount": 200000.0,
+        "msg": "[B] 계좌로 200,000원 입금 (신규 투입 및 타 계좌 잉여금)"
+      }
+    ],
+    "simulated_assets": [
+      {
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "projected_val": 2400000.0,
+        "current_qty": 30.0,
+        "qty_diff": 0.0,
+        "target_weight": 40,
+        "include_in_rebalance": true,
+        "projected_weight": 50.2092050209205,
+        "drift": 10.2092050209205
+      },
+      {
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "projected_val": 1120000.0,
+        "current_qty": 5.0,
+        "qty_diff": 3.0,
+        "target_weight": 30,
+        "include_in_rebalance": true,
+        "projected_weight": 23.430962343096233,
+        "drift": -6.569037656903767
+      },
+      {
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "projected_val": 730000.0,
+        "current_qty": 15.0,
+        "qty_diff": 58.0,
+        "target_weight": 20,
+        "include_in_rebalance": true,
+        "projected_weight": 15.271966527196653,
+        "drift": -4.728033472803347
+      },
+      {
+        "asset_id": "deposit",
+        "asset_name": "예금",
+        "projected_val": 510000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 10,
+        "include_in_rebalance": true,
+        "projected_weight": 10.669456066945607,
+        "drift": 0.6694560669456067
+      },
+      {
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "projected_val": 20000.0,
+        "current_qty": 2.0,
+        "qty_diff": 0.0,
+        "target_weight": 0,
+        "include_in_rebalance": true,
+        "projected_weight": 0.41841004184100417,
+        "drift": 0.41841004184100417
+      },
+      {
+        "asset_id": "excluded",
+        "asset_name": "비중 제외",
+        "projected_val": 110000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 0.0,
+        "include_in_rebalance": false,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      }
+    ],
+    "total_sim": 4780000.0,
+    "scale_max": 35.7,
+    "realized_summary": {
+      "has_sell": false,
+      "sell_count": 0,
+      "total_sell_amount": 0,
+      "total_cost_basis": 0,
+      "total_realized_profit": 0,
+      "total_realized_return_pct": 0.0
+    }
+  },
+  "DRIFT_0": {
+    "success": true,
+    "message": "리밸런싱 계산 완료",
+    "trade_plan": [
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "type": "SELL",
+        "qty": 8.0,
+        "price": 80000.0,
+        "avg_price": 60000,
+        "cost_basis_krw": 480000.0,
+        "total_krw": 640000.0,
+        "realized_profit_krw": 160000.0,
+        "realized_profit_pct": 33.33333333333333
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "type": "SELL",
+        "qty": 2,
+        "price": 10000.0,
+        "avg_price": 8000,
+        "cost_basis_krw": 16000,
+        "total_krw": 20000.0,
+        "realized_profit_krw": 4000.0,
+        "realized_profit_pct": 25.0
+      },
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "type": "BUY",
+        "qty": 77,
+        "price": 10000.0,
+        "total_krw": 770000.0
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "type": "BUY",
+        "qty": 4,
+        "price": 140000.0,
+        "total_krw": 560000.0
+      }
+    ],
+    "transfer_plan": [
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "type": "DEPOSIT",
+        "amount": 470000.0,
+        "msg": "[B] 계좌로 470,000원 입금 (신규 투입 및 타 계좌 잉여금)"
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "type": "WITHDRAW",
+        "amount": 470000.0,
+        "msg": "[A] 계좌에서 470,000원 출금 (타 계좌 매수 자금 지원용)"
+      }
+    ],
+    "simulated_assets": [
+      {
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "projected_val": 1760000.0,
+        "current_qty": 30.0,
+        "qty_diff": -8.0,
+        "target_weight": 40,
+        "include_in_rebalance": true,
+        "projected_weight": 39.550561797752806,
+        "drift": -0.4494382022471939
+      },
+      {
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "projected_val": 1260000.0,
+        "current_qty": 5.0,
+        "qty_diff": 4.0,
+        "target_weight": 30,
+        "include_in_rebalance": true,
+        "projected_weight": 28.314606741573034,
+        "drift": -1.6853932584269664
+      },
+      {
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "projected_val": 920000.0,
+        "current_qty": 15.0,
+        "qty_diff": 77.0,
+        "target_weight": 20,
+        "include_in_rebalance": true,
+        "projected_weight": 20.674157303370784,
+        "drift": 0.6741573033707837
+      },
+      {
+        "asset_id": "deposit",
+        "asset_name": "예금",
+        "projected_val": 510000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 10,
+        "include_in_rebalance": true,
+        "projected_weight": 11.46067415730337,
+        "drift": 1.4606741573033695
+      },
+      {
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "projected_val": 0.0,
+        "current_qty": 2.0,
+        "qty_diff": -2.0,
+        "target_weight": 0,
+        "include_in_rebalance": true,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      },
+      {
+        "asset_id": "excluded",
+        "asset_name": "비중 제외",
+        "projected_val": 110000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 0.0,
+        "include_in_rebalance": false,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      }
+    ],
+    "total_sim": 4450000.0,
+    "scale_max": 5.9,
+    "realized_summary": {
+      "has_sell": true,
+      "sell_count": 2,
+      "total_sell_amount": 660000.0,
+      "total_cost_basis": 496000.0,
+      "total_realized_profit": 164000.0,
+      "total_realized_return_pct": 33.064516129032256
+    }
+  },
+  "DRIFT_200000": {
+    "success": true,
+    "message": "리밸런싱 계산 완료",
+    "trade_plan": [
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "type": "SELL",
+        "qty": 7.0,
+        "price": 80000.0,
+        "avg_price": 60000,
+        "cost_basis_krw": 420000.0,
+        "total_krw": 560000.0,
+        "realized_profit_krw": 140000.0,
+        "realized_profit_pct": 33.33333333333333
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "type": "SELL",
+        "qty": 2,
+        "price": 10000.0,
+        "avg_price": 8000,
+        "cost_basis_krw": 16000,
+        "total_krw": 20000.0,
+        "realized_profit_krw": 4000.0,
+        "realized_profit_pct": 25.0
+      },
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "type": "BUY",
+        "qty": 81,
+        "price": 10000.0,
+        "total_krw": 810000.0
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "type": "BUY",
+        "qty": 5,
+        "price": 140000.0,
+        "total_krw": 700000.0
+      }
+    ],
+    "transfer_plan": [
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "type": "DEPOSIT",
+        "amount": 510000.0,
+        "msg": "[B] 계좌로 510,000원 입금 (신규 투입 및 타 계좌 잉여금)"
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "type": "WITHDRAW",
+        "amount": 310000.0,
+        "msg": "[A] 계좌에서 310,000원 출금 (타 계좌 매수 자금 지원용)"
+      }
+    ],
+    "simulated_assets": [
+      {
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "projected_val": 1840000.0,
+        "current_qty": 30.0,
+        "qty_diff": -7.0,
+        "target_weight": 40,
+        "include_in_rebalance": true,
+        "projected_weight": 39.06581740976646,
+        "drift": -0.9341825902335401
+      },
+      {
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "projected_val": 1400000.0,
+        "current_qty": 5.0,
+        "qty_diff": 5.0,
+        "target_weight": 30,
+        "include_in_rebalance": true,
+        "projected_weight": 29.723991507431,
+        "drift": -0.2760084925690016
+      },
+      {
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "projected_val": 960000.0,
+        "current_qty": 15.0,
+        "qty_diff": 81.0,
+        "target_weight": 20,
+        "include_in_rebalance": true,
+        "projected_weight": 20.382165605095544,
+        "drift": 0.382165605095544
+      },
+      {
+        "asset_id": "deposit",
+        "asset_name": "예금",
+        "projected_val": 510000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 10,
+        "include_in_rebalance": true,
+        "projected_weight": 10.828025477707007,
+        "drift": 0.8280254777070066
+      },
+      {
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "projected_val": 0.0,
+        "current_qty": 2.0,
+        "qty_diff": -2.0,
+        "target_weight": 0,
+        "include_in_rebalance": true,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      },
+      {
+        "asset_id": "excluded",
+        "asset_name": "비중 제외",
+        "projected_val": 110000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 0.0,
+        "include_in_rebalance": false,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      }
+    ],
+    "total_sim": 4710000.0,
+    "scale_max": 3.3,
+    "realized_summary": {
+      "has_sell": true,
+      "sell_count": 2,
+      "total_sell_amount": 580000.0,
+      "total_cost_basis": 436000.0,
+      "total_realized_profit": 144000.0,
+      "total_realized_return_pct": 33.02752293577982
+    }
+  },
+  "PERIODIC_0": {
+    "success": true,
+    "message": "리밸런싱 계산 완료",
+    "trade_plan": [
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "type": "SELL",
+        "qty": 8.0,
+        "price": 80000.0,
+        "avg_price": 60000,
+        "cost_basis_krw": 480000.0,
+        "total_krw": 640000.0,
+        "realized_profit_krw": 160000.0,
+        "realized_profit_pct": 33.33333333333333
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "type": "SELL",
+        "qty": 2,
+        "price": 10000.0,
+        "avg_price": 8000,
+        "cost_basis_krw": 16000,
+        "total_krw": 20000.0,
+        "realized_profit_krw": 4000.0,
+        "realized_profit_pct": 25.0
+      },
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "type": "BUY",
+        "qty": 77,
+        "price": 10000.0,
+        "total_krw": 770000.0
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "type": "BUY",
+        "qty": 4,
+        "price": 140000.0,
+        "total_krw": 560000.0
+      }
+    ],
+    "transfer_plan": [
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "type": "DEPOSIT",
+        "amount": 470000.0,
+        "msg": "[B] 계좌로 470,000원 입금 (신규 투입 및 타 계좌 잉여금)"
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "type": "WITHDRAW",
+        "amount": 470000.0,
+        "msg": "[A] 계좌에서 470,000원 출금 (타 계좌 매수 자금 지원용)"
+      }
+    ],
+    "simulated_assets": [
+      {
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "projected_val": 1760000.0,
+        "current_qty": 30.0,
+        "qty_diff": -8.0,
+        "target_weight": 40,
+        "include_in_rebalance": true,
+        "projected_weight": 39.550561797752806,
+        "drift": -0.4494382022471939
+      },
+      {
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "projected_val": 1260000.0,
+        "current_qty": 5.0,
+        "qty_diff": 4.0,
+        "target_weight": 30,
+        "include_in_rebalance": true,
+        "projected_weight": 28.314606741573034,
+        "drift": -1.6853932584269664
+      },
+      {
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "projected_val": 920000.0,
+        "current_qty": 15.0,
+        "qty_diff": 77.0,
+        "target_weight": 20,
+        "include_in_rebalance": true,
+        "projected_weight": 20.674157303370784,
+        "drift": 0.6741573033707837
+      },
+      {
+        "asset_id": "deposit",
+        "asset_name": "예금",
+        "projected_val": 510000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 10,
+        "include_in_rebalance": true,
+        "projected_weight": 11.46067415730337,
+        "drift": 1.4606741573033695
+      },
+      {
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "projected_val": 0.0,
+        "current_qty": 2.0,
+        "qty_diff": -2.0,
+        "target_weight": 0,
+        "include_in_rebalance": true,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      },
+      {
+        "asset_id": "excluded",
+        "asset_name": "비중 제외",
+        "projected_val": 110000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 0.0,
+        "include_in_rebalance": false,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      }
+    ],
+    "total_sim": 4450000.0,
+    "scale_max": 5.9,
+    "realized_summary": {
+      "has_sell": true,
+      "sell_count": 2,
+      "total_sell_amount": 660000.0,
+      "total_cost_basis": 496000.0,
+      "total_realized_profit": 164000.0,
+      "total_realized_return_pct": 33.064516129032256
+    }
+  },
+  "PERIODIC_200000": {
+    "success": true,
+    "message": "리밸런싱 계산 완료",
+    "trade_plan": [
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "type": "SELL",
+        "qty": 7.0,
+        "price": 80000.0,
+        "avg_price": 60000,
+        "cost_basis_krw": 420000.0,
+        "total_krw": 560000.0,
+        "realized_profit_krw": 140000.0,
+        "realized_profit_pct": 33.33333333333333
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "type": "SELL",
+        "qty": 2,
+        "price": 10000.0,
+        "avg_price": 8000,
+        "cost_basis_krw": 16000,
+        "total_krw": 20000.0,
+        "realized_profit_krw": 4000.0,
+        "realized_profit_pct": 25.0
+      },
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "type": "BUY",
+        "qty": 81,
+        "price": 10000.0,
+        "total_krw": 810000.0
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "type": "BUY",
+        "qty": 5,
+        "price": 140000.0,
+        "total_krw": 700000.0
+      }
+    ],
+    "transfer_plan": [
+      {
+        "account_id": "irp",
+        "account_alias": "B",
+        "type": "DEPOSIT",
+        "amount": 510000.0,
+        "msg": "[B] 계좌로 510,000원 입금 (신규 투입 및 타 계좌 잉여금)"
+      },
+      {
+        "account_id": "normal",
+        "account_alias": "A",
+        "type": "WITHDRAW",
+        "amount": 310000.0,
+        "msg": "[A] 계좌에서 310,000원 출금 (타 계좌 매수 자금 지원용)"
+      }
+    ],
+    "simulated_assets": [
+      {
+        "asset_id": "kr",
+        "asset_name": "국내주식",
+        "projected_val": 1840000.0,
+        "current_qty": 30.0,
+        "qty_diff": -7.0,
+        "target_weight": 40,
+        "include_in_rebalance": true,
+        "projected_weight": 39.06581740976646,
+        "drift": -0.9341825902335401
+      },
+      {
+        "asset_id": "us",
+        "asset_name": "미국채",
+        "projected_val": 1400000.0,
+        "current_qty": 5.0,
+        "qty_diff": 5.0,
+        "target_weight": 30,
+        "include_in_rebalance": true,
+        "projected_weight": 29.723991507431,
+        "drift": -0.2760084925690016
+      },
+      {
+        "asset_id": "safe",
+        "asset_name": "국내채권",
+        "projected_val": 960000.0,
+        "current_qty": 15.0,
+        "qty_diff": 81.0,
+        "target_weight": 20,
+        "include_in_rebalance": true,
+        "projected_weight": 20.382165605095544,
+        "drift": 0.382165605095544
+      },
+      {
+        "asset_id": "deposit",
+        "asset_name": "예금",
+        "projected_val": 510000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 10,
+        "include_in_rebalance": true,
+        "projected_weight": 10.828025477707007,
+        "drift": 0.8280254777070066
+      },
+      {
+        "asset_id": "inactive",
+        "asset_name": "비활성 보유종목",
+        "projected_val": 0.0,
+        "current_qty": 2.0,
+        "qty_diff": -2.0,
+        "target_weight": 0,
+        "include_in_rebalance": true,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      },
+      {
+        "asset_id": "excluded",
+        "asset_name": "비중 제외",
+        "projected_val": 110000.0,
+        "current_qty": 1.0,
+        "qty_diff": 0.0,
+        "target_weight": 0.0,
+        "include_in_rebalance": false,
+        "projected_weight": 0.0,
+        "drift": 0.0
+      }
+    ],
+    "total_sim": 4710000.0,
+    "scale_max": 3.3,
+    "realized_summary": {
+      "has_sell": true,
+      "sell_count": 2,
+      "total_sell_amount": 580000.0,
+      "total_cost_basis": 436000.0,
+      "total_realized_profit": 144000.0,
+      "total_realized_return_pct": 33.02752293577982
+    }
+  }
+}

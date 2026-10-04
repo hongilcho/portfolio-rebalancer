@@ -634,6 +634,30 @@ def delete_account(account_id):
 # ---------------------------------------------------------
 # Assets Helpers
 # ---------------------------------------------------------
+def _normalize_asset(row):
+    """Keep asset types/defaults identical for row and JSON batch readers."""
+    r = dict(row)
+    try:
+        raw_accs = json.loads(r['allowed_accounts']) if r.get('allowed_accounts') else []
+    except Exception:
+        raw_accs = []
+    r['allowed_accounts'] = sanitize_account_names(raw_accs)
+    r['account_no'] = r.get('account_no') or ''
+    r['is_risk_asset'] = bool(r.get('is_risk_asset', 1))
+    r['is_active'] = bool(r.get('is_active', True) if r.get('is_active') is not None else True)
+    r['is_deposit'] = bool(r.get('is_deposit', False))
+    r['deposit_principal'] = float(r.get('deposit_principal') or 0.0)
+    r['interest_rate'] = float(r.get('interest_rate') or 0.0)
+    r['start_date'] = r.get('start_date') or ''
+    r['maturity_date'] = r.get('maturity_date') or ''
+    r['early_termination_rate'] = float(r.get('early_termination_rate') or 0.0)
+    r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
+    r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
+    r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
+    r['is_dividend_cost_deduct'] = bool(r.get('is_dividend_cost_deduct', False))
+    return r
+
+
 def get_all_assets(portfolio_id: str = None):
     conn = get_connection()
     try:
@@ -642,29 +666,7 @@ def get_all_assets(portfolio_id: str = None):
             cursor.execute("SELECT * FROM assets WHERE portfolio_id = %s ORDER BY name ASC", (portfolio_id,))
         else:
             cursor.execute("SELECT * FROM assets ORDER BY name ASC")
-        rows = []
-        for r in cursor.fetchall():
-            r = dict(r)
-            try:
-                raw_accs = json.loads(r['allowed_accounts']) if r['allowed_accounts'] else []
-            except Exception:
-                raw_accs = []
-            r['allowed_accounts'] = sanitize_account_names(raw_accs)
-            r['account_no'] = r.get('account_no') or ''
-            r['is_risk_asset'] = bool(r.get('is_risk_asset', 1))
-            r['is_active'] = bool(r.get('is_active', True) if r.get('is_active') is not None else True)
-            r['is_deposit'] = bool(r.get('is_deposit', False))
-            r['deposit_principal'] = float(r.get('deposit_principal') or 0.0)
-            r['interest_rate'] = float(r.get('interest_rate') or 0.0)
-            r['start_date'] = r.get('start_date') or ''
-            r['maturity_date'] = r.get('maturity_date') or ''
-            r['early_termination_rate'] = float(r.get('early_termination_rate') or 0.0)
-            r['tax_rate'] = float(r.get('tax_rate') if r.get('tax_rate') is not None else 15.4)
-            r['lock_rebalance_sell'] = bool(r.get('lock_rebalance_sell', True) if r.get('lock_rebalance_sell') is not None else True)
-            r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
-            r['is_dividend_cost_deduct'] = bool(r.get('is_dividend_cost_deduct', False))
-            rows.append(r)
-        return rows
+        return [_normalize_asset(r) for r in cursor.fetchall()]
     finally:
         conn.close()
 
@@ -839,11 +841,11 @@ def get_holdings_by_account(account_id):
     finally:
         conn.close()
 
-def get_all_holdings():
+def get_all_holdings(portfolio_id: str = None):
     conn = get_connection()
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute('''
+        sql = '''
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
                    a.is_dividend_cost_deduct,
@@ -851,11 +853,59 @@ def get_all_holdings():
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
             JOIN accounts acc ON h.account_id = acc.id
-        ''')
+        '''
+        if portfolio_id:
+            cursor.execute(sql + ' WHERE acc.portfolio_id = %s', (portfolio_id,))
+        else:
+            cursor.execute(sql)
         rows = cursor.fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+def get_rebalance_batch_data(portfolio_id: str) -> Dict[str, Any]:
+    """Read one portfolio's calculation inputs in one consistent SQL snapshot.
+
+    Rebalancing needs raw quantities/costs, so trade dates and dividend history
+    are deliberately absent from this read.
+    """
+    sql = """
+    SELECT json_build_object(
+        'accounts', COALESCE((
+            SELECT json_agg(acc ORDER BY acc.account_alias ASC)
+            FROM accounts acc WHERE acc.portfolio_id = %s
+        ), '[]'::json),
+        'assets', COALESCE((
+            SELECT json_agg(ast ORDER BY ast.name ASC)
+            FROM assets ast WHERE ast.portfolio_id = %s
+        ), '[]'::json),
+        'holdings', COALESCE((SELECT json_agg(rows) FROM (
+            SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
+                   a.is_deposit, a.deposit_principal, a.interest_rate,
+                   a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
+                   a.is_dividend_cost_deduct, acc.account_alias, acc.account_type
+            FROM holdings h
+            JOIN assets a ON h.asset_id = a.id
+            JOIN accounts acc ON h.account_id = acc.id
+            WHERE acc.portfolio_id = %s
+        ) rows), '[]'::json)
+    );
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, (portfolio_id, portfolio_id, portfolio_id))
+        raw = cursor.fetchone()[0]
+    finally:
+        conn.close()
+    raw['assets'] = [_normalize_asset(r) for r in raw['assets']]
+    # Preserve the previous account-by-account aggregation order.
+    by_account = {}
+    for holding in raw['holdings']:
+        by_account.setdefault(str(holding['account_id']), []).append(holding)
+    raw['holdings'] = [h for account in raw['accounts']
+                       for h in by_account.get(str(account['id']), [])]
+    return raw
 
 def clear_all_caches():
     pass

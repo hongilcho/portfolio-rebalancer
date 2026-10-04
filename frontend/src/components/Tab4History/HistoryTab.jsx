@@ -9,6 +9,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { api } from '../../utils/api';
 import { formatKRW, formatUSD, formatQuantity } from '../../utils/formatters';
+import { loadAccountHoldings } from '../../utils/accountHoldings';
 
 export default function HistoryTab({ assets, accounts, priceMap, usdKrw = 1380.0, pricesData, onSaved, currentPortfolioId = 'default' }) {
   // Batch Trade Form State
@@ -30,6 +31,7 @@ export default function HistoryTab({ assets, accounts, priceMap, usdKrw = 1380.0
 
   // Account Holdings Map for Sell Validation
   const [accountHoldingsMap, setAccountHoldingsMap] = useState({});
+  const [holdingsError, setHoldingsError] = useState(false);
 
   // Reference Prices Collapsible
   const [isPriceRefOpen, setIsPriceRefOpen] = useState(false);
@@ -46,15 +48,17 @@ export default function HistoryTab({ assets, accounts, priceMap, usdKrw = 1380.0
 
   // Load account holdings for sell validation
   useEffect(() => {
-    accounts.forEach((acc) => {
-      api.getAccountHoldings(acc.id).then((res) => {
-        setAccountHoldingsMap((prev) => ({
-          ...prev,
-          [String(acc.id)]: res.holdings || []
-        }));
-      });
+    let cancelled = false;
+    setAccountHoldingsMap({});
+    setHoldingsError(false);
+    loadAccountHoldings(accounts, currentPortfolioId, api.getAllHoldings).then((grouped) => {
+      if (!cancelled) setAccountHoldingsMap(grouped);
+    }).catch(() => {
+      if (!cancelled) setHoldingsError(true);
     });
-  }, [accounts]);
+    // Discard a response from a previous portfolio or account refresh.
+    return () => { cancelled = true; };
+  }, [accounts, currentPortfolioId]);
 
   // Load trade history
   const loadTrades = useCallback(async () => {
@@ -482,6 +486,12 @@ export default function HistoryTab({ assets, accounts, priceMap, usdKrw = 1380.0
               <span>🔵 매도 (Sell) 입력</span>
               <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>{sellRows.length}건</span>
             </h4>
+
+            {holdingsError && (
+              <p role="alert" style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                보유 잔고를 불러오지 못했습니다. 화면을 새로고침하여 다시 조회해주세요.
+              </p>
+            )}
 
             {sellRows.map((row) => {
               const accHoldings = (accountHoldingsMap[String(row.accountId)] || []).filter((h) => h.quantity > 0);

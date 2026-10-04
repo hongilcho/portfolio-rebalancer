@@ -136,6 +136,11 @@ export const api = {
 
   // Holdings
   getAccountHoldings: (accountId) => request(`/api/holdings/account/${accountId}`),
+  getAllHoldings: (portfolioId) => {
+    const query = portfolioId && portfolioId !== 'all'
+      ? `?${new URLSearchParams({ portfolio_id: portfolioId })}` : '';
+    return request(`/api/holdings/all${query}`);
+  },
   saveHoldings: (data) => request('/api/holdings/save', {
     method: 'POST',
     body: JSON.stringify(data),
