@@ -96,7 +96,11 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
         classMap['crypto'].value += evalAmt;
       } else if (name.includes('금99') || name.includes('금 99') || name.includes('원자재') || name.includes('gold') || ticker === 'PDBC' || ticker === 'M04020000') {
         classMap['gold_commodities'].value += evalAmt;
-      } else if (name.includes('국채') || name.includes('채권') || name.includes('bond') || ticker === '0085P0' || ticker === '476760') {
+      } else if (
+        name.includes('국채') || name.includes('채권') || name.includes('bond') ||
+        name.includes('머니마켓') || ticker === '488770' ||
+        ticker === '0085P0' || ticker === '476760'
+      ) {
         classMap['bonds'].value += evalAmt;
       } else {
         // 국내/해외 구분 없이 모두 '주식'
