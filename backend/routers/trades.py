@@ -8,7 +8,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
-from data.data_manager import execute_trade, get_trade_history, delete_trade
+from data.data_manager import execute_trade, get_trade_history, delete_trades
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
@@ -105,21 +105,12 @@ def execute_batch_trades(req: BatchTradeRequest):
 
 @router.delete("/batch")
 def batch_delete_trades(req: DeleteTradesRequest):
-    success_count = 0
-    errors = []
-    
-    for trade_id in req.trade_ids:
-        success, msg = delete_trade(trade_id)
-        if success:
-            success_count += 1
-        else:
-            errors.append(f"[{trade_id}] {msg}")
-            
-    if errors:
-        raise HTTPException(status_code=400, detail="; ".join(errors))
+    success, msg = delete_trades(req.trade_ids)
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
         
     return {
         "success": True,
-        "deleted_count": success_count,
-        "message": f"{success_count}건의 매매 기록이 성공적으로 삭제 및 복원되었습니다."
+        "deleted_count": len(req.trade_ids),
+        "message": msg
     }

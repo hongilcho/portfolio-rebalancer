@@ -221,12 +221,12 @@ export default function HistoryTab({ assets, accounts, priceMap, usdKrw = 1380.0
   // Delete Selected Trades (with Rollback)
   const handleDeleteSelectedTrades = async () => {
     if (selectedTradeIds.length === 0) return;
-    if (!window.confirm(`선택한 ${selectedTradeIds.length}건의 매매 기록을 삭제하시겠습니까?\n과거 평단가와 수량이 자동으로 재계산되어 복원됩니다.`)) return;
+    if (!window.confirm(`선택한 ${selectedTradeIds.length}건의 매매 기록을 삭제하시겠습니까?\n예수금 변동을 되돌리고 보유 수량과 매입원가를 재계산합니다.`)) return;
 
     setDeletingTrades(true);
     try {
       const res = await api.batchDeleteTrades(selectedTradeIds);
-      alert(res.message || '삭제 및 평단가 롤백이 완료되었습니다.');
+      alert(res.message || '삭제 및 예수금·보유 잔고 복원이 완료되었습니다.');
       loadTrades();
       onSaved();
     } catch (err) {
@@ -817,7 +817,7 @@ export default function HistoryTab({ assets, accounts, priceMap, usdKrw = 1380.0
             {selectedTradeIds.length > 0 && (
               <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(251, 113, 133, 0.1)', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(251, 113, 133, 0.3)' }}>
                 <span style={{ fontWeight: 600, color: 'var(--color-risk)' }}>
-                  🗑️ 선택된 {selectedTradeIds.length}개의 기록 삭제 및 평단가 자동 롤백
+                  🗑️ 선택된 {selectedTradeIds.length}개의 기록 삭제 및 예수금·보유 잔고 복원
                 </span>
                 <button
                   className="btn btn-danger"

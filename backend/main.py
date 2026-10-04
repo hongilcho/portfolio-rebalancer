@@ -29,14 +29,10 @@ from backend.services import market_service
 from logic.crypto_price_fetcher import get_crypto_prices
 from backend.routers import auth, market, dashboard, accounts, assets, holdings, rebalance, trades, sync, crypto, portfolios, system
 
-# Safe DB schema initialization on import
-try:
-    init_db()
-except Exception as e:
-    print(f"Database initialization warning (safe to ignore if already initialized): {e}")
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Imports and test collection must not connect to a database.
+    init_db()
     # Zero-Cold-Start 백그라운드 프리워밍:
     # 컨테이너 기동 즉시 데몬 스레드로 백그라운드 갱신을 시작하여 사용자가 들어오기 전에 항상 최신 시세 준비
     def _background_warmup():

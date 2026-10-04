@@ -14,7 +14,7 @@
   * IRP 위험자산 70% 규제 검증, 계좌별 우선순위/납입한도, 최소 이체(Transfer) 최적화 기반 **스마트 리밸런싱 플랜** 자동 산출
 * **핵심 설계 철학**:
   1. **증권사 MTS 일치성**: 인위적으로 평단가를 깎아 손익을 맞추지 않음. 적립식 매수 및 증권사 잔고와 1원 단위까지 1:1 대조 가능.
-  2. **초고속 응답성 (Zero Cold-Start)**: 단일 배치 쿼리(0.02초)와 SWR(Stale-While-Revalidate) 인메모리 + PostgreSQL 캐시(`market_cache`)로 서버 슬립 해제 시 0초 응답.
+  2. **데이터 조회 및 캐시**: 주요 테이블 배치 조회와 메모리·PostgreSQL 캐시(`market_cache`). 시작 시 예열하며 일반 시세 만료 시에는 요청 안에서 동기 갱신합니다. 응답 시간 보장은 없습니다.
   3. **클린 아키텍처**: 데이터베이스(영속성), 비즈니스 로직(도메인/금융공학), API 계층(FastAPI), UI(React 19)의 철저한 관심사 분리.
 
 ---
@@ -84,10 +84,10 @@ cd frontend
 npm run dev
 ```
 
-#### 2) 테스트 실행 (36개 단위/통합 테스트 전체 통과 확인 필수)
+#### 2) 테스트 실행 (격리 회귀 테스트; DB 의존 테스트는 별도 검증)
 ```bash
 # 루트 디렉토리에서 실행
-python -m pytest
+python -m pytest -q -p no:cacheprovider
 ```
 
 #### 3) 프론트엔드 린트 및 프로덕션 빌드 검증
@@ -106,7 +106,7 @@ portfolio-rebalancer/
 ├── backend/
 │   ├── config.py           # .env 로딩, DB URL, 보안 암호, 상속 상수
 │   ├── main.py             # FastAPI 앱 생성, CORS 허용, 라이프사이클 이벤트
-│   ├── services.py         # MarketStateService (SWR 시세 싱글톤, 인메모리 + DB 캐시)
+│   ├── services.py         # MarketStateService (시세 캐시 싱글톤, 인메모리 + DB 캐시)
 │   └── routers/
 │       ├── dashboard.py    # /api/dashboard/bundle (대시보드 원샷 초고속 번들), Total Return 메트릭 계산
 │       ├── holdings.py     # 계좌별 보유종목 조회/수정/배당정보 연동
@@ -126,7 +126,7 @@ portfolio-rebalancer/
 │
 ├── logic/
 │   ├── dividend_fetcher.py # 거래소 공식 배당금 수집(yfinance) + trade_history 시계열 수량 추적 알고리즘
-│   ├── price_fetcher.py    # 3단계 시세 수집기 (네이버 JSON 1순위, NH 2순위, yfinance 3순위), 예금 복리이자
+│   ├── price_fetcher.py    # 3단계 시세 수집기 (네이버 JSON 1순위, NH 2순위, yfinance 3순위), 예금 일할 단리 이자
 │   └── rebalance_calculator.py # 목표 비중 괴리율 분석, 매매 수량 산출, IRP 70% 규제 검증
 │
 ├── frontend/
@@ -139,7 +139,7 @@ portfolio-rebalancer/
 │   │   │   ├── Tab5Crypto/    # 업비트 가상자산 소유자별 현황 탭
 │   │   │   └── Tab6Settings/  # 다중 포트폴리오 관리, 나무 API 설정, 시스템 진단
 │   │   └── utils/
-│   │       ├── api.js         # Axios 기반 고속 번들 API 클라이언트
+│   │       ├── api.js         # fetch 기반 고속 번들 API 클라이언트
 │   │       └── formatters.js  # 통화(KRW/USD), 백분율, 날짜 포맷 함수
 │   └── package.json
 │
@@ -151,7 +151,7 @@ portfolio-rebalancer/
 │   ├── seed_dev_db.sql     # 최신 DDL 스키마 및 가짜(Mock) 샘플 데이터 SQL
 │   └── seed_dev_db.py      # 파이썬 DB 시딩 러너
 │
-├── tests/                  # Pytest 기반 종합 테스트 스위트 (36개 테스트)
+├── tests/                  # Pytest 기반 격리 회귀 테스트 스위트
 ├── start_dev.bat           # 윈도우 원클릭 서버 실행 스크립트
 ├── .env.example            # 환경 변수 템플릿 (필수/선택 명시)
 ├── PROJECT_STRUCTURE.md    # 아키텍처 상세 명세서
@@ -162,7 +162,7 @@ portfolio-rebalancer/
 
 ## 4. 데이터베이스 스키마 및 핵심 모델
 
-모든 주요 테이블은 `portfolio_id` 필드를 통해 완벽하게 격리됩니다 (`default` 포트폴리오가 기본값).
+계좌·자산의 `portfolio_id`를 통해 금융 포트폴리오를 구분합니다. 보유·거래는 계좌·자산을 통해 연결하며 가상자산은 소유자별 별도 관리입니다 (`default` 포트폴리오가 기본값).
 
 ### 4.1 테이블 구조
 1. **`portfolios`**: 포트폴리오 엔티티
@@ -190,7 +190,7 @@ portfolio-rebalancer/
    * `quantity`, `price`, `currency` (`KRW`/`USD`), `exchange_rate`, `notes`
 6. **`crypto_holdings`**: 가상자산 보유 상태
    * `id`, `owner` (소유자명), `symbol` (BTC, ETH 등), `name`, `quantity`, `avg_buy_price`, `portfolio_id`
-7. **`market_cache`**: 영구 시세/배당 캐시 (Zero Cold-Start 보장)
+7. **`market_cache`**: 영구 시세/배당 캐시
    * `key` (TEXT PK, e.g. `div_KR_379810`), `data` (JSONB), `updated_at` (TIMESTAMP)
 
 ---
@@ -278,8 +278,10 @@ $$\text{Eval Profit (KRW)} = \text{Pure Stock Profit (KRW)} + \text{FX Profit (K
 ### 5.5 특수 자산 및 계좌 처리 규칙
 1. **정기예금 (Pure Asset 모델)**:
    * 정기예금은 계좌가 아니라 자산(`is_deposit = True`)으로 모델링.
-   * 복리 계산식을 통해 매일 경과 일수(`elapsed_days`)에 따른 세후 이자를 현재 평가액에 자동 가산:
-     $$\text{세후 누적이자} = \text{원금} \times \left(1 + \text{이율} \times \frac{\text{경과일수}}{365}\right) \times (1 - \text{세율})$$
+   * 일할 단리로 세전이자를 계산하고, 이자에만 세금을 부과하여 평가액에 가산:
+     `세전이자 = 원금 × (연이율 / 100) × 경과일수 / 365`
+     `이자세금 = floor(세전이자 × 세율 / 100)`
+     `평가액 = 원금 + 세전이자 − 이자세금`
    * 대시보드 탭 상단의 **'예금 포함/제외' 토글**로 순수 투자자산 뷰와 종합 자산 뷰 원터치 전환.
 2. **CMA 계좌 20:00 컷오프 특성**:
    * 증권사 CMA 계좌는 매일 오후 8시 이후 잔고가 예수금에서 'CMA 발행어음'으로 자동 매수되어 다음 날 오전까지 예수금이 0원으로 잡힙니다.
@@ -315,4 +317,9 @@ $$\text{Eval Profit (KRW)} = \text{Pure Stock Profit (KRW)} + \text{FX Profit (K
 
 ---
 
-> 💡 **Codex 작업 팁**: 작업을 시작할 때는 항상 `git status`로 브랜치를 확인하고, 코드 변경 후에는 반드시 `python -m pytest` (36개 테스트)와 `cd frontend && npm run build`를 실행하여 정합성을 검증하십시오!
+> 💡 **Codex 작업 팁**: 작업을 시작할 때는 항상 `git status`로 브랜치를 확인하고, 코드 변경 후에는 반드시 `python -m pytest -q -p no:cacheprovider`와 `cd frontend && npm run build`를 실행하여 정합성을 검증하십시오!
+
+
+## 최신 보완 사항
+
+개별·전체 화면은 배당 포함 보유자산 수익률을 사용하며 예수금을 분모에서 제외합니다. 거래 취소의 현금 복원, 기존 거래 삭제 제한, 테스트 격리와 배포 전 검증은 [ACCOUNTING_CHANGES.md](docs/ACCOUNTING_CHANGES.md)를 우선 참조하세요. 문서의 성능 수치와 운영 설정은 실제 측정·대시보드 확인 없이 보장하지 않습니다.

@@ -80,10 +80,11 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     all_accounts = batch_data.get("accounts", [])
     all_assets = batch_data.get("assets", [])
     all_holdings = batch_data.get("holdings", [])
+    all_trades = batch_data.get("trade_history", [])
     crypto_holdings = batch_data.get("crypto_holdings", [])
 
     # 2. 가격 데이터 가져오기 (인메모리 캐시 및 SWR 적용)
-    _, price_map = market_service.get_prices(force_refresh=force_refresh)
+    prices, price_map = market_service.get_prices(force_refresh=force_refresh)
     usd_krw = market_service.usd_krw
 
     # 3. 가상화폐 요약 (사전 조회된 crypto_holdings 및 캐시 시세 사용 -> 0ms)
@@ -112,6 +113,9 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     total_portfolios_buy = 0.0
     total_portfolios_eval = 0.0
     total_cash_krw = 0.0
+    native_cash_krw = 0.0
+    total_portfolios_profit = 0.0
+    total_portfolios_dividend = 0.0
 
     # Ticker-based aggregation map
     aggregated_assets_map: Dict[str, Dict[str, Any]] = {}
@@ -130,7 +134,9 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                 assets=p_assets,
                 all_holdings=all_holdings,
                 price_map=price_map,
-                usd_krw=usd_krw
+                usd_krw=usd_krw,
+                all_trades=all_trades,
+                price_data=prices,
             )
             kpi = dash.get("kpi", {})
             cash = dash.get("cash_assets", {})
@@ -138,14 +144,18 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
             
             p_stock_buy = float(kpi.get("total_stock_buy", 0.0))
             p_cash = float(cash.get("total_cash_krw", 0.0))
-            p_buy = p_stock_buy + p_cash
+            p_buy = p_stock_buy
             p_eval = float(kpi.get("total_portfolio_eval", 0.0))
-            p_profit = p_eval - p_buy
+            p_profit = float(kpi.get("total_stock_profit", 0.0))
+            p_dividend = float(kpi.get("total_dividend_profit", 0.0))
             p_profit_pct = (p_profit / p_buy * 100) if p_buy > 0 else 0.0
             
             total_portfolios_buy += p_buy
             total_portfolios_eval += p_eval
             total_cash_krw += p_cash
+            native_cash_krw += float(cash.get("krw_cash", 0.0))
+            total_portfolios_profit += p_profit
+            total_portfolios_dividend += p_dividend
 
             portfolio_summaries.append({
                 "id": pid,
@@ -156,7 +166,11 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                 "total_eval": p_eval,
                 "total_profit": p_profit,
                 "total_profit_pct": p_profit_pct,
-                "cash_krw": p_cash,
+                "eval_profit": p_profit - p_dividend,
+                "dividend_profit": p_dividend,
+                "cash_krw": float(cash.get("krw_cash", 0.0)),
+                "cash_usd": float(cash.get("usd_cash", 0.0)),
+                "total_cash_krw": p_cash,
                 "account_count": len(dash.get("accounts", [])),
                 "asset_count": len(stock_assets),
                 "weight_pct": 0.0 # Will calculate after grand total
@@ -203,6 +217,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                         "total_eval_amount": 0.0,
                         "total_buy_amount_usd": 0.0,
                         "total_eval_amount_usd": 0.0,
+                        "total_dividend_profit": 0.0,
+                        "total_dividend_profit_usd": 0.0,
                         "current_price": curr_price,
                         "current_price_usd": curr_price_usd,
                         "distribution": []
@@ -214,6 +230,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                 entry["total_eval_amount"] += eval_amt
                 entry["total_buy_amount_usd"] += buy_amt_usd
                 entry["total_eval_amount_usd"] += eval_amt_usd
+                entry["total_dividend_profit"] += float(sa.get("dividend_profit_krw", 0.0))
+                entry["total_dividend_profit_usd"] += float(sa.get("dividend_profit_usd", 0.0))
                 if curr_price > 0:
                     entry["current_price"] = curr_price
                 if curr_price_usd > 0:
@@ -227,6 +245,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                     "eval_amount": eval_amt,
                     "profit_krw": profit_krw,
                     "profit_pct": profit_pct,
+                    "dividend_profit_krw": float(sa.get("dividend_profit_krw", 0.0)),
+                    "dividend_profit_usd": float(sa.get("dividend_profit_usd", 0.0)),
                     "avg_price_usd": avg_price_usd,
                     "eval_amount_usd": eval_amt_usd,
                     "profit_usd": profit_usd,
@@ -243,36 +263,40 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
         tot_buy = item["total_buy_amount"]
         tot_eval = item["total_eval_amount"]
         weighted_avg = (tot_buy / tot_qty) if tot_qty > 0 else 0.0
-        profit = tot_eval - tot_buy
+        eval_profit = tot_eval - tot_buy
+        profit = eval_profit + item["total_dividend_profit"]
         profit_pct = (profit / tot_buy * 100) if tot_buy > 0 else 0.0
 
         item["weighted_avg_price"] = weighted_avg
         item["total_profit"] = profit
         item["total_profit_pct"] = profit_pct
+        item["eval_profit"] = eval_profit
 
         is_us_asset = item.get("is_us", False)
         tot_buy_usd = item.get("total_buy_amount_usd", 0.0)
         tot_eval_usd = item.get("total_eval_amount_usd", 0.0)
         weighted_avg_usd = (tot_buy_usd / tot_qty) if (tot_qty > 0 and is_us_asset) else 0.0
-        profit_usd = (tot_eval_usd - tot_buy_usd) if is_us_asset else 0.0
+        eval_profit_usd = (tot_eval_usd - tot_buy_usd) if is_us_asset else 0.0
+        profit_usd = (eval_profit_usd + item["total_dividend_profit_usd"]) if is_us_asset else 0.0
         profit_pct_usd = (profit_usd / tot_buy_usd * 100) if (tot_buy_usd > 0 and is_us_asset) else 0.0
 
         if is_us_asset and tot_buy_usd > 0:
             weighted_buy_fx = (tot_buy / tot_buy_usd) if tot_buy_usd > 0 else (usd_krw or 1380.0)
             fx_profit_krw = tot_buy_usd * ((usd_krw or 1380.0) - weighted_buy_fx)
             fx_profit_pct = (((usd_krw or 1380.0) - weighted_buy_fx) / weighted_buy_fx * 100) if weighted_buy_fx > 0 else 0.0
-            pure_stock_profit_krw = profit_usd * (usd_krw or 1380.0)
+            pure_stock_profit_krw = eval_profit_usd * (usd_krw or 1380.0)
         else:
             weighted_buy_fx = 0.0
             fx_profit_krw = 0.0
             fx_profit_pct = 0.0
-            pure_stock_profit_krw = profit
+            pure_stock_profit_krw = eval_profit
 
         item["weighted_avg_price_usd"] = round(weighted_avg_usd, 2)
         item["total_eval_amount_usd"] = round(tot_eval_usd, 2)
         item["total_buy_amount_usd"] = round(tot_buy_usd, 2)
         item["total_profit_usd"] = round(profit_usd, 2)
-        item["total_profit_pct_usd"] = round(profit_pct_usd, 2)
+        item["eval_profit_usd"] = round(eval_profit_usd, 2)
+        item["total_profit_pct_usd"] = profit_pct_usd
         item["buy_fx_rate"] = round(weighted_buy_fx, 2) if is_us_asset else 0.0
         item["fx_profit_krw"] = round(fx_profit_krw, 0) if is_us_asset else 0.0
         item["fx_profit_pct"] = round(fx_profit_pct, 2) if is_us_asset else 0.0
@@ -323,6 +347,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
                         "total_eval_amount": c_eval,
                         "total_profit": c_profit,
                         "total_profit_pct": c_profit_pct,
+                        "eval_profit": c_profit,
+                        "total_dividend_profit": 0.0,
                         "distribution": [{
                             "portfolio_id": "crypto",
                             "portfolio_name": "가상화폐 자산",
@@ -339,7 +365,7 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     # Grand Totals
     grand_total_buy = total_portfolios_buy + (crypto_total_buy if include_crypto else 0.0)
     grand_total_eval = total_portfolios_eval + (crypto_total_eval if include_crypto else 0.0)
-    grand_total_profit = grand_total_eval - grand_total_buy
+    grand_total_profit = total_portfolios_profit + (crypto_total_eval - crypto_total_buy if include_crypto else 0.0)
     grand_total_profit_pct = (grand_total_profit / grand_total_buy * 100) if grand_total_buy > 0 else 0.0
 
     # Calculate portfolio weights in grand total
@@ -360,7 +386,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     us_agg = [a for a in aggregated_assets_list if a.get("market") == "US"]
     grand_stock_eval_usd = sum(a.get("total_eval_amount_usd", 0.0) for a in us_agg)
     grand_stock_buy_usd = sum(a.get("total_buy_amount_usd", 0.0) for a in us_agg)
-    grand_stock_profit_usd = grand_stock_eval_usd - grand_stock_buy_usd
+    grand_stock_dividend_usd = sum(a.get("total_dividend_profit_usd", 0.0) for a in us_agg)
+    grand_stock_profit_usd = grand_stock_eval_usd - grand_stock_buy_usd + grand_stock_dividend_usd
     grand_stock_return_usd = (grand_stock_profit_usd / grand_stock_buy_usd * 100) if grand_stock_buy_usd > 0 else 0.0
     
     grand_total_fx_profit_krw = sum(a.get("fx_profit_krw", 0.0) for a in us_agg)
@@ -377,10 +404,11 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
         "stock_eval_usd": round(grand_stock_eval_usd, 2),
         "stock_buy_usd": round(grand_stock_buy_usd, 2),
         "stock_profit_usd": round(grand_stock_profit_usd, 2),
-        "stock_return_usd": round(grand_stock_return_usd, 2),
+        "stock_return_usd": grand_stock_return_usd,
+        "stock_dividend_usd": round(grand_stock_dividend_usd, 2),
         "cash_usd": round(total_usd_cash, 2),
         "total_eval_usd": round(grand_stock_eval_usd + total_usd_cash, 2),
-        "total_buy_usd": round(grand_stock_buy_usd + total_usd_cash, 2),
+        "total_buy_usd": round(grand_stock_buy_usd, 2),
         "weighted_buy_fx_rate": round(grand_weighted_buy_fx_rate, 2),
         "total_fx_profit_krw": round(grand_total_fx_profit_krw, 0),
         "total_fx_profit_pct": round(grand_total_fx_profit_pct, 2),
@@ -390,17 +418,19 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     kr_agg = [a for a in aggregated_assets_list if a.get("market") != "US"]
     grand_stock_eval_krw = sum(a.get("total_eval_amount", 0.0) for a in kr_agg)
     grand_stock_buy_krw = sum(a.get("total_buy_amount", 0.0) for a in kr_agg)
-    grand_stock_profit_krw = grand_stock_eval_krw - grand_stock_buy_krw
+    grand_stock_dividend_krw = sum(a.get("total_dividend_profit", 0.0) for a in kr_agg)
+    grand_stock_profit_krw = grand_stock_eval_krw - grand_stock_buy_krw + grand_stock_dividend_krw
     grand_stock_return_krw = (grand_stock_profit_krw / grand_stock_buy_krw * 100) if grand_stock_buy_krw > 0 else 0.0
 
     grand_krw_summary = {
         "stock_eval_krw": round(grand_stock_eval_krw, 0),
         "stock_buy_krw": round(grand_stock_buy_krw, 0),
         "stock_profit_krw": round(grand_stock_profit_krw, 0),
-        "stock_return_krw": round(grand_stock_return_krw, 2),
-        "cash_krw": round(total_cash_krw, 0),
-        "total_eval_krw": round(grand_stock_eval_krw + total_cash_krw, 0),
-        "total_buy_krw": round(grand_stock_buy_krw + total_cash_krw, 0)
+        "stock_return_krw": grand_stock_return_krw,
+        "stock_dividend_krw": round(grand_stock_dividend_krw, 0),
+        "cash_krw": round(native_cash_krw, 0),
+        "total_eval_krw": round(grand_stock_eval_krw + native_cash_krw, 0),
+        "total_buy_krw": round(grand_stock_buy_krw, 0)
     }
 
     return {
@@ -409,6 +439,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
             "total_eval": grand_total_eval,
             "total_profit": grand_total_profit,
             "total_profit_pct": grand_total_profit_pct,
+            "dividend_profit": total_portfolios_dividend,
+            "eval_profit": grand_total_profit - total_portfolios_dividend,
             "total_cash_krw": total_cash_krw,
             "portfolios_total_eval": total_portfolios_eval,
             "crypto_total_eval": crypto_total_eval if include_crypto else 0.0,

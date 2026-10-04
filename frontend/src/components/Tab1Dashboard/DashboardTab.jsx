@@ -315,7 +315,6 @@ export default function DashboardTab({
   }
 
   const totalStockEval = Number(displayKpi?.total_stock_eval) || 0;
-  const isProfit = (displayKpi?.total_stock_profit || 0) >= 0;
 
   const toggleAccordion = (accId) => {
     setExpandedAccs((prev) => ({
@@ -348,6 +347,9 @@ export default function DashboardTab({
 
   return (
     <div>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+        보유자산 수익률 = (평가손익 + 세후 배당) ÷ 보유자산 매입원가. 예수금은 총자산에만 포함됩니다.
+      </p>
       {/* 0. Top Filter & View Toggle Bar (예금 포함/제외 토글 스위치) */}
       <div style={{
         display: 'flex',
@@ -453,7 +455,7 @@ export default function DashboardTab({
                 {formatUSD(displayDualKpi.usd.total_eval)}
               </div>
               <div className="dual-kpi-sub-row">
-                <span className="dual-kpi-sub-label">외화 총손익(TR):</span>
+                <span className="dual-kpi-sub-label">외화 배당 포함 손익:</span>
                 <span className="dual-kpi-sub-value" style={{ color: getProfitColor(displayDualKpi.usd.total_profit) }}>
                   {formatUSD(displayDualKpi.usd.total_profit, true)} ({formatPercent(displayDualKpi.usd.total_return)})
                 </span>
@@ -510,7 +512,7 @@ export default function DashboardTab({
                 {formatKRW(displayDualKpi.krw.total_eval)}
               </div>
               <div className="dual-kpi-sub-row">
-                <span className="dual-kpi-sub-label">원화 총손익(TR):</span>
+                <span className="dual-kpi-sub-label">원화 배당 포함 손익:</span>
                 <span className="dual-kpi-sub-value" style={{ color: getProfitColor(displayDualKpi.krw.total_profit) }}>
                   {formatKRW(displayDualKpi.krw.total_profit, true)} ({formatPercent(displayDualKpi.krw.total_return)})
                 </span>
@@ -1107,7 +1109,6 @@ export default function DashboardTab({
             const isIrpOverRisk = isIrp && acc.risk_pct > 70.0;
             const accStockProfit = acc.profit_krw || ((acc.stock_eval || 0) - (acc.stock_buy_total || 0));
             const accStockReturn = acc.profit_pct || (acc.stock_buy_total > 0 ? (accStockProfit / acc.stock_buy_total * 100) : 0);
-            const isAccProfit = accStockProfit >= 0;
             const totalVal = acc.total_val || (acc.stock_eval + acc.deposit_krw + (acc.deposit_usd * (usd_krw || 1380)));
 
             const annualPct = (acc.annual_limit_pct || 0) * 100;
@@ -1279,7 +1280,6 @@ export default function DashboardTab({
                             {acc.holdings?.map((h) => {
                               const isHUs = h.market === 'US';
                               const isHUsdMode = currencyMode === 'USD' && isHUs;
-                              const isHProfit = isHUsdMode ? ((h.profit_usd || 0) >= 0) : ((h.profit_krw || 0) >= 0);
 
                               return (
                                 <tr key={h.asset_id}>
@@ -1359,7 +1359,6 @@ export default function DashboardTab({
                       {acc.holdings?.map((h) => {
                         const isHUs = h.market === 'US';
                         const isHUsdMode = currencyMode === 'USD' && isHUs;
-                        const isHProfit = isHUsdMode ? ((h.profit_usd || 0) >= 0) : ((h.profit_krw || 0) >= 0);
 
                         return (
                           <div key={h.asset_id} className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>

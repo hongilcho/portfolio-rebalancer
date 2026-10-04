@@ -76,7 +76,7 @@ export default function App() {
   const [dashboardData, setDashboardData] = useState(() => {
     try {
       const pid = localStorage.getItem('active_portfolio_id') || 'default';
-      const saved = sessionStorage.getItem('portfolio_dashboard_cache_' + pid);
+      const saved = sessionStorage.getItem('portfolio_dashboard_v2_' + pid);
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -99,7 +99,7 @@ export default function App() {
     localStorage.setItem('active_portfolio_id', pid);
     // 복원 가능한 세션 캐시가 있는 경우 즉시 반영
     try {
-      const saved = sessionStorage.getItem('portfolio_dashboard_cache_' + pid);
+      const saved = sessionStorage.getItem('portfolio_dashboard_v2_' + pid);
       if (saved) setDashboardData(JSON.parse(saved));
     } catch {}
   };
@@ -145,7 +145,7 @@ export default function App() {
       setPricesData(bundle.prices_data);
       setDashboardData(bundle.dashboard);
       try {
-        sessionStorage.setItem('portfolio_dashboard_cache_' + pid, JSON.stringify(bundle.dashboard));
+        sessionStorage.setItem('portfolio_dashboard_v2_' + pid, JSON.stringify(bundle.dashboard));
       } catch {}
       setAssets(bundle.assets || []);
       setAccounts(bundle.accounts || []);

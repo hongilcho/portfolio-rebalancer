@@ -166,12 +166,10 @@ def get_crypto_summary(
         try:
             dash = get_dashboard_summary(portfolio_id=target_pid)
             kpi = dash.get("kpi", {})
-            cash = dash.get("cash_assets", {})
 
             portfolio_eval = float(kpi.get("total_portfolio_eval", 0.0))
             portfolio_stock_buy = float(kpi.get("total_stock_buy", 0.0))
-            portfolio_cash = float(cash.get("total_cash_krw", 0.0))
-            portfolio_buy = portfolio_stock_buy + portfolio_cash
+            portfolio_buy = portfolio_stock_buy
             portfolio_profit = float(kpi.get("total_stock_profit", 0.0))
             portfolio_profit_pct = float(kpi.get("total_stock_return", 0.0))
         except Exception as e:
@@ -180,7 +178,7 @@ def get_crypto_summary(
     # 4. Calculate Combined Metrics (Portfolio + All Crypto)
     combined_eval = portfolio_eval + crypto_total_eval
     combined_buy = portfolio_buy + crypto_total_buy
-    combined_profit = combined_eval - combined_buy
+    combined_profit = portfolio_profit + crypto_total_profit
     combined_profit_pct = (combined_profit / combined_buy * 100) if combined_buy > 0 else 0.0
 
     portfolio_weight_pct = (portfolio_eval / combined_eval * 100) if combined_eval > 0 else 0.0

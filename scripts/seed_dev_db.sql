@@ -87,6 +87,9 @@ CREATE TABLE IF NOT EXISTS trade_history (
     price REAL NOT NULL,
     currency TEXT DEFAULT 'KRW',
     exchange_rate REAL DEFAULT 1.0,
+    cash_delta_krw DOUBLE PRECISION,
+    cash_delta_usd DOUBLE PRECISION,
+    trade_sequence BIGSERIAL,
     notes TEXT
 );
 

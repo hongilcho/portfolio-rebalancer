@@ -14,7 +14,7 @@
  * @param {Function} props.onSelectPortfolio - 특정 포트폴리오 선택 시 해당 화면으로 전환하는 콜백
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Sparkles, RefreshCw, TrendingUp, 
   Layers, ArrowRight, CheckSquare, Square, PieChart
@@ -22,19 +22,17 @@ import {
 import { api } from '../../utils/api';
 import { formatKRW, formatUSD, formatPercent, getProfitColor } from '../../utils/formatters';
 import DonutChart from '../common/DonutChart';
+import { createOverviewCache } from '../../utils/overviewCache';
 
-let _overviewCache = null;
-try {
-  const saved = sessionStorage.getItem('portfolio_overview_cache');
-  if (saved) _overviewCache = JSON.parse(saved);
-} catch {}
+const overviewCache = createOverviewCache();
 
 export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode = 'KRW' }) {
-  const [data, setData] = useState(() => _overviewCache);
-  const [loading, setLoading] = useState(() => !_overviewCache);
+  const [data, setData] = useState(() => overviewCache.get(true));
+  const [loading, setLoading] = useState(() => !overviewCache.get(true));
   const [refreshing, setRefreshing] = useState(false);
   const [includeCrypto, setIncludeCrypto] = useState(true);
   const [error, setError] = useState('');
+  const requestSequence = useRef(0);
 
   const [chartView, setChartView] = useState('dual'); // 'dual' | 'portfolios' | 'assetClasses'
 
@@ -64,7 +62,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
     return list.filter(item => item.value > 0).sort((a, b) => b.value - a.value);
   }, [data?.portfolios, includeCrypto, crypto, portfolioColors]);
 
-  // 자산군(Asset Class)별 비중 도넛 데이터 (예수금/현금 제외, 순수 자산군)
+  // 전체 순자산 구성: 보유자산과 예수금의 합이 중앙 총자산과 일치해야 함.
   const assetClassDonutData = useMemo(() => {
     const classMap = {
       'equity': { label: '📈 주식', value: 0, color: '#3B82F6' },
@@ -72,6 +70,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
       'gold_commodities': { label: '🥇 대체투자', value: 0, color: '#EAB308' },
       'deposits': { label: '🏦 예금', value: 0, color: '#10B981' },
       'crypto': { label: '🪙 가상화폐', value: 0, color: '#F97316' },
+      'cash': { label: '💵 예수금', value: Number(data?.grand_total?.total_cash_krw) || 0, color: '#64748B' },
     };
 
     (data?.aggregated_assets || []).forEach(item => {
@@ -108,35 +107,43 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
     return Object.values(classMap)
       .filter(item => item.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [data?.aggregated_assets]);
+  }, [data?.aggregated_assets, data?.grand_total?.total_cash_krw]);
 
   const loadOverview = useCallback(async (isRefresh = false, cryptoToggle = includeCrypto) => {
+    const sequence = ++requestSequence.current;
     if (isRefresh) setRefreshing(true);
-    else if (!_overviewCache) setLoading(true);
+    else if (!overviewCache.get(cryptoToggle)) setLoading(true);
     setError('');
 
     try {
       const res = await api.getPortfoliosOverview(cryptoToggle, isRefresh);
-      _overviewCache = res;
+      if (sequence !== requestSequence.current) return;
+      overviewCache.set(cryptoToggle, res);
       setData(res);
-      try {
-        sessionStorage.setItem('portfolio_overview_cache', JSON.stringify(res));
-      } catch {}
     } catch (err) {
+      if (sequence !== requestSequence.current) return;
       console.error('Failed to load portfolios overview:', err);
       setError(err.message || '전체 자산 종합 요약을 불러오는 중 오류가 발생했습니다.');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (sequence === requestSequence.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [includeCrypto]);
 
   useEffect(() => {
     loadOverview(false, includeCrypto);
+    return () => { requestSequence.current += 1; };
   }, [loadOverview, includeCrypto]);
 
   const handleToggleCrypto = () => {
     const nextVal = !includeCrypto;
+    requestSequence.current += 1;
+    const cached = overviewCache.get(nextVal);
+    setData(cached);
+    setLoading(!cached);
+    setRefreshing(false);
     setIncludeCrypto(nextVal);
   };
 
@@ -153,6 +160,9 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: 0 }}>
+        보유자산 수익률 = (평가손익 + 세후 배당) ÷ 보유자산 매입원가. 예수금은 총자산에만 포함됩니다.
+      </p>
       {/* Top Header & Toggle Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -238,7 +248,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                     {formatUSD(grand?.usd_summary?.stock_eval_usd)}
                   </div>
                   <div className="dual-kpi-sub-row">
-                    <span className="dual-kpi-sub-label">외화 평가손익:</span>
+                    <span className="dual-kpi-sub-label">외화 배당 포함 손익:</span>
                     <span className="dual-kpi-sub-value" style={{ color: getProfitColor(grand?.usd_summary?.stock_profit_usd) }}>
                       {formatUSD(grand?.usd_summary?.stock_profit_usd, true)} ({formatPercent(grand?.usd_summary?.stock_return_usd)})
                     </span>
@@ -287,7 +297,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                     {formatKRW(grand?.krw_summary?.stock_eval_krw)}
                   </div>
                   <div className="dual-kpi-sub-row">
-                    <span className="dual-kpi-sub-label">원화 평가손익:</span>
+                    <span className="dual-kpi-sub-label">원화 배당 포함 손익:</span>
                     <span className="dual-kpi-sub-value" style={{ color: getProfitColor(grand?.krw_summary?.stock_profit_krw) }}>
                       {formatKRW(grand?.krw_summary?.stock_profit_krw, true)} ({formatPercent(grand?.krw_summary?.stock_return_krw)})
                     </span>
@@ -352,14 +362,14 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
             </div>
 
             <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-              <div className="kpi-title">🛒 통합 총 매입금액 (원금 합계)</div>
+              <div className="kpi-title">🛒 보유자산 매입원가 (예수금 제외)</div>
               <div className="kpi-value" style={{ fontSize: '1.5rem' }}>
                 {formatKRW(grand.total_buy)}
               </div>
             </div>
 
             <div className="kpi-card" style={{ background: 'var(--bg-surface)' }}>
-              <div className="kpi-title">📈 통합 총 평가손익 (수익률)</div>
+              <div className="kpi-title">📈 배당 포함 보유자산 손익 (수익률)</div>
               <div className="kpi-value" style={{ color: getProfitColor(grand.total_profit), fontSize: '1.5rem' }}>
                 {(grand.total_profit || 0) > 0 ? '+' : ''}{formatKRW(grand.total_profit)}
                 <span style={{ fontSize: '0.95rem', marginLeft: '6px', fontWeight: 600 }}>
@@ -519,9 +529,9 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
               <tr>
                 <th>포트폴리오 / 자산 구분</th>
                 <th>운용 전략 (설명/메모)</th>
-                <th>총 매입금액(원)</th>
+                <th>보유자산 매입원가(원)</th>
                 <th>현재 평가금액(원)</th>
-                <th>평가 손익(원)</th>
+                <th>배당 포함 손익(원)</th>
                 <th>수익률(%)</th>
                 <th>보유 계좌/종목수</th>
                 <th>전체 자산 비중(%)</th>
@@ -530,7 +540,6 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
             </thead>
             <tbody>
               {portfolios.map((p, idx) => {
-                const isPProfit = (p.total_profit || 0) >= 0;
                 return (
                   <tr key={p.id}>
                     <td>
@@ -653,7 +662,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                 <th>통합 평단가 (가중평균)</th>
                 <th>실시간 현재가</th>
                 <th>총 평가금액{currencyMode === 'USD' ? '' : '(원)'}</th>
-                <th>평가 손익{currencyMode === 'USD' ? '' : '(원)'}</th>
+                <th>배당 포함 손익{currencyMode === 'USD' ? '' : '(원)'}</th>
                 <th>수익률(%)</th>
                 <th>전체 자산 비중(%)</th>
                 <th>포트폴리오별 보유 분산</th>
@@ -717,7 +726,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
                         <div>{isUsdMode ? formatUSD(item.total_profit_usd, true) : `${rowProfit > 0 ? '+' : ''}${formatKRW(item.total_profit)}`}</div>
                         {isUs && (
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
-                            주가 {isUsdMode ? formatUSD(item.total_profit_usd, true) : formatKRW(item.pure_stock_profit_krw, true)} / 환차 {formatKRW(item.fx_profit_krw, true)}
+                            주가 {isUsdMode ? formatUSD(item.eval_profit_usd, true) : formatKRW(item.pure_stock_profit_krw, true)} / 환차 {formatKRW(item.fx_profit_krw, true)} / 배당 {isUsdMode ? formatUSD(item.total_dividend_profit_usd) : formatKRW(item.total_dividend_profit)}
                           </div>
                         )}
                       </td>

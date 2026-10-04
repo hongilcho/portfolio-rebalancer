@@ -20,17 +20,18 @@ def load_config():
     2. 시스템 환경 변수 (os.getenv)
     3. .streamlit/secrets.toml (하위 호환 fallback)
     """
+    load_files = os.getenv("PORTFOLIO_LOAD_CONFIG_FILES", "1") != "0"
     try:
         from dotenv import load_dotenv
-        if os.path.exists(ENV_PATH):
+        if load_files and os.path.exists(ENV_PATH):
             load_dotenv(ENV_PATH)
-        else:
+        elif load_files:
             load_dotenv()
     except ImportError:
         pass
         
     secrets = {}
-    if os.path.exists(SECRETS_PATH):
+    if load_files and os.path.exists(SECRETS_PATH):
         try:
             with open(SECRETS_PATH, "r", encoding="utf-8") as f:
                 secrets = toml.load(f)

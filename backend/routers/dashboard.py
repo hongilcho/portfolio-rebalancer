@@ -54,6 +54,7 @@ def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = Fa
         all_holdings=all_holdings,
         price_map=price_map,
         usd_krw=usd_krw,
+        price_data=prices,
         all_trades=all_trades
     )
 
@@ -83,7 +84,8 @@ def get_dashboard_summary(
     all_holdings: Optional[List[Dict[str, Any]]] = None,
     price_map: Optional[Dict[str, float]] = None,
     usd_krw: Optional[float] = None,
-    all_trades: Optional[List[Dict[str, Any]]] = None
+    all_trades: Optional[List[Dict[str, Any]]] = None,
+    price_data: Optional[List[Dict[str, Any]]] = None
 ):
     """
     포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
@@ -103,10 +105,9 @@ def get_dashboard_summary(
         if assets is None:
             assets = [a for a in all_assets if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
     
-    price_data = None
     if price_map is None:
         price_data, price_map = market_service.get_prices()
-    else:
+    elif price_data is None:
         price_data = market_service.price_data or []
     if usd_krw is None:
         usd_krw = market_service.usd_krw
@@ -244,24 +245,24 @@ def get_dashboard_summary(
                 "eval_amount": eval_val,
                 "buy_amount": buy_amt,
                 "profit_krw": round(total_profit_krw, 0),
-                "profit_pct": round(total_profit_pct, 2),
+                "profit_pct": total_profit_pct,
                 "eval_profit_krw": round(eval_profit_krw, 0),
                 "eval_profit_pct": round(eval_profit_pct, 2),
                 "dividend_profit_krw": round(div_profit_krw, 0),
                 "dividend_profit_usd": round(div_profit_usd, 2),
                 "dividend_details": adj_info.get("dividend_details", []),
                 "total_profit_krw": round(total_profit_krw, 0),
-                "total_profit_pct": round(total_profit_pct, 2),
+                "total_profit_pct": total_profit_pct,
                 "avg_price_usd": round(avg_p_usd, 2) if is_us else 0.0,
                 "current_price_usd": round(curr_p_usd, 2) if is_us else 0.0,
                 "eval_amount_usd": round(eval_val_usd, 2) if is_us else 0.0,
                 "buy_amount_usd": round(buy_amt_usd, 2) if is_us else 0.0,
                 "profit_usd": round(total_profit_usd if is_us else 0.0, 2),
-                "profit_pct_usd": round(total_profit_pct_usd if is_us else 0.0, 2),
+                "profit_pct_usd": total_profit_pct_usd if is_us else 0.0,
                 "eval_profit_usd": round(eval_profit_usd, 2) if is_us else 0.0,
                 "eval_profit_pct_usd": round(eval_profit_pct_usd, 2) if is_us else 0.0,
                 "total_profit_usd": round(total_profit_usd, 2) if is_us else 0.0,
-                "total_profit_pct_usd": round(total_profit_pct_usd, 2) if is_us else 0.0,
+                "total_profit_pct_usd": total_profit_pct_usd if is_us else 0.0,
                 "buy_fx_rate": round(buy_fx_rate, 2) if is_us else 0.0,
                 "fx_profit_krw": round(fx_profit_krw, 0) if is_us else 0.0,
                 "fx_profit_pct": round(fx_profit_pct, 2) if is_us else 0.0,
@@ -551,23 +552,23 @@ def get_dashboard_summary(
             "eval_amount": data['eval_amt_krw'],
             "buy_amount": data['buy_amt_krw'],
             "profit_krw": round(total_profit_krw, 0),
-            "profit_pct": round(total_profit_pct, 2),
+            "profit_pct": total_profit_pct,
             "eval_profit_krw": round(eval_profit_krw, 0),
             "eval_profit_pct": round(eval_profit_pct, 2),
             "dividend_profit_krw": round(div_profit_krw, 0),
             "dividend_profit_usd": round(div_profit_usd, 2),
             "total_profit_krw": round(total_profit_krw, 0),
-            "total_profit_pct": round(total_profit_pct, 2),
+            "total_profit_pct": total_profit_pct,
             "avg_price_usd": round(avg_price_usd, 2) if is_us else 0.0,
             "current_price_usd": round(curr_price_usd, 2) if is_us else 0.0,
             "eval_amount_usd": round(eval_amount_usd, 2) if is_us else 0.0,
             "buy_amount_usd": round(buy_amount_usd, 2) if is_us else 0.0,
             "profit_usd": round(total_profit_usd, 2) if is_us else 0.0,
-            "profit_pct_usd": round(total_profit_pct_usd, 2) if is_us else 0.0,
+            "profit_pct_usd": total_profit_pct_usd if is_us else 0.0,
             "eval_profit_usd": round(eval_profit_usd, 2) if is_us else 0.0,
             "eval_profit_pct_usd": round(eval_profit_pct_usd, 2) if is_us else 0.0,
             "total_profit_usd": round(total_profit_usd, 2) if is_us else 0.0,
-            "total_profit_pct_usd": round(total_profit_pct_usd, 2) if is_us else 0.0,
+            "total_profit_pct_usd": total_profit_pct_usd if is_us else 0.0,
             "buy_fx_rate": round(weighted_buy_fx, 2) if is_us else 0.0,
             "fx_profit_krw": round(fx_profit_krw, 0) if is_us else 0.0,
             "fx_profit_pct": round(fx_profit_pct, 2) if is_us else 0.0,
@@ -641,19 +642,19 @@ def get_dashboard_summary(
             "total_eval_return": round((total_eval_profit / total_stock_buy * 100) if total_stock_buy > 0 else 0.0, 2),
             "total_dividend_profit": round(total_dividend_profit, 0),
             "total_stock_profit": round(total_stock_profit, 0),
-            "total_stock_return": round(total_stock_return, 2),
+            "total_stock_return": total_stock_return,
             "total_portfolio_eval": total_portfolio_eval,
             "usd_summary": {
                 "stock_eval_usd": round(total_stock_eval_usd, 2),
                 "stock_buy_usd": round(total_stock_buy_usd, 2),
                 "stock_eval_profit_usd": round(total_stock_eval_profit_usd, 2),
-                "stock_eval_return_usd": round(total_stock_eval_return_usd, 2),
+                "stock_eval_return_usd": total_stock_eval_return_usd,
                 "stock_dividend_usd": round(total_dividend_usd, 2),
                 "stock_profit_usd": round(total_stock_profit_usd, 2),
-                "stock_return_usd": round(total_stock_return_usd, 2),
+                "stock_return_usd": total_stock_return_usd,
                 "cash_usd": round(total_usd_cash, 2),
                 "total_eval_usd": round(total_stock_eval_usd + total_usd_cash, 2),
-                "total_buy_usd": round(total_stock_buy_usd + total_usd_cash, 2),
+                "total_buy_usd": round(total_stock_buy_usd, 2),
                 "weighted_buy_fx_rate": round(weighted_buy_fx_rate, 2),
                 "total_fx_profit_krw": round(total_fx_profit_krw, 0),
                 "total_fx_profit_pct": round(total_fx_profit_pct, 2),
@@ -663,13 +664,13 @@ def get_dashboard_summary(
                 "stock_eval_krw": round(total_stock_eval_krw_only, 0),
                 "stock_buy_krw": round(total_stock_buy_krw_only, 0),
                 "stock_eval_profit_krw": round(total_stock_eval_profit_krw_only, 0),
-                "stock_eval_return_krw": round(total_stock_eval_return_krw_only, 2),
+                "stock_eval_return_krw": total_stock_eval_return_krw_only,
                 "stock_dividend_krw": round(krw_dividend_krw, 0),
                 "stock_profit_krw": round(total_stock_profit_krw_only, 0),
-                "stock_return_krw": round(total_stock_return_krw_only, 2),
+                "stock_return_krw": total_stock_return_krw_only,
                 "cash_krw": round(total_krw_cash, 0),
                 "total_eval_krw": round(total_stock_eval_krw_only + total_krw_cash, 0),
-                "total_buy_krw": round(total_stock_buy_krw_only + total_krw_cash, 0)
+                "total_buy_krw": round(total_stock_buy_krw_only, 0)
             }
         },
         "stock_assets": stock_summary_rows,

@@ -10,7 +10,7 @@
 - **목적**: 일반 주식, ISA, 연금저축, IRP, 정기예금 등 복수 계좌에 분산된 자산을 하나의 포트폴리오(또는 다중 포트폴리오)로 통합 관리하고, 목표 자산 배분 비중에 맞춰 최적의 매수/매도/이체 플랜을 자동으로 계산하여 실행하도록 돕는 자산 관리 플랫폼입니다.
 - **주요 특징**:
   - **초고속 단일 번들 API**: 초기 로딩 시 단 1회의 HTTP 통신으로 대시보드/자산/계좌/환율 데이터를 일괄 수취 (Render 서버 기준 400~700ms, 세션 캐시 0ms)
-  - **SWR (Stale-While-Revalidate) & 영구 DB 캐시**: PostgreSQL `market_cache` 테이블을 통한 Zero Cold-Start 및 백그라운드 무중단 시세 갱신
+  - **시세 캐시**: PostgreSQL `market_cache`와 메모리 캐시; 시작 시 예열, 만료 시 동기 갱신
   - **네이버 금융 공식 JSON API 1순위 연동**: 실시간 환율, 국내주식, 미국주식 시세를 초고속(~500ms) 및 429 호출 제한 없이 안정적 수집 (NH API 및 yfinance 자동 폴백)
   - **특화 자산 완벽 지원**: KRX 금시장 현물(1g 단위 단가) 실시간 연동, 정기예금 일할 세후 누적이자 자동 가산
   - **탭 1 예금 포함/제외 토글**: 정기예금 포함 종합 현황과 순수 투자자산(주식/채권/대체투자) 전용 현황 간 원터치 실시간 전환
@@ -33,7 +33,7 @@ flowchart TB
         FastAPI["FastAPI App (backend/main.py)"]
         RouterBundle["통합 번들 라우터 (/api/dashboard/bundle)"]
         Routers["도메인별 라우터 (Assets, Accounts, Rebalance 등)"]
-        MarketService["MarketStateService (SWR & In-Memory Cache)"]
+        MarketService["MarketStateService (Memory & DB Cache)"]
         Logic["리밸런싱 계산기 & 시세 엔진 (logic/)"]
         DataManager["데이터 매니저 (data/data_manager.py)"]
 
@@ -47,7 +47,7 @@ flowchart TB
     end
 
     subgraph Storage ["🗄️ 데이터베이스 (Supabase)"]
-        Postgres[("PostgreSQL\n- portfolios, accounts, assets\n- holdings, trades, targets\n- crypto_holdings\n- market_cache (영구 시세 캐시)")]
+        Postgres[("PostgreSQL\n- portfolios, accounts, assets\n- holdings, trade_history\n- crypto_holdings\n- market_cache (영구 시세 캐시)")]
         ConnPool["ThreadedConnectionPool\n(스레드 세이프 커넥션 풀)"]
         DataManager <--> ConnPool <--> Postgres
     end
@@ -76,7 +76,7 @@ portfolio-rebalancer/
 ├── backend/                        # FastAPI 기반 고성능 RESTful 백엔드
 │   ├── main.py                     # 애플리케이션 진입점, CORS, 라이프사이클 이벤트
 │   ├── config.py                   # 중앙 설정 로더 (.env & secrets.toml 자동 감지)
-│   ├── services.py                 # MarketStateService 싱글톤 (SWR 및 DB 캐시 연동)
+│   ├── services.py                 # MarketStateService 싱글톤 (메모리 및 DB 캐시 연동)
 │   └── routers/                    # 기능별 세부 API 라우터
 │       ├── dashboard.py            # /api/dashboard/bundle (통합 번들), KPI, 자산 목록
 │       ├── accounts.py             # 계좌 CRUD, 우선순위, 납입/세액공제 한도
@@ -123,7 +123,7 @@ portfolio-rebalancer/
 │   │       ├── api.js              # 백엔드 API 비동기 통신 클라이언트 (단일 번들 최적화)
 │   │       └── formatters.js       # 원화(KRW), 달러(USD), 수량, 백분율 표기 유틸
 │
-├── tests/                          # pytest 기반 자동화 단위/통합 테스트 슈트 (총 27개 테스트)
+├── tests/                          # pytest 기반 자동화 단위/통합 테스트 슈트 (격리 회귀 테스트)
 │   ├── test_price_fetcher.py       # 시세 수집기 1순위(네이버) 및 폴백(NH, yf) 검증
 │   ├── test_deposit_and_realized_profit.py # 정기예금 일할이자 및 매도 실현손익 검증
 │   ├── test_rebalance_calculator.py# 리밸런싱 알고리즘 및 IRP 70% 한도 검증
@@ -142,12 +142,10 @@ portfolio-rebalancer/
 
 ## 4. 핵심 모듈별 동작 원리
 
-### 4.1 백엔드 데이터 서비스 & SWR 아키텍처 (`backend/services.py`)
-- **Zero Cold-Start 복구**: 백엔드 서버(Render)가 슬립 상태에서 깨어날 때, PostgreSQL의 `market_cache` 테이블에 영구 저장된 마지막 시세 스냅샷을 0.05초 만에 메모리로 로드하여 사용자 요청에 즉각(0ms) 응답합니다.
-- **Stale-While-Revalidate (SWR)**: 
-  - 캐시 유효 시간(TTL, 기본 5분) 이내 요청 시: 메모리 캐시를 즉시 반환.
-  - 캐시 만료 시: 기존 캐시 데이터를 0ms에 즉시 반환함과 동시에, 백그라운드 워커 스레드(`_do_fetch_prices`)를 비동기로 가동하여 네이버 금융에서 최신 시세를 수집하고 DB 영구 캐시를 갱신합니다.
-  - 사용자는 대기 시간 없이 즉시 화면을 보게 되며, 시세는 백그라운드에서 매끄럽게 최신 상태를 유지합니다.
+### 4.1 시세 캐시 (`backend/services.py`)
+- 앱 import 시에는 DB를 읽지 않습니다. 서버 시작 또는 첫 시세 요청 시 DB 캐시를 복원합니다.
+- 메모리 캐시 TTL은 5분입니다. 만료 또는 강제 새로고침 시 요청 안에서 동기 갱신합니다.
+- 서버 시작 시 예열은 백그라운드 스레드로 수행합니다. 응답 시간은 환경에 따라 달라집니다.
 
 ### 4.2 고속 단일 번들 API (`backend/routers/dashboard.py`)
 - 기존 5개로 분산되어 개별 HTTP 왕복 지연을 일으키던 요청(`dashboard`, `assets`, `accounts`, `portfolios`, `prices`)을 `/api/dashboard/bundle` 단일 엔드포인트로 통합했습니다.
@@ -205,19 +203,18 @@ portfolio-rebalancer/
 | **`accounts`** | 투자 및 예금 계좌 정보 | `id`, `portfolio_id`, `account_no`, `account_alias`, `account_type`, `deposit_krw`, `deposit_usd`, `annual_limit`, `tax_limit`, `priority`, `is_limit_exhausted` |
 | **`assets`** | 관리 대상 자산 및 예금 메타 | `id`, `portfolio_id`, `name`, `ticker`, `market`, `target_weight`, `is_risk_asset`, `is_deposit`, `deposit_principal`, `interest_rate`, `start_date`, `maturity_date`, `tax_rate`, `include_in_rebalance`, `allowed_accounts` |
 | **`holdings`** | 계좌별 종목 보유 잔고 | `account_id`, `asset_id`, `quantity`, `avg_price`, `updated_at` |
-| **`trades`** | 매매 및 입출금 체결 내역 | `id`, `portfolio_id`, `account_id`, `asset_id`, `trade_type`, `quantity`, `price`, `amount_krw`, `trade_date` |
-| **`portfolio_targets`** | 포트폴리오별 종목 목표 비중 | `portfolio_id`, `asset_id`, `target_weight`, `updated_at` |
-| **`crypto_holdings`** | 가상자산 보유량 및 소유자 | `id`, `symbol`, `name`, `owner`, `quantity`, `avg_buy_price` |
-| **`market_cache`** | 영구 시세 스냅샷 캐시 | `cache_key` (prices, exchange_rate), `data` (JSONB), `updated_at` |
+| **`trade_history`** | 매매·초기잔고 이력 및 예수금 변동 | `id`, `account_id`, `asset_id`, `trade_type`, `quantity`, `price`, `currency`, `exchange_rate`, `cash_delta_krw`, `cash_delta_usd`, `trade_sequence`, `trade_date` |
+| **`crypto_holdings`** | 가상자산 보유량 및 소유자 | `id`, `symbol`, `name`, `owner`, `quantity`, `avg_price` |
+| **`market_cache`** | 영구 시세 스냅샷 캐시 | `key` (prices, exchange_rate), `data` (JSONB), `updated_at` |
 
 ---
 
 ## 6. 테스트 및 품질 보증 (QA)
 
-- **테스트 프레임워크**: Python `pytest` + `pytest-mock` (총 **27개 단위/통합 테스트** 자동화)
+- **테스트 프레임워크**: Python `pytest` + `pytest-mock` (격리 회귀 테스트; 실제 결과는 실행 로그로 확인)
 - **주요 검증 영역**:
   - `test_price_fetcher.py`: 네이버 금융 1순위 수집, NH API 2순위 폴백, yfinance 3순위 폴백, 금현물 NH 유지
-  - `test_deposit_and_realized_profit.py`: 예금 일할 복리 이자 계산, 만기 경과 처리, 매도 시 실현 손익 정산
+  - `test_deposit_and_realized_profit.py`: 예금 일할 단리 이자 계산, 만기 경과 처리, 매도 시 실현 손익 정산
   - `test_rebalance_calculator.py`: 기본 비중 맞춤, IRP 70% 위험자산 한도 준수, 자금 배분 알고리즘
   - `test_multi_portfolio.py`: 포트폴리오 간 완벽한 데이터 격리 및 집계 검증
   - `test_mock_trade_krw.py`: 외화 주식 원화 모의 체결 및 계좌 예수금 자동 반영
@@ -228,11 +225,16 @@ portfolio-rebalancer/
 ## 7. 인프라 및 배포 파이프라인
 
 - **프론트엔드**: [Vercel](https://vercel.com)
-  - GitHub `main` 브랜치 푸시 시 자동 감지 및 30초 내 초고속 무중단 배포
+  - 배포 연결 브랜치와 자동 배포 여부는 Vercel 대시보드에서 확인
   - 글로벌 에지 CDN을 통한 정적 에셋 서빙
 - **백엔드**: [Render](https://render.com)
   - Python 3.12 / Linux 환경의 고성능 Web Service
-  - Manual Deploy 지원으로 월간 빌드 크레딧 효율적 관리
+  - 배포 연결 브랜치와 자동/수동 배포 여부는 Render 대시보드에서 확인
 - **데이터베이스**: [Supabase](https://supabase.com)
   - 클라우드 관리형 PostgreSQL 15+
   - 커넥션 풀러(Connection Pooler)를 통한 다중 워커의 안전한 DB 연결 유지
+
+
+## 자산 계산 및 취소 기준
+
+최신 수익률 정의, 현금 집계, 거래 삭제, 테스트 격리 및 배포 전 확인 사항은 [ACCOUNTING_CHANGES.md](docs/ACCOUNTING_CHANGES.md)를 참조합니다.

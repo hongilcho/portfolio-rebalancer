@@ -12,18 +12,18 @@
 
 ```
 portfolio-rebalancer/
-├── backend/            # FastAPI 고성능 백엔드 API (단일 번들 통신, SWR 영구 캐시)
+├── backend/            # FastAPI 고성능 백엔드 API (단일 번들 통신, 메모리·DB 시세 캐시)
 │   ├── routers/        # 도메인별 라우터 (대시보드 번들, 계좌, 자산, 거래, 리밸런싱, 가상화폐, 시스템 진단 등)
 │   ├── config.py       # 중앙 환경변수 및 보안 설정 (.env & 하위호환 지원)
 │   ├── main.py         # FastAPI 애플리케이션 진입점 및 CORS 설정
-│   └── services.py     # MarketStateService 싱글톤 (SWR 백그라운드 갱신 및 Zero Cold-Start)
+│   └── services.py     # MarketStateService 싱글톤 (시작 시 예열, 캐시 만료 시 동기 갱신)
 ├── frontend/           # React 19 + Vite 모던 웹 프론트엔드 (Dark/Light/Sepia 테마)
 │   ├── src/components/ # 탭별 컴포넌트 (포트폴리오 현황, 예금 토글, 목표비중, 리밸런싱, 거래내역, 가상자산, 설정)
 │   └── src/utils/      # 고속 번들 API 클라이언트 및 통화/비율 포맷터
 ├── data/               # 데이터베이스 매니저 (Supabase PostgreSQL 스레드세이프 커넥션 풀 & NH API)
 ├── logic/              # 3단계 시세 수집기 (네이버 1순위, NH 2순위, yf 3순위), 리밸런싱 최적화 엔진
 ├── docs/               # 브랜치 전략, 시스템 명세 및 아카이브 문서
-├── tests/              # pytest 기반 백엔드 통합 및 단위 테스트 (27개 테스트 전체 통과)
+├── tests/              # pytest 기반 격리 회귀 테스트 (DB 의존 기존 테스트는 별도 확인)
 └── PROJECT_STRUCTURE.md # 전체 소프트웨어 구조 및 아키텍처 상세 명세서
 ```
 
@@ -66,16 +66,25 @@ start_dev.bat
 
 ---
 
+## 자산 계산 기준
+
+개별·전체 화면의 기본 수익률은 `(보유자산 평가손익 + 세후 배당) / 보유자산 매입원가 × 100`입니다. 예수금은 총자산에 포함하고 수익률 분모에서는 제외합니다. 배당을 총자산에 다시 더하지 않습니다.
+
+거래 취소·기존 거래 처리·격리 검증과 배포 전 확인 사항은 [자산 집계 및 거래 취소 기준](docs/ACCOUNTING_CHANGES.md)을 참고하세요.
+
 ## 🧪 테스트 및 품질 검증
+
+기본 테스트는 운영 설정·DB·외부 시세 호출을 차단합니다. 운영 DB에 의존하던 기존 테스트 5개는 건너뛰며, 수집 개수와 실제 통과 결과를 구분합니다.
 
 ### 백엔드 테스트 실행
 ```bash
-python -m pytest
+python -m pytest -q -p no:cacheprovider
 ```
 
 ### 프론트엔드 린터 및 빌드
 ```bash
 cd frontend
+npm run test      # 캐시 범위 분리 회귀 테스트
 npm run lint      # oxlint 기반 정적 분석 (0 warning, 0 error)
 npm run build     # Vite 프로덕션 번들 빌드
 ```

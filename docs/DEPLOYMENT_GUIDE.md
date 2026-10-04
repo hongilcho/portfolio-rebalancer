@@ -2,6 +2,8 @@
 
 > 본 문서는 **Render (백엔드)** 및 **Vercel (프론트엔드)**의 실제 프로덕션 배포 설정값, 시작 명령어, 필수 환경 변수, CORS 및 **NH투자증권 Open API 접속 조건(IP 허용 정책)**을 명시한 배포 가이드입니다.
 
+> 아래 배포값은 구성 참고용입니다. 실제 배포 SHA, 연결 브랜치와 Auto-Deploy 상태는 운영 대시보드에서 확인해야 합니다. 이번 보완에서는 운영 배포·DB 변경을 수행하지 않았습니다. 배포 전 [거래 취소 스키마 및 검증 사항](ACCOUNTING_CHANGES.md)을 확인하세요.
+
 ---
 
 ## 1. 백엔드 배포: Render (Cloud Web Service)
@@ -10,7 +12,7 @@ Render는 FastAPI 백엔드를 구동하는 PaaS 플랫폼입니다.
 
 * **GitHub 연결 레포지토리**: `https://github.com/hongilcho/portfolio-rebalancer`
 * **배포 연결 브랜치**: **`main`**
-* **Auto-Deploy**: `Yes` (main 브랜치 푸시 시 자동 무중단 배포)
+* **Auto-Deploy**: 실제 Render 대시보드에서 확인 (문서만으로 활성 여부를 판단하지 않음)
 * **런타임 환경 (Runtime)**: `Python 3` (루트의 `runtime.txt`에 `python-3.12.10` 지정됨)
 * **Root Directory**: `.` (프로젝트 루트 디렉토리)
 * **Build Command**:
@@ -22,7 +24,7 @@ Render는 FastAPI 백엔드를 구동하는 PaaS 플랫폼입니다.
   uvicorn backend.main:app --host 0.0.0.0 --port $PORT
   ```
   *(Render가 주입하는 동적 환경변수 `$PORT`에 바인딩)*
-* **Health Check Path**: `/docs` 또는 `/api/system/health`
+* **Health Check Path**: `/api/health` (현재 코드의 상태 확인 경로)
 
 ### Render 필수 환경 변수 (Environment Variables)
 Render 대시보드 > Web Service > `Environment` 탭에 다음 변수들을 등록합니다:

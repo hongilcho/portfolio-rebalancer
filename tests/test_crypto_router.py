@@ -10,6 +10,23 @@ from unittest.mock import patch
 from logic.crypto_price_fetcher import get_crypto_prices
 from backend.routers.crypto import get_crypto_summary, update_crypto_holdings, CryptoHoldingsUpdateRequest, CryptoHoldingItem
 
+@pytest.fixture(autouse=True)
+def isolated_crypto(mocker):
+    prices = {
+        "BTC": {"symbol": "BTC", "price": 100000000.0, "change_rate": 0.0},
+        "ETH": {"symbol": "ETH", "price": 5000000.0, "change_rate": 0.0},
+    }
+    mocker.patch("logic.crypto_price_fetcher.get_market_cache", return_value=(None, 0))
+    mocker.patch("logic.crypto_price_fetcher.save_market_cache", return_value=True)
+    mocker.patch("logic.crypto_price_fetcher._fetch_crypto_from_external", return_value=prices)
+    mocker.patch("backend.routers.crypto.get_crypto_prices", return_value=prices)
+    mocker.patch("backend.routers.crypto.get_portfolio", return_value={"name": "Test"})
+    mocker.patch("backend.routers.crypto.get_dashboard_summary", return_value={
+        "kpi": {"total_stock_buy": 100000, "total_portfolio_eval": 150000,
+                "total_stock_profit": 10000, "total_stock_return": 10},
+        "cash_assets": {"total_cash_krw": 40000},
+    })
+
 def test_crypto_prices_fetch():
     """업비트/빗썸/yfinance를 통한 가상자산 시세 조회 결과 규격 검증"""
     prices = get_crypto_prices()

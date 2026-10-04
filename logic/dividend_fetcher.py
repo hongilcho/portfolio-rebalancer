@@ -3,7 +3,7 @@
 =================================================================
 미국 ETF(SGOV 등) 및 국내 ETF(KODEX 머니마켓액티브 등)의 실제 거래소 공시 배당 이력을
 yfinance로부터 수집하여 PostgreSQL market_cache 및 인메모리에 24시간 캐싱하고,
-보유 기간(first_buy_date) 이후 발생한 실제 배당락 금액만큼 매입단가를 차감(Adjusted Cost Basis)합니다.
+배당락일 당시 보유 수량으로 세후 배당을 계산합니다. 매입단가는 보존합니다.
 """
 
 import time
@@ -13,6 +13,7 @@ from typing import List, Dict, Any, Tuple, Optional
 import yfinance as yf
 
 from data.data_manager import get_market_cache, save_market_cache
+from logic.trade_accounting import trade_sort_key
 
 _dividend_memory_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 CACHE_TTL = 86400.0  # 24시간 캐시
@@ -115,7 +116,7 @@ def calculate_holding_dividends_from_history(
     total_tax = 0.0
     history = []
     
-    sorted_trades = sorted(trades, key=lambda t: (str(t.get('trade_date', '')), str(t.get('id', ''))))
+    sorted_trades = sorted(trades, key=trade_sort_key)
     
     for d in qualifying_divs:
         ex_date = d['date']

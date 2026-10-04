@@ -19,12 +19,14 @@ import os
 import json
 import uuid
 import threading
+import math
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 from backend.config import SUPABASE_URL
+from logic.trade_accounting import cash_movement, replay_holding
 
 # 사용자 정의 6가지 표준 계좌 유형
 from data.enums import AccountType
@@ -138,31 +140,17 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Render 및 다중 Uvicorn 워커 환경에서 DDL 락 경합 및 Deadlock 방지 (PostgreSQL Advisory Lock)
-    acquired = False
+    # Transaction-scoped locks also work through Supavisor transaction pooling.
+    # Wait for another initializer rather than serving against an old schema.
     try:
-        cursor.execute("SELECT pg_try_advisory_lock(424242)")
-        res = cursor.fetchone()
-        acquired = bool(res and res[0])
-        if not acquired:
-            print("Another worker is initializing DB schema. Skipping init_db.")
-            conn.close()
-            return
-    except Exception as e:
-        print(f"Advisory lock check skipped: {e}")
-
-    try:
+        cursor.execute("SET LOCAL lock_timeout = '30s'")
+        cursor.execute("SELECT pg_advisory_xact_lock(424242)")
         _do_init_db_schema(conn, cursor)
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        print(f"Schema initialization warning (ignoring deadlock/race): {e}")
+        # Missing columns must prevent startup, not fail later during a trade.
+        raise
     finally:
-        if acquired:
-            try:
-                cursor.execute("SELECT pg_advisory_unlock(424242)")
-                conn.commit()
-            except Exception:
-                pass
         conn.close()
 
 def _do_init_db_schema(conn, cursor):
@@ -316,6 +304,11 @@ def _do_init_db_schema(conn, cursor):
         )
     ''')
     
+    # NULL means the historical settlement currency is unknown. Never guess it.
+    cursor.execute("ALTER TABLE trade_history ADD COLUMN IF NOT EXISTS cash_delta_krw DOUBLE PRECISION")
+    cursor.execute("ALTER TABLE trade_history ADD COLUMN IF NOT EXISTS cash_delta_usd DOUBLE PRECISION")
+    cursor.execute("ALTER TABLE trade_history ADD COLUMN IF NOT EXISTS trade_sequence BIGSERIAL")
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS crypto_holdings (
             id TEXT PRIMARY KEY,
@@ -1041,22 +1034,24 @@ def sync_account_with_api(account_id, api_data):
 # Trade History & Execution
 # ---------------------------------------------------------
 def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price, currency=None, exchange_rate=None):
-    if quantity <= 0 or price <= 0:
+    if not all(math.isfinite(v) and v > 0 for v in (quantity, price)):
         return False, "수량과 단가는 0보다 커야 합니다."
         
+    if trade_type not in ('INIT', 'BUY', 'SELL') or currency not in (None, 'KRW', 'USD'):
+        return False, "거래 유형 또는 통화를 확인해주세요."
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     new_trade_id = generate_id()
     try:
-        is_us = (currency == 'USD') or (exchange_rate is not None and float(exchange_rate) > 1.0)
+        is_us = (currency == 'USD') if currency else (exchange_rate is not None and float(exchange_rate) > 1.0)
         if currency is None:
             currency = 'USD' if is_us else 'KRW'
 
         if is_us or currency == 'USD':
             if exchange_rate is None or float(exchange_rate) <= 1.0:
                 try:
-                    from backend.services.market_service import get_usd_krw
-                    exchange_rate = get_usd_krw() or 1380.0
+                    from backend.services import market_service
+                    exchange_rate = market_service.usd_krw or 1380.0
                 except Exception:
                     exchange_rate = 1380.0
             else:
@@ -1064,52 +1059,29 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price,
         else:
             exchange_rate = 1.0
 
-        cursor.execute('''
-            INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price, currency, exchange_rate)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (new_trade_id, trade_date, str(account_id), str(asset_id), trade_type, quantity, price, currency, exchange_rate))
-        
-        # 현금 잔고(예수금) 업데이트 로직
+        if not math.isfinite(exchange_rate) or exchange_rate <= 0:
+            raise ValueError("매입환율은 양수여야 합니다.")
+        if not math.isfinite(quantity * price * exchange_rate):
+            raise ValueError("거래 금액이 허용 범위를 초과합니다.")
+        # Lock before reading balances; deletion takes the same account lock.
+        cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
+        acc_row = cursor.fetchone()
+        if not acc_row:
+            raise ValueError("존재하지 않는 계좌입니다.")
+        dep_krw = float(acc_row.get('deposit_krw') or 0.0)
+        dep_usd = float(acc_row.get('deposit_usd') or 0.0)
+        delta_krw, delta_usd = cash_movement(
+            trade_type, quantity, price, currency, exchange_rate, dep_krw, dep_usd
+        )
+        cursor.execute("""
+            INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price, currency, exchange_rate, cash_delta_krw, cash_delta_usd)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (new_trade_id, trade_date, str(account_id), str(asset_id), trade_type, quantity, price, currency, exchange_rate, delta_krw, delta_usd))
         if trade_type in ('BUY', 'SELL'):
-            if is_us or currency == 'USD':
-                cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s', (str(account_id),))
-                acc_row = cursor.fetchone()
-                if acc_row:
-                    dep_krw = float(acc_row.get('deposit_krw') or 0.0)
-                    dep_usd = float(acc_row.get('deposit_usd') or 0.0)
-                    trade_amt_usd = quantity * price
-                    trade_amt_krw = trade_amt_usd * exchange_rate
-                    if trade_type == 'BUY':
-                        if dep_usd >= trade_amt_usd:
-                            dep_usd -= trade_amt_usd
-                        else:
-                            dep_krw -= trade_amt_krw
-                    else: # SELL
-                        if dep_usd > 0:
-                            dep_usd += trade_amt_usd
-                        else:
-                            dep_krw += trade_amt_krw
-                    cursor.execute('''
-                        UPDATE accounts
-                        SET deposit_krw = %s, deposit_usd = %s
-                        WHERE id = %s
-                    ''', (dep_krw, dep_usd, str(account_id)))
-            else:
-                trade_amount = quantity * price
-                cursor.execute('SELECT deposit_krw FROM accounts WHERE id = %s', (str(account_id),))
-                acc_row = cursor.fetchone()
-                if acc_row:
-                    dep_krw = float(acc_row['deposit_krw'])
-                    if trade_type == 'BUY':
-                        dep_krw -= trade_amount
-                    elif trade_type == 'SELL':
-                        dep_krw += trade_amount
-                    cursor.execute('''
-                        UPDATE accounts
-                        SET deposit_krw = %s
-                        WHERE id = %s
-                    ''', (dep_krw, str(account_id)))
-                    
+            cursor.execute("""
+                UPDATE accounts SET deposit_krw = %s, deposit_usd = %s WHERE id = %s
+            """, (dep_krw + delta_krw, dep_usd + delta_usd, str(account_id)))
+
         cursor.execute('''
             SELECT quantity, avg_price, avg_price_usd, buy_fx_rate FROM holdings 
             WHERE account_id = %s AND asset_id = %s
@@ -1159,6 +1131,8 @@ def execute_trade(trade_date, account_id, asset_id, trade_type, quantity, price,
                     new_avg_usd = price if (is_us or currency == 'USD') else 0.0
                     new_buy_fx = exchange_rate if (is_us or currency == 'USD') else 0.0
             else: # SELL
+                if quantity > curr_qty + 1e-9:
+                    raise ValueError("매도할 보유 수량이 부족합니다.")
                 new_qty = curr_qty - quantity
                 new_avg_price = curr_avg_price
                 new_avg_usd = curr_avg_usd
@@ -1238,107 +1212,90 @@ def get_trade_history(portfolio_id: str = None):
         conn.close()
 
 def delete_trade(trade_id):
+    return delete_trades([trade_id])
+
+
+def delete_trades(trade_ids):
+    """Reverse recorded cash movements and replay holdings in one transaction.
+
+    Legacy BUY/SELL rows without cash deltas require reconciliation first.
+    Account locks are taken in stable order before locking transaction rows.
+    """
+    ids = [str(tid) for tid in trade_ids]
+    if not ids:
+        return False, "삭제할 거래를 선택해주세요."
+    if len(ids) != len(set(ids)):
+        return False, "중복된 거래 ID가 있습니다."
+    placeholders = ', '.join(['%s'] * len(ids))
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     try:
-        cursor.execute("SELECT account_id, asset_id FROM trade_history WHERE id = %s", (str(trade_id),))
-        row = cursor.fetchone()
-        if not row:
-            return False, "존재하지 않는 매매 기록입니다."
-        
-        account_id = row['account_id']
-        asset_id = row['asset_id']
-        
-        cursor.execute("DELETE FROM trade_history WHERE id = %s", (str(trade_id),))
-        
-        cursor.execute('''
-            SELECT t.trade_type, t.quantity, t.price, t.currency, t.exchange_rate, a.market
-            FROM trade_history t
-            JOIN assets a ON t.asset_id = a.id
-            WHERE t.account_id = %s AND t.asset_id = %s 
-            ORDER BY t.trade_date ASC, CASE WHEN t.trade_type = 'INIT' THEN 0 ELSE 1 END, t.id ASC
-        ''', (account_id, asset_id))
-        
-        remaining_trades = cursor.fetchall()
-        
-        new_qty = 0.0
-        new_avg_price = 0.0
-        new_avg_usd = 0.0
-        new_buy_fx = 0.0
-        
-        for t in remaining_trades:
-            t_type = t['trade_type']
-            t_qty = float(t['quantity'])
-            t_price = float(t['price'])
-            t_curr = t.get('currency') or ('USD' if t.get('market') == 'US' else 'KRW')
-            t_fx = float(t.get('exchange_rate') or 1.0)
-            is_t_us = (t_curr == 'USD' or t.get('market') == 'US')
-            
-            if t_type == 'INIT':
-                new_qty = t_qty
-                if is_t_us:
-                    new_avg_usd = t_price
-                    new_buy_fx = t_fx
-                    new_avg_price = round(new_avg_usd * new_buy_fx, 2)
-                else:
-                    new_avg_price = t_price
-                    new_avg_usd = 0.0
-                    new_buy_fx = 0.0
-            elif t_type == 'BUY':
-                next_qty = new_qty + t_qty
-                if next_qty > 0:
-                    if is_t_us:
-                        c_usd_0 = new_qty * new_avg_usd
-                        c_krw_0 = c_usd_0 * new_buy_fx
-                        c_usd_new = t_qty * t_price
-                        c_krw_new = c_usd_new * t_fx
-                        total_c_usd = c_usd_0 + c_usd_new
-                        total_c_krw = c_krw_0 + c_krw_new
-                        new_avg_usd = total_c_usd / next_qty
-                        new_buy_fx = (total_c_krw / total_c_usd) if total_c_usd > 0 else t_fx
-                        new_avg_price = total_c_krw / next_qty
-                    else:
-                        new_avg_price = ((new_qty * new_avg_price) + (t_qty * t_price)) / next_qty
-                        new_avg_usd = 0.0
-                        new_buy_fx = 0.0
-                else:
-                    new_avg_price = t_price
-                    new_avg_usd = t_price if is_t_us else 0.0
-                    new_buy_fx = t_fx if is_t_us else 0.0
-                new_qty = next_qty
-            else: # SELL
-                new_qty -= t_qty
-                if new_qty <= 0:
-                    new_qty = 0.0
-                    new_avg_price = 0.0
-                    new_avg_usd = 0.0
-                    new_buy_fx = 0.0
-                    
-        if new_qty > 0:
-            cursor.execute('''
-                INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate, original_avg_price, original_avg_price_usd)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT(account_id, asset_id) DO UPDATE SET
-                    quantity = EXCLUDED.quantity,
-                    avg_price = EXCLUDED.avg_price,
-                    avg_price_usd = EXCLUDED.avg_price_usd,
-                    buy_fx_rate = EXCLUDED.buy_fx_rate,
-                    original_avg_price = EXCLUDED.avg_price,
-                    original_avg_price_usd = EXCLUDED.avg_price_usd
-            ''', (generate_id(), account_id, asset_id, new_qty, new_avg_price, new_avg_usd, new_buy_fx, new_avg_price, new_avg_usd))
-        else:
-            cursor.execute('''
-                DELETE FROM holdings 
-                WHERE account_id = %s AND asset_id = %s
-            ''', (account_id, asset_id))
-            
+        cursor.execute(f"SELECT id, account_id FROM trade_history WHERE id IN ({placeholders})", tuple(ids))
+        references = cursor.fetchall()
+        if len(references) != len(ids):
+            raise ValueError("존재하지 않는 매매 기록이 있습니다.")
+        account_ids = sorted({r['account_id'] for r in references})
+        acc_placeholders = ', '.join(['%s'] * len(account_ids))
+        cursor.execute(f"SELECT id FROM accounts WHERE id IN ({acc_placeholders}) ORDER BY id FOR UPDATE", tuple(account_ids))
+        if len(cursor.fetchall()) != len(account_ids):
+            raise ValueError("존재하지 않는 계좌입니다.")
+        cursor.execute(f"SELECT * FROM trade_history WHERE id IN ({placeholders}) FOR UPDATE", tuple(ids))
+        selected = cursor.fetchall()
+        if len(selected) != len(ids):
+            raise ValueError("이미 삭제된 매매 기록이 있습니다.")
+        for trade in selected:
+            if trade['trade_type'] != 'INIT' and (
+                trade.get('cash_delta_krw') is None or trade.get('cash_delta_usd') is None
+            ):
+                raise ValueError("기존 거래의 결제 통화·예수금 변동 기록이 없습니다. 잔고 대사 후 삭제해주세요.")
+        cursor.execute(f"DELETE FROM trade_history WHERE id IN ({placeholders})", tuple(ids))
+        for trade in selected:
+            if trade['trade_type'] != 'INIT':
+                cursor.execute("""
+                    UPDATE accounts
+                    SET deposit_krw = deposit_krw - %s, deposit_usd = deposit_usd - %s
+                    WHERE id = %s
+                """, (trade['cash_delta_krw'], trade['cash_delta_usd'], trade['account_id']))
+        cursor.execute(f"SELECT deposit_krw, deposit_usd FROM accounts WHERE id IN ({acc_placeholders})", tuple(account_ids))
+        if any(float(a.get('deposit_krw') or 0) < -1e-9 or float(a.get('deposit_usd') or 0) < -1e-9
+               for a in cursor.fetchall()):
+            raise ValueError("삭제 후 예수금이 부족합니다. 관련 거래 또는 현재 잔고를 확인해주세요.")
+        pairs = sorted({(t['account_id'], t['asset_id']) for t in selected})
+        for account_id, asset_id in pairs:
+            cursor.execute("""
+                SELECT t.*, a.market FROM trade_history t
+                JOIN assets a ON t.asset_id = a.id
+                WHERE t.account_id = %s AND t.asset_id = %s
+            """, (account_id, asset_id))
+            qty, avg_krw, avg_usd, buy_fx = replay_holding(cursor.fetchall())
+            if qty > 0:
+                cursor.execute("""
+                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate, original_avg_price, original_avg_price_usd)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(account_id, asset_id) DO UPDATE SET
+                        quantity = EXCLUDED.quantity,
+                        avg_price = EXCLUDED.avg_price,
+                        avg_price_usd = EXCLUDED.avg_price_usd,
+                        buy_fx_rate = EXCLUDED.buy_fx_rate,
+                        original_avg_price = EXCLUDED.avg_price,
+                        original_avg_price_usd = EXCLUDED.avg_price_usd
+                """, (generate_id(), account_id, asset_id, qty, avg_krw, avg_usd, buy_fx, avg_krw, avg_usd))
+            else:
+                # Keep optional first-buy-date and dividend overrides for a future
+                # undo/re-entry, and let quantity filters hide the closed position.
+                cursor.execute("""
+                    UPDATE holdings SET quantity = 0, avg_price = 0, avg_price_usd = 0,
+                        buy_fx_rate = 0, original_avg_price = 0, original_avg_price_usd = 0
+                    WHERE account_id = %s AND asset_id = %s
+                """, (account_id, asset_id))
         conn.commit()
-        return True, "매매 기록이 삭제되었으며, 평단가가 정상적으로 롤백되었습니다."
+        return True, "매매 기록이 삭제되었으며 예수금·수량·매입원가가 복원되었습니다."
     except Exception as e:
         conn.rollback()
         return False, str(e)
     finally:
         conn.close()
+
 
 def apply_transfer_plan(transfer_plan: list) -> Tuple[bool, str]:
     """

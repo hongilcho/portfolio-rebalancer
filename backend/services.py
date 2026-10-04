@@ -5,11 +5,8 @@
 
 주요 특징:
 1. 싱글톤 패턴(Singleton): 애플리케이션 전역에서 단일 인스턴스로 시세 상태 공유.
-2. 2단계 캐시 및 0초 콜드스타트(Zero Cold-Start):
-   - PostgreSQL `market_prices_cache` 테이블을 통해 서버 재부팅 직후에도 직전 유효 시세를 0.05초 만에 복원.
-3. Stale-While-Revalidate (SWR):
-   - 인메모리 캐시 TTL(5분) 경과 시, 사용자는 대기 없이 직전 캐시를 즉시 수신하고
-     백그라운드 데몬 스레드에서 외부 API 호출을 수행하여 캐시를 갱신.
+2. 메모리 및 PostgreSQL `market_cache`에 시세를 보관.
+3. 시작 시 백그라운드 예열, 요청 시 캐시 만료 또는 강제 새로고침이면 동기 갱신.
 4. 동시성 락(`_fetch_lock`):
    - 여러 요청이 동시에 인입되어도 외부 API 중복 호출을 방지.
 """
@@ -44,8 +41,8 @@ class MarketStateService:
         self._fetch_lock = threading.Lock()
         self._is_fetching: bool = False
         
-        # 서버 기동 시 DB 영구 캐시에서 0.05초 만에 복구 (Zero Cold-Start)
-        self._load_from_db_cache()
+        # Cache IO is deferred until startup or a request, never at import time.
+        self._cache_loaded = False
 
     @classmethod
     def get_instance(cls):
@@ -114,12 +111,14 @@ class MarketStateService:
 
     def warmup(self):
         """서버 기동 시 백그라운드에서 캐시 상태를 확인하고 필요한 경우 자동 갱신"""
+        self._ensure_cache_loaded()
         now = time.time()
         if self.price_data is None or (now - self.last_price_fetch_time > self.cache_ttl_seconds):
             if not self._is_fetching:
                 self._do_fetch_prices()
 
     def get_prices(self, force_refresh: bool = False) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
+        self._ensure_cache_loaded()
         now = time.time()
         
         # 1. 강제 새로고침 요청이거나, 캐시가 없거나, 캐시 TTL(5분)이 만료된 경우 동기 최신화 수집 (1초대 소요)
@@ -135,5 +134,12 @@ class MarketStateService:
                 price_map[str(item['id'])] = float(item['price_krw'])
                 
         return self.price_data or [], price_map
+
+    def _ensure_cache_loaded(self):
+        with self._lock:
+            if not self._cache_loaded:
+                self._cache_loaded = True
+                if self.price_data is None:
+                    self._load_from_db_cache()
 
 market_service = MarketStateService.get_instance()

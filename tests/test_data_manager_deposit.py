@@ -29,7 +29,7 @@ def test_execute_trade_deposit_update(mock_get_connection):
     # Check if accounts update was called with correct new deposit: 19000 - (3 * 5000) = 4000
     update_acc_call = [call for call in mock_cursor.execute.call_args_list if 'UPDATE accounts' in call[0][0]]
     assert len(update_acc_call) == 1
-    assert update_acc_call[0][0][1] == (4000.0, 'acc_1')
+    assert update_acc_call[0][0][1] == (4000.0, 0.0, 'acc_1')
 
     # 2. Test SELL (should add to deposit_krw)
     mock_cursor.reset_mock()
@@ -44,4 +44,4 @@ def test_execute_trade_deposit_update(mock_get_connection):
     # Check if accounts update was called with correct new deposit: 10000 + (5 * 26000) = 140000
     update_acc_call = [call for call in mock_cursor.execute.call_args_list if 'UPDATE accounts' in call[0][0]]
     assert len(update_acc_call) == 1
-    assert update_acc_call[0][0][1] == (140000.0, 'acc_1')
+    assert update_acc_call[0][0][1] == (140000.0, 0.0, 'acc_1')
