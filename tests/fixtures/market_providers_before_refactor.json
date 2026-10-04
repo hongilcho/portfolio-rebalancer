@@ -1,0 +1,2411 @@
+{
+  "baseline_commit": "64cda1d",
+  "results": {
+    "fx_naver": {
+      "values": [
+        [
+          1435.68,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_close_price": {
+      "values": [
+        [
+          1400.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_invalid_500": {
+      "values": [
+        [
+          1420.12,
+          "Namuh API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_invalid_-1": {
+      "values": [
+        [
+          1420.12,
+          "Namuh API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_invalid_bad": {
+      "values": [
+        [
+          1420.12,
+          "Namuh API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_invalid_None": {
+      "values": [
+        [
+          1420.12,
+          "Namuh API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_nh": {
+      "values": [
+        [
+          1450.12,
+          "Namuh API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_yahoo_fast": {
+      "values": [
+        [
+          1460.12,
+          "yfinance"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ],
+        [
+          "yahoo",
+          "KRW=X"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_yahoo_history": {
+      "values": [
+        [
+          1470.12,
+          "yfinance"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ],
+        [
+          "yahoo",
+          "KRW=X"
+        ],
+        [
+          "history",
+          "KRW=X",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_default": {
+      "values": [
+        [
+          1380.0,
+          "기본값(기본 1380원)"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ],
+        [
+          "yahoo",
+          "KRW=X"
+        ],
+        [
+          "history",
+          "KRW=X",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "fx_all_errors": {
+      "values": [
+        [
+          1380.0,
+          "기본값(기본 1380원)"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "fx",
+          [
+            "USD"
+          ],
+          {}
+        ],
+        [
+          "yahoo",
+          "KRW=X"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_polling": {
+      "values": [
+        [
+          70100.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_now_price": {
+      "values": [
+        [
+          71000.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_mobile": {
+      "values": [
+        [
+          72000.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://m.stock.naver.com/api/stock/005930/basic",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_nh": {
+      "values": [
+        [
+          73000,
+          "NH API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://m.stock.naver.com/api/stock/005930/basic",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "005930"
+          ],
+          {
+            "market": "KR"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_invalid_naver": {
+      "values": [
+        [
+          74000,
+          "NH API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://m.stock.naver.com/api/stock/005930/basic",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "005930"
+          ],
+          {
+            "market": "KR"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_yahoo_fast": {
+      "values": [
+        [
+          75000.0,
+          "yfinance"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://m.stock.naver.com/api/stock/005930/basic",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "005930"
+          ],
+          {
+            "market": "KR"
+          }
+        ],
+        [
+          "yahoo",
+          "005930.KS"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_yahoo_history": {
+      "values": [
+        [
+          76000.0,
+          "yfinance"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://m.stock.naver.com/api/stock/005930/basic",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "005930"
+          ],
+          {
+            "market": "KR"
+          }
+        ],
+        [
+          "yahoo",
+          "005930.KS"
+        ],
+        [
+          "history",
+          "005930.KS",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_kq": {
+      "values": [
+        [
+          77000.0,
+          "yfinance"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://m.stock.naver.com/api/stock/005930/basic",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "005930"
+          ],
+          {
+            "market": "KR"
+          }
+        ],
+        [
+          "yahoo",
+          "005930.KS"
+        ],
+        [
+          "history",
+          "005930.KS",
+          {
+            "period": "1d"
+          }
+        ],
+        [
+          "yahoo",
+          "005930.KQ"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_yahoo_error": {
+      "values": [
+        [
+          null,
+          "yfinance 오류: offline"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://m.stock.naver.com/api/stock/005930/basic",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "005930"
+          ],
+          {
+            "market": "KR"
+          }
+        ],
+        [
+          "yahoo",
+          "005930.KS"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "kr_yahoo_empty": {
+      "values": [
+        [
+          null,
+          "시세를 찾을 수 없음"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/005930",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://m.stock.naver.com/api/stock/005930/basic",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "005930"
+          ],
+          {
+            "market": "KR"
+          }
+        ],
+        [
+          "yahoo",
+          "005930.KS"
+        ],
+        [
+          "history",
+          "005930.KS",
+          {
+            "period": "1d"
+          }
+        ],
+        [
+          "yahoo",
+          "005930.KQ"
+        ],
+        [
+          "history",
+          "005930.KQ",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "batch_empty": {
+      "values": [
+        {}
+      ],
+      "trace": [],
+      "suffix": {},
+      "stdout": ""
+    },
+    "batch_complete": {
+      "values": [
+        {
+          "0085P0": 9545.0,
+          "476760": 8780.0
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/0085P0,476760",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "batch_partial_invalid": {
+      "values": [
+        {
+          "A": 100.0
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/A,B,C,D",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "batch_timeout": {
+      "values": [
+        {}
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/A",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ]
+      ],
+      "suffix": {},
+      "stdout": "Notice: Naver batch stock fetch error: offline\n"
+    },
+    "batch_non_200": {
+      "values": [
+        {}
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/A",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "batch_malformed_json": {
+      "values": [
+        {}
+      ],
+      "trace": [
+        [
+          "http",
+          "https://polling.finance.naver.com/api/realtime/domestic/stock/A",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ]
+      ],
+      "suffix": {},
+      "stdout": "Notice: Naver batch stock fetch error: broken json\n"
+    },
+    "us_cached": {
+      "values": [
+        [
+          35175.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/PDBC.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ]
+      ],
+      "suffix": {
+        "PDBC": "PDBC.O"
+      },
+      "stdout": ""
+    },
+    "us_discover_then_reuse": {
+      "values": [
+        [
+          28175.0,
+          "네이버 금융"
+        ],
+        [
+          29575.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ]
+      ],
+      "suffix": {
+        "NEW": "NEW.K"
+      },
+      "stdout": ""
+    },
+    "us_cached_failure": {
+      "values": [
+        [
+          30800.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ]
+      ],
+      "suffix": {
+        "NEW": "NEW.K"
+      },
+      "stdout": ""
+    },
+    "us_explicit_suffix": {
+      "values": [
+        [
+          32200.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ]
+      ],
+      "suffix": {
+        "NEW.K": "NEW"
+      },
+      "stdout": ""
+    },
+    "us_nh": {
+      "values": [
+        [
+          33772.83,
+          "NH API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.N/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "NEW"
+          ],
+          {
+            "market": "US"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "us_yahoo_fast": {
+      "values": [
+        [
+          35172.83,
+          "yfinance"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.N/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "NEW"
+          ],
+          {
+            "market": "US"
+          }
+        ],
+        [
+          "yahoo",
+          "NEW"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "us_yahoo_history": {
+      "values": [
+        [
+          36572.83,
+          "yfinance"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.N/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "NEW"
+          ],
+          {
+            "market": "US"
+          }
+        ],
+        [
+          "yahoo",
+          "NEW"
+        ],
+        [
+          "history",
+          "NEW",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "us_yahoo_error": {
+      "values": [
+        [
+          null,
+          "yfinance 오류: offline"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.N/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "NEW"
+          ],
+          {
+            "market": "US"
+          }
+        ],
+        [
+          "yahoo",
+          "NEW"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "us_yahoo_empty": {
+      "values": [
+        [
+          null,
+          "시세를 찾을 수 없음"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.N/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "NEW"
+          ],
+          {
+            "market": "US"
+          }
+        ],
+        [
+          "yahoo",
+          "NEW"
+        ],
+        [
+          "history",
+          "NEW",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "us_default_fx_0": {
+      "values": [
+        [
+          37398.0,
+          "NH API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.N/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "NEW"
+          ],
+          {
+            "market": "US"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "us_default_fx_None": {
+      "values": [
+        [
+          37398.0,
+          "NH API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.N/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "NEW"
+          ],
+          {
+            "market": "US"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "us_default_fx_-1": {
+      "values": [
+        [
+          37398.0,
+          "NH API"
+        ]
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.O/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.K/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/stock/NEW.N/basic",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2
+        ],
+        [
+          "nh",
+          "stock",
+          [
+            "NEW"
+          ],
+          {
+            "market": "US"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "gold_nh": {
+      "values": [
+        [
+          135000,
+          "NH API"
+        ]
+      ],
+      "trace": [
+        [
+          "nh",
+          "gold",
+          [
+            "M04020000"
+          ],
+          {}
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "gold_naver_api": {
+      "values": [
+        [
+          201000.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "nh",
+          "gold",
+          [
+            "M04020000"
+          ],
+          {}
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/metals/M04020000",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2.5
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "gold_naver_html": {
+      "values": [
+        [
+          202000.0,
+          "네이버 금융"
+        ]
+      ],
+      "trace": [
+        [
+          "nh",
+          "gold",
+          [
+            "M04020000"
+          ],
+          {}
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/metals/M04020000",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2.5
+        ],
+        [
+          "http",
+          "https://finance.naver.com/marketindex/goldDetail.naver",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "gold_yahoo_fast": {
+      "values": [
+        [
+          135039.0,
+          "COMEX 금선물"
+        ]
+      ],
+      "trace": [
+        [
+          "nh",
+          "gold",
+          [
+            "M04020000"
+          ],
+          {}
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/metals/M04020000",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2.5
+        ],
+        [
+          "http",
+          "https://finance.naver.com/marketindex/goldDetail.naver",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ],
+        [
+          "yahoo",
+          "GC=F"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "gold_yahoo_history": {
+      "values": [
+        [
+          139540.0,
+          "COMEX 금선물"
+        ]
+      ],
+      "trace": [
+        [
+          "nh",
+          "gold",
+          [
+            "M04020000"
+          ],
+          {}
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/metals/M04020000",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2.5
+        ],
+        [
+          "http",
+          "https://finance.naver.com/marketindex/goldDetail.naver",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ],
+        [
+          "yahoo",
+          "GC=F"
+        ],
+        [
+          "history",
+          "GC=F",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "gold_default": {
+      "values": [
+        [
+          201620.0,
+          "기본값"
+        ]
+      ],
+      "trace": [
+        [
+          "nh",
+          "gold",
+          [
+            "M04020000"
+          ],
+          {}
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/metals/M04020000",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2.5
+        ],
+        [
+          "http",
+          "https://finance.naver.com/marketindex/goldDetail.naver",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ],
+        [
+          "yahoo",
+          "GC=F"
+        ],
+        [
+          "history",
+          "GC=F",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "gold_invalid_history": {
+      "values": [
+        [
+          201620.0,
+          "기본값"
+        ]
+      ],
+      "trace": [
+        [
+          "nh",
+          "gold",
+          [
+            "M04020000"
+          ],
+          {}
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/metals/M04020000",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2.5
+        ],
+        [
+          "http",
+          "https://finance.naver.com/marketindex/goldDetail.naver",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ],
+        [
+          "yahoo",
+          "GC=F"
+        ],
+        [
+          "history",
+          "GC=F",
+          {
+            "period": "1d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "gold_default_fx": {
+      "values": [
+        [
+          133109.0,
+          "COMEX 금선물"
+        ]
+      ],
+      "trace": [
+        [
+          "nh",
+          "gold",
+          [
+            "M04020000"
+          ],
+          {}
+        ],
+        [
+          "http",
+          "https://api.stock.naver.com/marketindex/metals/M04020000",
+          {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          },
+          2.5
+        ],
+        [
+          "http",
+          "https://finance.naver.com/marketindex/goldDetail.naver",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          2.5
+        ],
+        [
+          "yahoo",
+          "GC=F"
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "crypto_upbit": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 100000000.0,
+            "change_24h_pct": -1.23,
+            "high_24h": 101000000.0,
+            "low_24h": 99000000.0,
+            "prev_close": 100500000.0,
+            "source": "업비트 (Upbit)"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 5000000.0,
+            "change_24h_pct": -1.23,
+            "high_24h": 101000000.0,
+            "low_24h": 99000000.0,
+            "prev_close": 100500000.0,
+            "source": "업비트 (Upbit)"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "crypto_partial_upbit": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 100000000.0,
+            "change_24h_pct": -1.23,
+            "high_24h": 101000000.0,
+            "low_24h": 99000000.0,
+            "prev_close": 100500000.0,
+            "source": "업비트 (Upbit)"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 5100000.0,
+            "change_24h_pct": 2.0,
+            "high_24h": 5200000.0,
+            "low_24h": 4900000.0,
+            "prev_close": 5000000.0,
+            "source": "빗썸 (Bithumb)"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/ETH_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "crypto_bithumb": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 5100000.0,
+            "change_24h_pct": 2.0,
+            "high_24h": 5200000.0,
+            "low_24h": 4900000.0,
+            "prev_close": 5000000.0,
+            "source": "빗썸 (Bithumb)"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 5100000.0,
+            "change_24h_pct": 2.0,
+            "high_24h": 5200000.0,
+            "low_24h": 4900000.0,
+            "prev_close": 5000000.0,
+            "source": "빗썸 (Bithumb)"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/BTC_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/ETH_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "crypto_yahoo": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 100000000.0,
+            "change_24h_pct": 1.01,
+            "high_24h": 101000000.0,
+            "low_24h": 98000000.0,
+            "prev_close": 99000000.0,
+            "source": "yfinance"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 5000000.0,
+            "change_24h_pct": 0.0,
+            "high_24h": 5100000.0,
+            "low_24h": 4900000.0,
+            "prev_close": 5000000.0,
+            "source": "yfinance"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/BTC_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/ETH_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "yahoo",
+          "BTC-KRW"
+        ],
+        [
+          "history",
+          "BTC-KRW",
+          {
+            "period": "2d"
+          }
+        ],
+        [
+          "yahoo",
+          "ETH-KRW"
+        ],
+        [
+          "history",
+          "ETH-KRW",
+          {
+            "period": "2d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "crypto_mixed_yahoo": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 100000000.0,
+            "change_24h_pct": -1.23,
+            "high_24h": 101000000.0,
+            "low_24h": 99000000.0,
+            "prev_close": 100500000.0,
+            "source": "업비트 (Upbit)"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 5000000.0,
+            "change_24h_pct": 0.0,
+            "high_24h": 5100000.0,
+            "low_24h": 4900000.0,
+            "prev_close": 5000000.0,
+            "source": "yfinance"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/ETH_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "yahoo",
+          "ETH-KRW"
+        ],
+        [
+          "history",
+          "ETH-KRW",
+          {
+            "period": "2d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "crypto_bithumb_error_skips_remaining": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 100000000.0,
+            "change_24h_pct": 1.01,
+            "high_24h": 101000000.0,
+            "low_24h": 98000000.0,
+            "prev_close": 99000000.0,
+            "source": "yfinance"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 5000000.0,
+            "change_24h_pct": 0.0,
+            "high_24h": 5100000.0,
+            "low_24h": 4900000.0,
+            "prev_close": 5000000.0,
+            "source": "yfinance"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/BTC_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "yahoo",
+          "BTC-KRW"
+        ],
+        [
+          "history",
+          "BTC-KRW",
+          {
+            "period": "2d"
+          }
+        ],
+        [
+          "yahoo",
+          "ETH-KRW"
+        ],
+        [
+          "history",
+          "ETH-KRW",
+          {
+            "period": "2d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": "Bithumb API error: offline\n"
+    },
+    "crypto_malformed_after_btc": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 100000000.0,
+            "change_24h_pct": -1.23,
+            "high_24h": 101000000.0,
+            "low_24h": 99000000.0,
+            "prev_close": 100500000.0,
+            "source": "업비트 (Upbit)"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 5100000.0,
+            "change_24h_pct": 2.0,
+            "high_24h": 5200000.0,
+            "low_24h": 4900000.0,
+            "prev_close": 5000000.0,
+            "source": "빗썸 (Bithumb)"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/ETH_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ]
+      ],
+      "suffix": {},
+      "stdout": "Upbit API error: could not convert string to float: 'bad'\n"
+    },
+    "crypto_yahoo_partial_failure": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 0.0,
+            "change_24h_pct": 0.0,
+            "high_24h": 0.0,
+            "low_24h": 0.0,
+            "prev_close": 0.0,
+            "source": "기본값"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 5000000.0,
+            "change_24h_pct": 0.0,
+            "high_24h": 5100000.0,
+            "low_24h": 4900000.0,
+            "prev_close": 5000000.0,
+            "source": "yfinance"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/BTC_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/ETH_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "yahoo",
+          "BTC-KRW"
+        ],
+        [
+          "yahoo",
+          "ETH-KRW"
+        ],
+        [
+          "history",
+          "ETH-KRW",
+          {
+            "period": "2d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": "yfinance crypto error for BTC: offline\n"
+    },
+    "crypto_missing": {
+      "values": [
+        {
+          "BTC": {
+            "symbol": "BTC",
+            "name": "비트코인",
+            "price": 0.0,
+            "change_24h_pct": 0.0,
+            "high_24h": 0.0,
+            "low_24h": 0.0,
+            "prev_close": 0.0,
+            "source": "기본값"
+          },
+          "ETH": {
+            "symbol": "ETH",
+            "name": "이더리움",
+            "price": 0.0,
+            "change_24h_pct": 0.0,
+            "high_24h": 0.0,
+            "low_24h": 0.0,
+            "prev_close": 0.0,
+            "source": "기본값"
+          }
+        }
+      ],
+      "trace": [
+        [
+          "http",
+          "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH",
+          {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/BTC_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "http",
+          "https://api.bithumb.com/public/ticker/ETH_KRW",
+          {
+            "User-Agent": "Mozilla/5.0"
+          },
+          3
+        ],
+        [
+          "yahoo",
+          "BTC-KRW"
+        ],
+        [
+          "history",
+          "BTC-KRW",
+          {
+            "period": "2d"
+          }
+        ],
+        [
+          "yahoo",
+          "ETH-KRW"
+        ],
+        [
+          "history",
+          "ETH-KRW",
+          {
+            "period": "2d"
+          }
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "dividend_us": {
+      "values": [
+        [
+          {
+            "date": "2026-01-01",
+            "amount": 0.25
+          },
+          {
+            "date": "2026-08-01",
+            "amount": 1.2346
+          }
+        ]
+      ],
+      "trace": [
+        [
+          "cache_read",
+          "div_US_ABC"
+        ],
+        [
+          "yahoo",
+          "ABC"
+        ],
+        [
+          "cache_save",
+          "div_US_ABC",
+          [
+            {
+              "date": "2026-01-01",
+              "amount": 0.25
+            },
+            {
+              "date": "2026-08-01",
+              "amount": 1.2346
+            }
+          ]
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "dividend_kr": {
+      "values": [
+        [
+          {
+            "date": "2026-01-01",
+            "amount": 0.25
+          },
+          {
+            "date": "2026-08-01",
+            "amount": 1.2346
+          }
+        ]
+      ],
+      "trace": [
+        [
+          "cache_read",
+          "div_KR_005930"
+        ],
+        [
+          "yahoo",
+          "005930.KS"
+        ],
+        [
+          "cache_save",
+          "div_KR_005930",
+          [
+            {
+              "date": "2026-01-01",
+              "amount": 0.25
+            },
+            {
+              "date": "2026-08-01",
+              "amount": 1.2346
+            }
+          ]
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "dividend_kr_suffix": {
+      "values": [
+        [
+          {
+            "date": "2026-01-01",
+            "amount": 0.25
+          },
+          {
+            "date": "2026-08-01",
+            "amount": 1.2346
+          }
+        ]
+      ],
+      "trace": [
+        [
+          "cache_read",
+          "div_KR_005930.KQ"
+        ],
+        [
+          "yahoo",
+          "005930.KQ"
+        ],
+        [
+          "cache_save",
+          "div_KR_005930.KQ",
+          [
+            {
+              "date": "2026-01-01",
+              "amount": 0.25
+            },
+            {
+              "date": "2026-08-01",
+              "amount": 1.2346
+            }
+          ]
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "dividend_empty": {
+      "values": [
+        []
+      ],
+      "trace": [
+        [
+          "cache_read",
+          "div_US_ABC"
+        ],
+        [
+          "yahoo",
+          "ABC"
+        ],
+        [
+          "cache_save",
+          "div_US_ABC",
+          []
+        ]
+      ],
+      "suffix": {},
+      "stdout": ""
+    },
+    "dividend_missing_ticker": {
+      "values": [
+        []
+      ],
+      "trace": [],
+      "suffix": {},
+      "stdout": ""
+    }
+  }
+}

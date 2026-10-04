@@ -349,3 +349,13 @@ DB 접근의 기존 호출 API는 `data/data_manager.py`에 유지합니다.
 풀 내부 변수 대신 `get_connection_pool()` 공개 함수를 사용하세요.
 운영 접속을 차단한 로컬 전후 비교는 `scripts/verify_data_repositories.py`,
 복원 사본의 동시성·롤백 검증은 `scripts/verify_postgres.py`를 참조하세요.
+
+외부 시세 응답 해석은 `logic/market_providers/`의 네이버·나무·Yahoo·
+업비트·빗썸 모듈에서 관리합니다. `price_fetcher.py`의 기존 함수는
+폴백·환산·배치·병렬 수집을 담당하며, 시세·배당·가상자산 캐시 정책은
+기존 서비스/수집기에 남아 있습니다. HTTP는 지연 생성되는 공용 세션을
+사용합니다. 테스트에서는 `_http_get` 또는 제공자 생성자의 콜백을
+교체하세요. 나무 인증·제한·계좌 동기화는 `data/nh_api.py`에 유지합니다.
+전후 비교는 `python scripts/verify_market_providers.py`로 실행하며,
+61개 합성 입력의 기준은 `64cda1d`입니다. 공급자 응답 형식 수정 시
+출처·제한시간·접미사 탐색·부분 수집·기존 캐시 보존을 함께 확인하세요.

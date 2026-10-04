@@ -7,9 +7,9 @@ yfinance로부터 수집하여 PostgreSQL market_cache 및 인메모리에 24시
 """
 
 import time
-import pandas as pd
 from typing import List, Dict, Any, Optional
 import yfinance as yf
+from logic.market_providers.yahoo import YahooQuotes
 
 from data.data_manager import get_market_cache, save_market_cache
 from logic.dividend_calculator import (
@@ -49,16 +49,7 @@ def _get_dividend_cache(clean_ticker, market):
         return (value, age) if isinstance(value, list) else (None, 0)
 
     def fetch():
-        sym = clean_ticker
-        if market == "KR" and not sym.endswith((".KS", ".KQ")):
-            sym += ".KS"
-        divs = yf.Ticker(sym).dividends
-        records = []
-        if divs is not None:
-            for dt, amt in divs.items():
-                if not pd.isna(amt) and amt > 0:
-                    records.append({"date": dt.strftime("%Y-%m-%d"), "amount": round(float(amt), 4)})
-        records.sort(key=lambda x: x["date"])
+        records = YahooQuotes(yf.Ticker).dividends(clean_ticker, market)
         if not records and cache.value:
             # yfinance can return an empty series after an upstream failure.
             # Previously recorded dividends must not silently disappear.

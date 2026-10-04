@@ -14,7 +14,7 @@ def test_get_us_stock_price_naver(mocker):
     mock_res = mocker.MagicMock()
     mock_res.status_code = 200
     mock_res.json.return_value = {'closePrice': '155.0'}
-    mocker.patch('logic.price_fetcher.requests.get', return_value=mock_res)
+    mocker.patch('logic.price_fetcher._http_get', return_value=mock_res)
     
     price, source = get_us_stock_price('AAPL', usd_krw=1380.0)
     assert price == 155.0 * 1380.0
@@ -22,7 +22,7 @@ def test_get_us_stock_price_naver(mocker):
 
 def test_get_us_stock_price_nh_fallback(mocker):
     # Mock Naver API to fail
-    mocker.patch('logic.price_fetcher.requests.get', side_effect=Exception("Naver Error"))
+    mocker.patch('logic.price_fetcher._http_get', side_effect=Exception("Naver Error"))
     # Mock NH API to succeed (2nd fallback)
     mocker.patch('logic.price_fetcher.nh_api_client.fetch_current_price', return_value=150.0)
     
@@ -32,7 +32,7 @@ def test_get_us_stock_price_nh_fallback(mocker):
 
 def test_get_us_stock_price_yfinance_fallback(mocker):
     # Mock naver and nh_api_client to fail, testing yfinance fallback
-    mocker.patch('logic.price_fetcher.requests.get', side_effect=Exception("Naver Error"))
+    mocker.patch('logic.price_fetcher._http_get', side_effect=Exception("Naver Error"))
     mocker.patch('logic.price_fetcher.nh_api_client.fetch_current_price', return_value=None)
     
     # Mock yfinance Ticker and history
@@ -49,7 +49,7 @@ def test_get_us_stock_price_yfinance_fallback(mocker):
     assert source == "yfinance"
 
 def test_get_us_stock_price_fastinfo(mocker):
-    mocker.patch('logic.price_fetcher.requests.get', side_effect=Exception("Naver Error"))
+    mocker.patch('logic.price_fetcher._http_get', side_effect=Exception("Naver Error"))
     mocker.patch('logic.price_fetcher.nh_api_client.fetch_current_price', return_value=None)
     
     mock_ticker = mocker.MagicMock()
@@ -70,7 +70,7 @@ def test_get_kr_stock_price_naver(mocker):
     mock_response.json.return_value = {
         'datas': [{'closePrice': '70000'}]
     }
-    mocker.patch('logic.price_fetcher.requests.get', return_value=mock_response)
+    mocker.patch('logic.price_fetcher._http_get', return_value=mock_response)
 
     price, source = get_kr_stock_price('005930')
     assert price == 70000.0
@@ -78,7 +78,7 @@ def test_get_kr_stock_price_naver(mocker):
 
 def test_get_kr_stock_price_nh_fallback(mocker):
     # Mock Naver API to fail
-    mocker.patch('logic.price_fetcher.requests.get', side_effect=Exception("Naver Error"))
+    mocker.patch('logic.price_fetcher._http_get', side_effect=Exception("Naver Error"))
     # Mock NH API to succeed
     mocker.patch('logic.price_fetcher.nh_api_client.fetch_current_price', return_value=71000.0)
 
@@ -93,7 +93,7 @@ def test_get_exchange_rate_naver(mocker):
     mock_response.json.return_value = {
         'exchangeInfo': {'calcPrice': '1350.5'}
     }
-    mocker.patch('logic.price_fetcher.requests.get', return_value=mock_response)
+    mocker.patch('logic.price_fetcher._http_get', return_value=mock_response)
     
     rate, source = get_exchange_rate_usd_krw()
     assert rate == 1350.5
@@ -101,7 +101,7 @@ def test_get_exchange_rate_naver(mocker):
 
 def test_get_exchange_rate_nh_fallback(mocker):
     # Mock Naver API to fail
-    mocker.patch('logic.price_fetcher.requests.get', side_effect=Exception("Naver Error"))
+    mocker.patch('logic.price_fetcher._http_get', side_effect=Exception("Naver Error"))
     # Mock NH API to succeed (2nd fallback)
     mocker.patch('logic.price_fetcher.nh_api_client.fetch_exchange_rate', return_value=1355.0)
 
@@ -128,7 +128,7 @@ def test_fetch_kr_stocks_batch(mocker):
             {'itemCode': '476760', 'closePrice': '8,780'}
         ]
     }
-    mocker.patch('logic.price_fetcher.requests.get', return_value=mock_res)
+    mocker.patch('logic.price_fetcher._http_get', return_value=mock_res)
     res = fetch_kr_stocks_batch(['0085P0', '476760'])
     assert res.get('0085P0') == 9545.0
     assert res.get('476760') == 8780.0
@@ -141,7 +141,7 @@ def test_us_stock_suffix_cache(mocker):
     mock_res = mocker.MagicMock()
     mock_res.status_code = 200
     mock_res.json.return_value = {'closePrice': '25.0'}
-    mocker.patch('logic.price_fetcher.requests.get', return_value=mock_res)
+    mocker.patch('logic.price_fetcher._http_get', return_value=mock_res)
 
     price, source = get_us_stock_price('TEST_TICKER', usd_krw=1000.0)
     assert price == 25000.0
