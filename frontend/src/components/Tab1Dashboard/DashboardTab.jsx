@@ -261,6 +261,15 @@ export default function DashboardTab({
     return '주식';
   };
 
+  // 투자 자산 표·카드: 자산군 순서 우선, 같은 자산군에서는 원화 평가금액 내림차순.
+  const investmentAssets = useMemo(() => {
+    const order = { '주식': 0, '채권': 1, '대체투자': 2, '예금': 3 };
+    return [...displayStockAssets].sort((a, b) =>
+      order[classifyAssetType(a)] - order[classifyAssetType(b)] ||
+      (Number(b.eval_amount) || 0) - (Number(a.eval_amount) || 0)
+    );
+  }, [displayStockAssets]);
+
   // 종목 유형별(주식/채권/대체투자/예금) 비중 도넛 차트 데이터 가공 (선택에 따라 예금 포함 또는 제외)
   const assetTypeDonutData = useMemo(() => {
     const categories = {
@@ -721,7 +730,7 @@ export default function DashboardTab({
                     </td>
                   </tr>
                 ) : (
-                  displayStockAssets.map((item) => {
+                  investmentAssets.map((item) => {
                   const isUs = item.market === 'US';
                   const isUsdMode = currencyMode === 'USD' && isUs;
                   const itemProfit = isUsdMode ? (item.profit_usd || 0) : (item.profit_krw || 0);
@@ -906,7 +915,7 @@ export default function DashboardTab({
               현재 보유 중인 투자 자산이 없습니다. (보유 수량 0주 종목 제외)
             </div>
           ) : (
-            displayStockAssets.map((item) => {
+            investmentAssets.map((item) => {
             const isUs = item.market === 'US';
             const isUsdMode = currencyMode === 'USD' && isUs;
             const itemProfit = isUsdMode ? (item.profit_usd || 0) : (item.profit_krw || 0);
