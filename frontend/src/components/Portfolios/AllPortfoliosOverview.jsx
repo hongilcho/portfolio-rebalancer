@@ -25,6 +25,7 @@ import DonutChart from '../common/DonutChart';
 import { createOverviewCache } from '../../utils/overviewCache';
 import MarketStatus from '../common/MarketStatus';
 import { useMarketRevalidation } from '../../utils/useMarketRevalidation';
+import { assetClassBreakdown } from '../../utils/assetClasses';
 
 const overviewCache = createOverviewCache();
 
@@ -66,55 +67,12 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
   }, [data?.portfolios, includeCrypto, crypto, portfolioColors]);
 
   // 전체 순자산 구성: 보유자산과 예수금의 합이 중앙 총자산과 일치해야 함.
-  const assetClassDonutData = useMemo(() => {
-    const classMap = {
-      'equity': { label: '📈 주식', value: 0, color: '#3B82F6' },
-      'bonds': { label: '📜 채권', value: 0, color: '#8B5CF6' },
-      'gold_commodities': { label: '🥇 대체투자', value: 0, color: '#EAB308' },
-      'deposits': { label: '🏦 예금', value: 0, color: '#10B981' },
-      'crypto': { label: '🪙 가상화폐', value: 0, color: '#F97316' },
-      'cash': { label: '💵 예수금', value: Number(data?.grand_total?.total_cash_krw) || 0, color: '#64748B' },
-    };
-
-    (data?.aggregated_assets || []).forEach(item => {
-      const evalAmt = Number(item.total_eval_amount) || 0;
-      if (evalAmt <= 0) return;
-
-      const name = (item.name || '').toLowerCase();
-      const ticker = (item.ticker || '').toUpperCase();
-      const market = (item.market || '').toUpperCase();
-      const assetType = (item.asset_type || '').toUpperCase();
-
-      const isDep = item.is_deposit || 
-                    assetType === 'DEPOSIT' || 
-                    ticker.startsWith('DEP') || 
-                    name.includes('예금') || 
-                    name.includes('적금') || 
-                    name.includes('새마을') || 
-                    name.includes('금고');
-
-      if (isDep) {
-        classMap['deposits'].value += evalAmt;
-      } else if (assetType === 'CRYPTO' || market === 'CRYPTO') {
-        classMap['crypto'].value += evalAmt;
-      } else if (name.includes('금99') || name.includes('금 99') || name.includes('원자재') || name.includes('gold') || ticker === 'PDBC' || ticker === 'M04020000') {
-        classMap['gold_commodities'].value += evalAmt;
-      } else if (
-        name.includes('국채') || name.includes('채권') || name.includes('bond') ||
-        name.includes('머니마켓') || ticker === '488770' ||
-        ticker === '0085P0' || ticker === '476760'
-      ) {
-        classMap['bonds'].value += evalAmt;
-      } else {
-        // 국내/해외 구분 없이 모두 '주식'
-        classMap['equity'].value += evalAmt;
-      }
-    });
-
-    return Object.values(classMap)
-      .filter(item => item.value > 0)
-      .sort((a, b) => b.value - a.value);
-  }, [data?.aggregated_assets, data?.grand_total?.total_cash_krw]);
+  const assetClassDonutData = useMemo(() =>
+    assetClassBreakdown(data?.aggregated_assets, 'total_eval_amount', {
+      includeCrypto: true,
+      cashKrw: Number(data?.grand_total?.total_cash_krw) || 0,
+    }),
+  [data?.aggregated_assets, data?.grand_total?.total_cash_krw]);
 
   const loadOverview = useCallback(async (isRefresh = false, cryptoToggle = includeCrypto) => {
     const sequence = ++requestSequence.current;
