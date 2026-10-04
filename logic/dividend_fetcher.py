@@ -38,10 +38,8 @@ def get_dividend_status():
             "refresh_failed": any(s["refresh_failed"] for s in statuses)}
 
 
-def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
-    clean_ticker = (ticker or "").strip().upper()
-    if not clean_ticker or clean_ticker in ("없음", "-", "M04020000"):
-        return []
+def _get_dividend_cache(clean_ticker, market):
+    """Create a lazy cache without doing DB or external provider IO."""
     key = f"div_{market}_{clean_ticker}"
 
     def load():
@@ -68,6 +66,46 @@ def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
 
     with _dividend_lock:
         cache = _dividend_memory_cache.setdefault(key, RefreshingCache(CACHE_TTL, load, fetch))
+    return cache
+
+
+def prepare_dividend_cache(batch_data):
+    """Restore held tickers from the existing dashboard SQL round trip.
+
+    Only initialise unloaded caches. A later DB snapshot must never overwrite
+    an in-flight refresh or a newer memory value. Missing rows remain unknown,
+    rather than being seeded as a verified empty dividend history.
+    """
+    if 'dividend_cache' not in batch_data:
+        return  # Older callers/test fixtures retain the lazy loader.
+    rows = batch_data['dividend_cache']
+    assets = {str(a['id']): a for a in batch_data.get('assets', [])}
+    for holding in batch_data.get('holdings', []):
+        asset = assets.get(str(holding['asset_id']), {})
+        ticker = (asset.get('ticker') or '').strip().upper()
+        if (not ticker or ticker in ('없음', '-', 'M04020000')
+                or asset.get('is_deposit') or '금' in asset.get('name', '')):
+            continue
+        market = asset.get('market', 'KR')
+        cache = _get_dividend_cache(ticker, market)
+        row = rows.get(f'div_{market}_{ticker}')
+        with cache.condition:
+            if cache.loaded or cache.refreshing:
+                continue
+            if row and isinstance(row.get('data'), list):
+                cache.seed(row['data'], time.time() - max(0, float(row.get('age_seconds') or 0)))
+            else:
+                # This SQL snapshot already checked the key; avoid another SELECT.
+                # With value=None, the existing cold/forced fetch semantics apply.
+                cache.loaded = True
+
+
+def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
+    clean_ticker = (ticker or "").strip().upper()
+    if not clean_ticker or clean_ticker in ("없음", "-", "M04020000"):
+        return []
+    key = f"div_{market}_{clean_ticker}"
+    cache = _get_dividend_cache(clean_ticker, market)
     try:
         force = getattr(_dividend_request, "force", False) and key not in getattr(_dividend_request, "statuses", {})
         records, status = cache.get(force=force)

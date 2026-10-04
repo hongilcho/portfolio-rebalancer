@@ -5,7 +5,7 @@ FastAPI 애플리케이션 엔트리포인트 모듈
 
 주요 아키텍처:
 1. Lifespan 이벤트(프리워밍):
-   - 컨테이너 기동 즉시 백그라운드 스레드에서 시장 시세 및 가상자산 캐시를 프리워밍(Warmup)하여 사용자 첫 접속 시 지연(Cold Start) 0초 구현.
+   - 서버 시작 시 시세·가상자산 및 보유 종목의 저장된 배당 캐시를 백그라운드에서 준비합니다.
 2. W3C Server-Timing 미들웨어:
    - 모든 HTTP 응답 헤더에 실제 백엔드 처리 지연시간(ms)을 기록하여 프론트엔드 및 성능 모니터링 지원.
 3. CORS 및 12개 도메인별 라우터 분기 등록.
@@ -26,7 +26,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from logic.refreshing_cache import MarketRefreshUnavailable
-from data.data_manager import init_db
+from data.data_manager import init_db, get_overview_batch_data
+from logic.dividend_fetcher import prepare_dividend_cache
 from backend.services import market_service
 from logic.crypto_price_fetcher import get_crypto_prices
 from backend.routers import auth, market, dashboard, accounts, assets, holdings, rebalance, trades, sync, crypto, portfolios, system
@@ -35,8 +36,7 @@ from backend.routers import auth, market, dashboard, accounts, assets, holdings,
 async def lifespan(app: FastAPI):
     # Imports and test collection must not connect to a database.
     init_db()
-    # Zero-Cold-Start 백그라운드 프리워밍:
-    # 컨테이너 기동 즉시 데몬 스레드로 백그라운드 갱신을 시작하여 사용자가 들어오기 전에 항상 최신 시세 준비
+    # Market collection and dividend DB restoration run independently.
     def _background_warmup():
         try:
             market_service.warmup()
@@ -45,6 +45,13 @@ async def lifespan(app: FastAPI):
             print(f"Background warmup notice: {e}")
 
     threading.Thread(target=_background_warmup, daemon=True).start()
+    def _background_dividend_warmup():
+        try:
+            prepare_dividend_cache(get_overview_batch_data())
+        except Exception as e:
+            print(f"Dividend cache warmup notice: {type(e).__name__}")
+
+    threading.Thread(target=_background_dividend_warmup, daemon=True).start()
     yield
 
 app = FastAPI(

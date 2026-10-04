@@ -1433,7 +1433,19 @@ def get_overview_batch_data() -> Dict[str, Any]:
             JOIN accounts acc ON h.account_id = acc.id
         ) h), '[]'::json),
         'crypto_holdings', COALESCE((SELECT json_agg(c) FROM crypto_holdings c), '[]'::json),
-        'trade_history', COALESCE((SELECT json_agg(t ORDER BY t.trade_date ASC, t.id ASC) FROM trade_history t), '[]'::json)
+        'trade_history', COALESCE((SELECT json_agg(t ORDER BY t.trade_date ASC, t.id ASC) FROM trade_history t), '[]'::json),
+        'dividend_cache', COALESCE((
+            SELECT json_object_agg(mc.key, json_build_object(
+                'data', mc.data,
+                'age_seconds', EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - mc.updated_at))
+            )) FROM market_cache mc
+            WHERE mc.key IN (
+                SELECT 'div_' || a.market || '_' || UPPER(TRIM(a.ticker))
+                FROM assets a JOIN holdings h ON h.asset_id = a.id
+                WHERE NOT COALESCE(a.is_deposit, FALSE)
+                  AND COALESCE(a.ticker, '') NOT IN ('', '-', '없음', 'M04020000')
+            )
+        ), '{}'::json)
     );
     """
     conn = get_connection()

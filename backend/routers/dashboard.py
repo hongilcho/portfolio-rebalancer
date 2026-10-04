@@ -17,7 +17,7 @@ from typing import Dict, Any, List, Optional
 
 from data.data_manager import get_overview_batch_data
 from backend.services import market_service
-from logic.dividend_fetcher import calculate_adjusted_holding_prices, begin_dividend_request, get_dividend_status
+from logic.dividend_fetcher import calculate_adjusted_holding_prices, begin_dividend_request, get_dividend_status, prepare_dividend_cache
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -34,6 +34,7 @@ def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = Fa
         dict: portfolios, dashboard, assets, accounts, prices_data, usd_krw, rate_source
     """
     batch_data = get_overview_batch_data()
+    prepare_dividend_cache(batch_data)
     portfolios = batch_data.get("portfolios", [])
     all_accounts = batch_data.get("accounts", [])
     all_assets = batch_data.get("assets", [])
@@ -97,6 +98,7 @@ def get_dashboard_summary(
     """
     if accounts is None or assets is None or all_holdings is None:
         batch_data = get_overview_batch_data()
+        prepare_dividend_cache(batch_data)
         all_accounts = batch_data.get("accounts", [])
         all_assets = batch_data.get("assets", [])
         if all_holdings is None:

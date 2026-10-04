@@ -22,7 +22,7 @@ from backend.services import market_service
 from backend.routers.dashboard import get_dashboard_summary
 from backend.routers.crypto import get_crypto_summary
 from logic.crypto_price_fetcher import get_crypto_prices, get_crypto_status
-from logic.dividend_fetcher import begin_dividend_request, get_dividend_status
+from logic.dividend_fetcher import begin_dividend_request, get_dividend_status, prepare_dividend_cache
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
@@ -77,6 +77,7 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     """
     # 1. DB 전체 데이터를 단 1회의 PostgreSQL 네트워크 왕복으로 배치 조회
     batch_data = get_overview_batch_data()
+    prepare_dividend_cache(batch_data)
     portfolios = batch_data.get("portfolios", [])
     all_accounts = batch_data.get("accounts", [])
     all_assets = batch_data.get("assets", [])
