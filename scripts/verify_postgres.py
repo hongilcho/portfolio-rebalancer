@@ -208,7 +208,7 @@ def main():
         require((h["quantity"],h["avg_price"]) == (1,200))
 
     check("concurrent buy and deletion preserve remaining cash and cost", buy_while_deleting)
-    dm._connection_pool.closeall()
+    dm.get_connection_pool().closeall()
     report["status"] = "passed"
     report["check_count"] = len(report["checks"])
     report["backup_sha256"] = metadata["archive_sha256"]

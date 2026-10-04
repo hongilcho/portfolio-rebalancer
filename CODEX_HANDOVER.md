@@ -339,3 +339,13 @@ $$\text{Eval Profit (KRW)} = \text{Pure Stock Profit (KRW)} + \text{FX Profit (K
 `common/DeferredDialog.jsx`를 사용합니다. 구조 변경 시 `frontend`에서
 `npm test`와 `npm run lint`도 실행하세요. 17개 화면 지문은 분리 전
 `b273a8a`의 합성 입력 결과이며, 의도한 화면 변경 없이 갱신하지 마세요.
+
+DB 접근의 기존 호출 API는 `data/data_manager.py`에 유지합니다.
+연결 풀·대여·반납은 `data/connection.py`, 기존 시작 시 DDL은
+`data/schema.py`, 업무별 SQL은 `data/repositories/`에서 관리합니다.
+공통 순수 정규화는 `data/normalization.py`에 있습니다. 저장 모듈은
+`RepositoryContext`로 연결·ID·환율 등의 콜백을 받아 사용합니다.
+거래 실행·취소의 여러 테이블 쓰기는 한 연결과 한 트랜잭션을 유지하세요.
+풀 내부 변수 대신 `get_connection_pool()` 공개 함수를 사용하세요.
+운영 접속을 차단한 로컬 전후 비교는 `scripts/verify_data_repositories.py`,
+복원 사본의 동시성·롤백 검증은 `scripts/verify_postgres.py`를 참조하세요.

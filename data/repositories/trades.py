@@ -1,0 +1,324 @@
+"""Trade execution, reversal and transfers; no nested connection leases."""
+import math
+from typing import Tuple
+from psycopg2.extras import RealDictCursor
+from logic.trade_accounting import cash_movement, replay_holding
+from data.repository_context import RepositoryContext
+
+def execute_trade(
+    db: RepositoryContext,
+    trade_date,
+    account_id,
+    asset_id,
+    trade_type,
+    quantity,
+    price,
+    currency=None,
+    exchange_rate=None,
+):
+    if not all(math.isfinite(v) and v > 0 for v in (quantity, price)):
+        return False, "수량과 단가는 0보다 커야 합니다."
+        
+    if trade_type not in ('INIT', 'BUY', 'SELL') or currency not in (None, 'KRW', 'USD'):
+        return False, "거래 유형 또는 통화를 확인해주세요."
+    conn = db.connect()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    new_trade_id = db.new_id()
+    try:
+        is_us = (currency == 'USD') if currency else (exchange_rate is not None and float(exchange_rate) > 1.0)
+        if currency is None:
+            currency = 'USD' if is_us else 'KRW'
+
+        if is_us or currency == 'USD':
+            if exchange_rate is None or float(exchange_rate) <= 1.0:
+                try:
+                    exchange_rate = db.exchange_rate() or 1380.0
+                except Exception:
+                    exchange_rate = 1380.0
+            else:
+                exchange_rate = float(exchange_rate)
+        else:
+            exchange_rate = 1.0
+
+        if not math.isfinite(exchange_rate) or exchange_rate <= 0:
+            raise ValueError("매입환율은 양수여야 합니다.")
+        if not math.isfinite(quantity * price * exchange_rate):
+            raise ValueError("거래 금액이 허용 범위를 초과합니다.")
+        # Lock before reading balances; deletion takes the same account lock.
+        cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
+        acc_row = cursor.fetchone()
+        if not acc_row:
+            raise ValueError("존재하지 않는 계좌입니다.")
+        dep_krw = float(acc_row.get('deposit_krw') or 0.0)
+        dep_usd = float(acc_row.get('deposit_usd') or 0.0)
+        delta_krw, delta_usd = cash_movement(
+            trade_type, quantity, price, currency, exchange_rate, dep_krw, dep_usd
+        )
+        cursor.execute("""
+            INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price, currency, exchange_rate, cash_delta_krw, cash_delta_usd)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (new_trade_id, trade_date, str(account_id), str(asset_id), trade_type, quantity, price, currency, exchange_rate, delta_krw, delta_usd))
+        if trade_type in ('BUY', 'SELL'):
+            cursor.execute("""
+                UPDATE accounts SET deposit_krw = %s, deposit_usd = %s WHERE id = %s
+            """, (dep_krw + delta_krw, dep_usd + delta_usd, str(account_id)))
+
+        cursor.execute('''
+            SELECT quantity, avg_price, avg_price_usd, buy_fx_rate FROM holdings 
+            WHERE account_id = %s AND asset_id = %s
+        ''', (str(account_id), str(asset_id)))
+        
+        row = cursor.fetchone()
+        
+        if row:
+            curr_qty = float(row['quantity'] or 0.0)
+            curr_avg_price = float(row['avg_price'] or 0.0)
+            curr_avg_usd = float(row.get('avg_price_usd') or 0.0)
+            curr_buy_fx = float(row.get('buy_fx_rate') or 0.0)
+            if curr_buy_fx == 0.0 and curr_avg_usd > 0 and curr_avg_price > 0:
+                curr_buy_fx = curr_avg_price / curr_avg_usd
+            
+            if trade_type == 'INIT':
+                new_qty = quantity
+                if is_us or currency == 'USD':
+                    new_avg_usd = price
+                    new_buy_fx = exchange_rate
+                    new_avg_price = round(new_avg_usd * new_buy_fx, 2)
+                else:
+                    new_avg_price = price
+                    new_avg_usd = 0.0
+                    new_buy_fx = 0.0
+            elif trade_type == 'BUY':
+                new_qty = curr_qty + quantity
+                if new_qty > 0:
+                    if is_us or currency == 'USD':
+                        c_usd_0 = curr_qty * curr_avg_usd
+                        c_krw_0 = c_usd_0 * curr_buy_fx
+                        c_usd_new = quantity * price
+                        c_krw_new = c_usd_new * exchange_rate
+                        
+                        total_c_usd = c_usd_0 + c_usd_new
+                        total_c_krw = c_krw_0 + c_krw_new
+                        
+                        new_avg_usd = total_c_usd / new_qty
+                        new_buy_fx = (total_c_krw / total_c_usd) if total_c_usd > 0 else exchange_rate
+                        new_avg_price = total_c_krw / new_qty
+                    else:
+                        new_avg_price = ((curr_qty * curr_avg_price) + (quantity * price)) / new_qty
+                        new_avg_usd = 0.0
+                        new_buy_fx = 0.0
+                else:
+                    new_avg_price = price
+                    new_avg_usd = price if (is_us or currency == 'USD') else 0.0
+                    new_buy_fx = exchange_rate if (is_us or currency == 'USD') else 0.0
+            else: # SELL
+                if quantity > curr_qty + 1e-9:
+                    raise ValueError("매도할 보유 수량이 부족합니다.")
+                new_qty = curr_qty - quantity
+                new_avg_price = curr_avg_price
+                new_avg_usd = curr_avg_usd
+                new_buy_fx = curr_buy_fx
+                if new_qty <= 0:
+                    new_qty = 0.0
+                    new_avg_price = 0.0
+                    new_avg_usd = 0.0
+                    new_buy_fx = 0.0
+                    
+            if trade_type in ('BUY', 'INIT'):
+                cursor.execute('''
+                    UPDATE holdings
+                    SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s,
+                        original_avg_price = %s, original_avg_price_usd = %s
+                    WHERE account_id = %s AND asset_id = %s
+                ''', (new_qty, new_avg_price, new_avg_usd, new_buy_fx, new_avg_price, new_avg_usd, str(account_id), str(asset_id)))
+            else:
+                cursor.execute('''
+                    UPDATE holdings
+                    SET quantity = %s, avg_price = %s, avg_price_usd = %s, buy_fx_rate = %s
+                    WHERE account_id = %s AND asset_id = %s
+                ''', (new_qty, new_avg_price, new_avg_usd, new_buy_fx, str(account_id), str(asset_id)))
+            
+        else:
+            if trade_type in ('BUY', 'INIT'):
+                new_h_id = db.new_id()
+                if is_us or currency == 'USD':
+                    new_avg_usd = price
+                    new_buy_fx = exchange_rate
+                    new_avg_price = round(price * exchange_rate, 2)
+                else:
+                    new_avg_price = price
+                    new_avg_usd = 0.0
+                    new_buy_fx = 0.0
+                cursor.execute('''
+                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate, original_avg_price, original_avg_price_usd)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (new_h_id, str(account_id), str(asset_id), quantity, new_avg_price, new_avg_usd, new_buy_fx, new_avg_price, new_avg_usd))
+            else:
+                conn.rollback()
+                return False, "매도할 보유 잔고가 없습니다."
+                
+        conn.commit()
+        return True, "매매 기록 및 잔고 업데이트가 완료되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+
+def get_trade_history(db: RepositoryContext, portfolio_id: str = None):
+    conn = db.connect()
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        if portfolio_id:
+            cursor.execute('''
+                SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker, ast.market
+                FROM trade_history t
+                JOIN accounts a ON t.account_id = a.id
+                JOIN assets ast ON t.asset_id = ast.id
+                WHERE t.trade_type != 'INIT' AND a.portfolio_id = %s
+                ORDER BY t.trade_date DESC, t.id DESC
+            ''', (portfolio_id,))
+        else:
+            cursor.execute('''
+                SELECT t.*, a.account_alias, a.account_type, ast.name as asset_name, ast.ticker, ast.market
+                FROM trade_history t
+                JOIN accounts a ON t.account_id = a.id
+                JOIN assets ast ON t.asset_id = ast.id
+                WHERE t.trade_type != 'INIT'
+                ORDER BY t.trade_date DESC, t.id DESC
+            ''')
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def delete_trades(db: RepositoryContext, trade_ids):
+    """Reverse recorded cash movements and replay holdings in one transaction.
+
+    Legacy BUY/SELL rows without cash deltas require reconciliation first.
+    Account locks are taken in stable order before locking transaction rows.
+    """
+    ids = [str(tid) for tid in trade_ids]
+    if not ids:
+        return False, "삭제할 거래를 선택해주세요."
+    if len(ids) != len(set(ids)):
+        return False, "중복된 거래 ID가 있습니다."
+    placeholders = ', '.join(['%s'] * len(ids))
+    conn = db.connect()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cursor.execute(f"SELECT id, account_id FROM trade_history WHERE id IN ({placeholders})", tuple(ids))
+        references = cursor.fetchall()
+        if len(references) != len(ids):
+            raise ValueError("존재하지 않는 매매 기록이 있습니다.")
+        account_ids = sorted({r['account_id'] for r in references})
+        acc_placeholders = ', '.join(['%s'] * len(account_ids))
+        cursor.execute(f"SELECT id FROM accounts WHERE id IN ({acc_placeholders}) ORDER BY id FOR UPDATE", tuple(account_ids))
+        if len(cursor.fetchall()) != len(account_ids):
+            raise ValueError("존재하지 않는 계좌입니다.")
+        cursor.execute(f"SELECT * FROM trade_history WHERE id IN ({placeholders}) FOR UPDATE", tuple(ids))
+        selected = cursor.fetchall()
+        if len(selected) != len(ids):
+            raise ValueError("이미 삭제된 매매 기록이 있습니다.")
+        for trade in selected:
+            if trade['trade_type'] != 'INIT' and (
+                trade.get('cash_delta_krw') is None or trade.get('cash_delta_usd') is None
+            ):
+                raise ValueError("기존 거래의 결제 통화·예수금 변동 기록이 없습니다. 잔고 대사 후 삭제해주세요.")
+        cursor.execute(f"DELETE FROM trade_history WHERE id IN ({placeholders})", tuple(ids))
+        for trade in selected:
+            if trade['trade_type'] != 'INIT':
+                cursor.execute("""
+                    UPDATE accounts
+                    SET deposit_krw = deposit_krw - %s, deposit_usd = deposit_usd - %s
+                    WHERE id = %s
+                """, (trade['cash_delta_krw'], trade['cash_delta_usd'], trade['account_id']))
+        cursor.execute(f"SELECT deposit_krw, deposit_usd FROM accounts WHERE id IN ({acc_placeholders})", tuple(account_ids))
+        if any(float(a.get('deposit_krw') or 0) < -1e-9 or float(a.get('deposit_usd') or 0) < -1e-9
+               for a in cursor.fetchall()):
+            raise ValueError("삭제 후 예수금이 부족합니다. 관련 거래 또는 현재 잔고를 확인해주세요.")
+        pairs = sorted({(t['account_id'], t['asset_id']) for t in selected})
+        for account_id, asset_id in pairs:
+            cursor.execute("""
+                SELECT t.*, a.market FROM trade_history t
+                JOIN assets a ON t.asset_id = a.id
+                WHERE t.account_id = %s AND t.asset_id = %s
+            """, (account_id, asset_id))
+            qty, avg_krw, avg_usd, buy_fx = replay_holding(cursor.fetchall())
+            if qty > 0:
+                cursor.execute("""
+                    INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate, original_avg_price, original_avg_price_usd)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(account_id, asset_id) DO UPDATE SET
+                        quantity = EXCLUDED.quantity,
+                        avg_price = EXCLUDED.avg_price,
+                        avg_price_usd = EXCLUDED.avg_price_usd,
+                        buy_fx_rate = EXCLUDED.buy_fx_rate,
+                        original_avg_price = EXCLUDED.avg_price,
+                        original_avg_price_usd = EXCLUDED.avg_price_usd
+                """, (db.new_id(), account_id, asset_id, qty, avg_krw, avg_usd, buy_fx, avg_krw, avg_usd))
+            else:
+                # Keep optional first-buy-date and dividend overrides for a future
+                # undo/re-entry, and let quantity filters hide the closed position.
+                cursor.execute("""
+                    UPDATE holdings SET quantity = 0, avg_price = 0, avg_price_usd = 0,
+                        buy_fx_rate = 0, original_avg_price = 0, original_avg_price_usd = 0
+                    WHERE account_id = %s AND asset_id = %s
+                """, (account_id, asset_id))
+        conn.commit()
+        return True, "매매 기록이 삭제되었으며 예수금·수량·매입원가가 복원되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+
+def apply_transfer_plan(db: RepositoryContext, transfer_plan: list) -> Tuple[bool, str]:
+    """
+    리밸런싱 이체 지시서(transfer_plan)에 명시된 금액을 각 계좌의 예수금(deposit_krw)에 즉시 반영합니다.
+    
+    원자적(Atomic) 트랜잭션으로 처리되어, 도중 하나라도 오류가 발생할 경우 자동 롤백됩니다.
+
+    Args:
+        transfer_plan (list): 계좌 ID(account_id), 이체유형(type: DEPOSIT/WITHDRAW), 금액(amount) 목록
+
+    Returns:
+        Tuple[bool, str]: (성공 여부, 결과 또는 오류 메시지)
+    """
+    if not transfer_plan:
+        return True, "반영할 이체 내역이 없습니다."
+        
+    conn = db.connect()
+    cursor = conn.cursor()
+    try:
+        for tr in transfer_plan:
+            acc_id = str(tr['account_id'])
+            amount = float(tr['amount'])
+            
+            # Fetch current deposit
+            cursor.execute("SELECT deposit_krw FROM accounts WHERE id = %s", (acc_id,))
+            row = cursor.fetchone()
+            if not row:
+                continue
+                
+            curr_deposit = float(row[0])
+            if tr['type'] == 'DEPOSIT':
+                new_deposit = curr_deposit + amount
+            elif tr['type'] == 'WITHDRAW':
+                new_deposit = curr_deposit - amount
+            else:
+                continue
+                
+            # Update deposit
+            cursor.execute("UPDATE accounts SET deposit_krw = %s WHERE id = %s", (new_deposit, acc_id))
+            
+        conn.commit()
+        return True, "이체 지시서가 실제 계좌 예수금에 모두 반영되었습니다."
+    except Exception as e:
+        conn.rollback()
+        return False, f"이체 내역 반영 중 오류가 발생했습니다: {str(e)}"
+    finally:
+        conn.close()
