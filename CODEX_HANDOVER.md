@@ -323,3 +323,9 @@ $$\text{Eval Profit (KRW)} = \text{Pure Stock Profit (KRW)} + \text{FX Profit (K
 ## 최신 보완 사항
 
 개별·전체 화면은 배당 포함 보유자산 수익률을 사용하며 예수금을 분모에서 제외합니다. 거래 취소의 현금 복원, 기존 거래 삭제 제한, 테스트 격리와 배포 전 검증은 [ACCOUNTING_CHANGES.md](docs/ACCOUNTING_CHANGES.md)를 우선 참조하세요. 문서의 성능 수치와 운영 설정은 실제 측정·대시보드 확인 없이 보장하지 않습니다.
+
+평가·배당 집계는 `backend/valuation_service.py`와 `logic/*_valuation.py`,
+`logic/dividend_calculator.py`에 분리되어 있습니다. 라우터는 조회와 응답
+메타데이터를 처리합니다. 계산식 수정 시 개별·전체 응답과 반올림 경계를
+함께 검증하세요. 구조와 검증 범위는
+[LOADING_IMPROVEMENTS.md](docs/LOADING_IMPROVEMENTS.md)를 참조하세요.

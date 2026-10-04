@@ -1,0 +1,24 @@
+{
+  "source_commit": "dea1258",
+  "data": "synthetic fixtures in test_valuation_refactor.py; fixed quotes/dividends",
+  "sha256": {
+    "normal/bundle": "55d6a39ecc535cb60daf52474944eb74312e4a573e01ae5f4363a3d328a9758e",
+    "normal/overview": "7363869ab4d2dcfe497e12b63a1a6806cd21c1841bac427f30a0502029a6512f",
+    "normal/overview_crypto": "2beeccca75b7c7f24bf4255f80670842d1822b3295ed74d4f204df61b29d7fdd",
+    "manual/bundle": "fc9700089e9310ce5daaa8416ab982d0057065fd4f974b2d6093fe31e972a388",
+    "manual/overview": "306098983c92aa8c554c11e0f079ffa488aef3176f2c815ca57c5924be8d6d3b",
+    "manual/overview_crypto": "1ba4f1547f9044dcca28c456a70bb708f832f0ed270d616bf5f08b05c523f3ad",
+    "zero_quotes/bundle": "695ff8d79a677e62bcb45acad46a7c3d034b17cb3d60c9aa2e4681201ba2448c",
+    "zero_quotes/overview": "bcafc305007477ca870248ec1146917f358fd350349b513f3512719a2e28afbb",
+    "zero_quotes/overview_crypto": "65c3dfd828696597f00f336fea9cacf3d79ce667fed1766e27d95416ba3d511f",
+    "missing_quotes/bundle": "3fc6bb04d5ad313141c1905047684b642a4e254dcd6539addc0487d4926cb48b",
+    "missing_quotes/overview": "952614cb59deae1c340007425a794d317c98dd65f47a9c6107aca328d121609a",
+    "missing_quotes/overview_crypto": "c5a880b330ab42edccddae41097066cb5bf1f0aa2ed90cb07a226922a63b1130",
+    "empty/bundle": "0e5cc5df7f0024ed9fb24a7f6a073bc220f43be6bec03e8287b04640b2e8e3aa",
+    "empty/overview": "215d85b3b45c0761d0b2b9d86f323daed672c0aec2d2d074b0600201eec5c885",
+    "empty/overview_crypto": "59d7d2e488b66e34563bad4504ebd6a0cb9f8e8f276256d5d000cc152f7ad54b",
+    "zero_fx/bundle": "1605be28b8d39afa58e5aa4b04b295a711462e76073ecaa5388b992f9d797391",
+    "zero_fx/overview": "87d3f174cfc0f5bc8f6264132b33ff4c8052ac5fe14d4330960072f3ce161292",
+    "zero_fx/overview_crypto": "7c516d48742e7d11a4c7529ffd62b39dee1583d97bb1c726fdd0f850638c20e9"
+  }
+}
