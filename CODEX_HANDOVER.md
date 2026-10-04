@@ -329,3 +329,13 @@ $$\text{Eval Profit (KRW)} = \text{Pure Stock Profit (KRW)} + \text{FX Profit (K
 메타데이터를 처리합니다. 계산식 수정 시 개별·전체 응답과 반올림 경계를
 함께 검증하세요. 구조와 검증 범위는
 [LOADING_IMPROVEMENTS.md](docs/LOADING_IMPROVEMENTS.md)를 참조하세요.
+
+큰 프런트엔드 화면의 표·카드·차트·입력 폼은 해당 화면 디렉터리의
+하위 컴포넌트로 분리했습니다. 데이터 조회·저장·화면 상태는
+`DashboardTab`·`SettingsTab`·`HistoryTab`·`CryptoTab`·
+`AllPortfoliosOverview`에서 관리합니다. `App.jsx`는 기본 대시보드를
+즉시 로드하고 나머지 탭은 선택 시 로드합니다. 모달 로딩 안내는
+`common/ViewLoading.jsx`, 첫 열기 후 입력 상태 보존은
+`common/DeferredDialog.jsx`를 사용합니다. 구조 변경 시 `frontend`에서
+`npm test`와 `npm run lint`도 실행하세요. 17개 화면 지문은 분리 전
+`b273a8a`의 합성 입력 결과이며, 의도한 화면 변경 없이 갱신하지 마세요.

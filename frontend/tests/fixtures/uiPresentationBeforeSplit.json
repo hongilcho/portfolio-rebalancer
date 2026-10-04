@@ -1,0 +1,22 @@
+{
+  "source_commit": "b273a8a",
+  "sha256": {
+    "dashboard/KRW": "ee199b71110fcabe95d110623e19c99f0da3ee3fc8aa562e1187f6eb8998d2d0",
+    "dashboard/USD": "316ed1b793f1139bd3a1ca45c5c754e45f926191e141a9db3424108767ad75e8",
+    "dashboard/no-deposit": "3f5129c8c339c2e337af8734c132e16a628a7551bfe814cf39c2fa6d7bb29768",
+    "dashboard/collapsed": "c91e81a33807b4d1e4889b289a14478b93a3c213e9a8a3f5df3909a239450418",
+    "dashboard/no-data": "48af2e6aa349ca6c381ecddfcad6c35b5d15f3454a88d4aff9f6ca2e85492e7b",
+    "settings/tables": "d3acd6e8dd61bc6a92113320d760176ac59c1f0650680b5057d458dc2cce7e23",
+    "settings/new-account": "602251a022c453f6c5cda8e05d3b2dca8be5330276d45e4fca6708ef5bf85b4c",
+    "settings/edit-account": "fed93aabb3e2a2fdcc03b0ec7d90b9a82cdcf631b6fbe2c6841c9bfe5fe73c43",
+    "settings/new-US-asset": "c43e14b7142de6472ab196586aad2be60f156c786f4ff2ab2403e59f02d31471",
+    "settings/edit-deposit": "d02fb4415e43592e07b2ac6695b68f9515761341240337953690513cc428cbe4",
+    "history/empty": "2c2edb52e7b7c74eb23f5d657741e5a470b92c907bb435f9716b89985003ba94",
+    "history/filled-forms": "73104cf7cf7f1c45c675c7beb6682b326a471e4f94742ea8ff1993848ad81fa2",
+    "overview/KRW": "ad703d16caad5132a682394a3a358d7c6b709b6a5c15ecaa27f225d03020498b",
+    "overview/USD": "1162b5dc324691a7af8b194cd3733b1ece5c8ebaef1f4ddbb8ede45aa8b8d42f",
+    "overview/no-crypto": "ae95dc5b044bc5e8d2ff29079fd3ffacefa93491d0de2dd4756bf96d2ca7b242",
+    "crypto/loaded": "d90c1c862c06abe1a7287ff79cf20dc073e002303ee7ce54c8a55e9907908c35",
+    "crypto/empty": "3111a4745e1f203b6059cff20bdedafad3e3a5ef0b869e8402c85fa36e450136"
+  }
+}

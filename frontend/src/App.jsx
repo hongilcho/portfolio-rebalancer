@@ -17,7 +17,7 @@
  *    - 5. 계좌 마스터 관리 (SettingsTab)
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { 
   BarChart3, Target, Scale, History, Settings, RefreshCw 
 } from 'lucide-react';
@@ -25,14 +25,18 @@ import { api } from './utils/api';
 import Header from './components/Header';
 import AuthModal from './components/AuthModal';
 import DashboardTab from './components/Tab1Dashboard/DashboardTab';
-import WeightsTab from './components/Tab2Weights/WeightsTab';
-import RebalanceTab from './components/Tab3Rebalance/RebalanceTab';
-import HistoryTab from './components/Tab4History/HistoryTab';
-import CryptoTab from './components/Tab5Crypto/CryptoTab';
-import SettingsTab from './components/Tab5Settings/SettingsTab';
-import ManagePortfoliosModal from './components/Portfolios/ManagePortfoliosModal';
-import AllPortfoliosOverview from './components/Portfolios/AllPortfoliosOverview';
+import ViewLoading from './components/common/ViewLoading';
+import DeferredDialog from './components/common/DeferredDialog';
 import { useMarketRevalidation } from './utils/useMarketRevalidation';
+
+// Keep the initial dashboard eager; fetch other screens only when selected.
+const WeightsTab = lazy(() => import('./components/Tab2Weights/WeightsTab'));
+const RebalanceTab = lazy(() => import('./components/Tab3Rebalance/RebalanceTab'));
+const HistoryTab = lazy(() => import('./components/Tab4History/HistoryTab'));
+const CryptoTab = lazy(() => import('./components/Tab5Crypto/CryptoTab'));
+const SettingsTab = lazy(() => import('./components/Tab5Settings/SettingsTab'));
+const ManagePortfoliosModal = lazy(() => import('./components/Portfolios/ManagePortfoliosModal'));
+const AllPortfoliosOverview = lazy(() => import('./components/Portfolios/AllPortfoliosOverview'));
 
 const TABS = [
   { id: 'tab1', label: '📊 1. 포트폴리오 현황', icon: BarChart3 },
@@ -216,25 +220,29 @@ export default function App() {
       {/* Content View: When 'all' is selected -> AllPortfoliosOverview */}
       {currentPortfolioId === 'all' ? (
         <main>
-          <AllPortfoliosOverview 
-            key={childRefreshKey}
-            onMarketUpdate={updateMarketHeader}
-            forceRefreshOnMount={childRefreshKey > 0}
-            currencyMode={currencyMode}
-            onSelectPortfolio={(id) => {
-              if (id === 'tab_crypto' || id === 'crypto') {
-                handleSelectPortfolio('crypto');
-              } else {
-                handleSelectPortfolio(id);
-                setActiveTab('tab1');
-              }
-            }} 
-          />
+          <Suspense fallback={<ViewLoading />}>
+            <AllPortfoliosOverview
+              key={childRefreshKey}
+              onMarketUpdate={updateMarketHeader}
+              forceRefreshOnMount={childRefreshKey > 0}
+              currencyMode={currencyMode}
+              onSelectPortfolio={(id) => {
+                if (id === 'tab_crypto' || id === 'crypto') {
+                  handleSelectPortfolio('crypto');
+                } else {
+                  handleSelectPortfolio(id);
+                  setActiveTab('tab1');
+                }
+              }}
+            />
+          </Suspense>
         </main>
       ) : currentPortfolioId === 'crypto' ? (
         /* Content View: When 'crypto' is selected -> Independent Crypto Dashboard */
         <main>
-          <CryptoTab key={childRefreshKey} forceRefreshOnMount={childRefreshKey > 0} currentPortfolioId={currentPortfolioId} />
+          <Suspense fallback={<ViewLoading />}>
+            <CryptoTab key={childRefreshKey} forceRefreshOnMount={childRefreshKey > 0} currentPortfolioId={currentPortfolioId} />
+          </Suspense>
         </main>
       ) : (
         <>
@@ -264,66 +272,70 @@ export default function App() {
             </div>
           ) : (
             <main>
-              {activeTab === 'tab1' && (
-                <DashboardTab
-                  dashboardData={dashboardData}
-                  assets={assets}
-                  accounts={accounts}
-                  currencyMode={currencyMode}
-                  onRefresh={() => loadAllData(true, currentPortfolioId)}
-                />
-              )}
+              <Suspense fallback={<ViewLoading />}>
+                {activeTab === 'tab1' && (
+                  <DashboardTab
+                    dashboardData={dashboardData}
+                    assets={assets}
+                    accounts={accounts}
+                    currencyMode={currencyMode}
+                    onRefresh={() => loadAllData(true, currentPortfolioId)}
+                  />
+                )}
 
-              {activeTab === 'tab2' && (
-                <WeightsTab
-                  assets={assets}
-                  accounts={accounts}
-                  onSaved={() => loadAllData(false, currentPortfolioId)}
-                />
-              )}
+                {activeTab === 'tab2' && (
+                  <WeightsTab
+                    assets={assets}
+                    accounts={accounts}
+                    onSaved={() => loadAllData(false, currentPortfolioId)}
+                  />
+                )}
 
-              {activeTab === 'tab3' && (
-                <RebalanceTab
-                  onRefresh={() => loadAllData(true, currentPortfolioId)}
-                  currentPortfolioId={currentPortfolioId}
-                />
-              )}
+                {activeTab === 'tab3' && (
+                  <RebalanceTab
+                    onRefresh={() => loadAllData(true, currentPortfolioId)}
+                    currentPortfolioId={currentPortfolioId}
+                  />
+                )}
 
-              {activeTab === 'tab4' && (
-                <HistoryTab
-                  assets={assets}
-                  accounts={accounts}
-                  priceMap={priceMap}
-                  usdKrw={usdKrw}
-                  pricesData={pricesData}
-                  currentPortfolioId={currentPortfolioId}
-                  onSaved={() => loadAllData(false, currentPortfolioId)}
-                />
-              )}
+                {activeTab === 'tab4' && (
+                  <HistoryTab
+                    assets={assets}
+                    accounts={accounts}
+                    priceMap={priceMap}
+                    usdKrw={usdKrw}
+                    pricesData={pricesData}
+                    currentPortfolioId={currentPortfolioId}
+                    onSaved={() => loadAllData(false, currentPortfolioId)}
+                  />
+                )}
 
-              {activeTab === 'tab5' && (
-                <SettingsTab
-                  pricesData={pricesData}
-                  accounts={accounts}
-                  assets={assets}
-                  currentPortfolioId={currentPortfolioId}
-                  onSaved={() => loadAllData(false, currentPortfolioId)}
-                />
-              )}
+                {activeTab === 'tab5' && (
+                  <SettingsTab
+                    pricesData={pricesData}
+                    accounts={accounts}
+                    assets={assets}
+                    currentPortfolioId={currentPortfolioId}
+                    onSaved={() => loadAllData(false, currentPortfolioId)}
+                  />
+                )}
+              </Suspense>
             </main>
           )}
         </>
       )}
 
       {/* Manage Portfolios Modal */}
-      <ManagePortfoliosModal
-        isOpen={isManagePortfoliosOpen}
-        onClose={() => setIsManagePortfoliosOpen(false)}
-        portfolios={portfolios}
-        currentPortfolioId={currentPortfolioId}
-        onSelectPortfolio={handleSelectPortfolio}
-        onRefresh={() => loadAllData(false, currentPortfolioId)}
-      />
+      <DeferredDialog isOpen={isManagePortfoliosOpen} onClose={() => setIsManagePortfoliosOpen(false)}>
+        <ManagePortfoliosModal
+          isOpen={isManagePortfoliosOpen}
+          onClose={() => setIsManagePortfoliosOpen(false)}
+          portfolios={portfolios}
+          currentPortfolioId={currentPortfolioId}
+          onSelectPortfolio={handleSelectPortfolio}
+          onRefresh={() => loadAllData(false, currentPortfolioId)}
+        />
+      </DeferredDialog>
     </div>
   );
 }
