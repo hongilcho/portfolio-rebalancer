@@ -10,7 +10,7 @@
    - 3차: yfinance (글로벌 시세 기반 KRW 환산 폴백)
 2. 2단계 캐싱 아키텍처:
    - 1단계: 60초 인메모리 캐시 (SWR: Stale-While-Revalidate 백그라운드 갱신)
-   - 2단계: PostgreSQL DB 영구 캐시(market_prices_cache)를 통한 서버 재시작 시 0초 콜드스타트
+   - 2단계: PostgreSQL DB 영구 캐시(market_prices_cache)를 통한 서버 재시작 시 캐시 복원
 """
 
 import time
@@ -22,12 +22,6 @@ from data.data_manager import get_market_cache, save_market_cache
 # ============================================================================
 # 인메모리 캐시 및 동시성 제어 전역 변수
 # ============================================================================
-_crypto_cache = None          # 직전 수집된 가상자산 시세 딕셔너리 캐시
-_crypto_cache_time = 0.0      # 캐시 저장 시각 (timestamp)
-_crypto_cache_ttl = 60.0      # 캐시 유효 시간 (초 단위, 기본 60초)
-_crypto_lock = threading.Lock() # 백그라운드 갱신 동시 실행 방지 뮤텍스
-_crypto_fetching = False      # 현재 백그라운드에서 시세 갱신 중인지 여부 플래그
-
 def _fetch_crypto_from_external() -> dict:
     """
     외부 거래소 API를 순차적으로 호출하여 가상자산 실시간 시세를 수집합니다.
@@ -145,66 +139,31 @@ def _fetch_crypto_from_external() -> dict:
 
     return prices
 
-def _background_crypto_refresh():
-    """
-    백그라운드 스레드에서 외부 거래소로부터 가상자산 시세를 갱신합니다.
-    
-    Stale-While-Revalidate(SWR) 패턴을 지원하여, 캐시 만료 시 사용자가
-    시세 조회를 기다리지 않고 즉시 캐시된 데이터를 받은 뒤 백그라운드에서
-    최신 시세를 갱신하도록 합니다.
-    """
-    global _crypto_cache, _crypto_cache_time, _crypto_fetching
-    with _crypto_lock:
-        if _crypto_fetching:
-            return
-        _crypto_fetching = True
-    try:
-        fresh = _fetch_crypto_from_external()
-        if fresh and (fresh["BTC"]["price"] > 0 or fresh["ETH"]["price"] > 0):
-            _crypto_cache = fresh
-            _crypto_cache_time = time.time()
-            save_market_cache("crypto", fresh)
-    finally:
-        _crypto_fetching = False
+def _load_crypto_snapshot():
+    value, age = get_market_cache("crypto")
+    if not isinstance(value, dict) or any(float(value.get(sym, {}).get("price", 0)) <= 0 for sym in ("BTC", "ETH")):
+        return None, 0
+    return value, age
+
+
+def _fetch_crypto_snapshot():
+    value = _fetch_crypto_from_external()
+    if not value or any(float(value.get(sym, {}).get("price", 0)) <= 0 for sym in ("BTC", "ETH")):
+        raise RuntimeError("Incomplete crypto quotes")
+    save_market_cache("crypto", value)
+    return value
+
+
+from logic.refreshing_cache import RefreshingCache
+_crypto_snapshots = RefreshingCache(60, _load_crypto_snapshot, _fetch_crypto_snapshot)
+_crypto_request = threading.local()
+
 
 def get_crypto_prices(force_refresh: bool = False):
-    """
-    비트코인(BTC) 및 이더리움(ETH)의 실시간 원화 시세를 반환합니다.
-    
-    2단계 캐싱(인메모리 SWR + PostgreSQL 영구 캐시)을 적용하여
-    외부 API 호출 지연을 숨기고 신속한 응답(0~0.05초)을 보장합니다.
+    value, status = _crypto_snapshots.get(force=force_refresh)
+    _crypto_request.status = status
+    return value
 
-    Args:
-        force_refresh (bool): True일 경우 캐시를 무시하고 외부 거래소에서 강제로 동기 수집
 
-    Returns:
-        dict: BTC, ETH의 원화 평가 시세 정보를 포함한 딕셔너리
-    """
-    global _crypto_cache, _crypto_cache_time
-    now = time.time()
-
-    # 1. 인메모리 캐시가 아직 없으면 DB 영구 캐시에서 0.05초 만에 복구
-    if _crypto_cache is None:
-        db_cache, age = get_market_cache("crypto")
-        if db_cache and isinstance(db_cache, dict) and "BTC" in db_cache:
-            _crypto_cache = db_cache
-            _crypto_cache_time = now - min(age, 3600.0)
-
-    # 2. 명시적 새로고침 요청이거나 캐시 TTL(60초) 만료 또는 캐시 부재 시 동기 최신화 수집
-    if force_refresh or _crypto_cache is None or (now - _crypto_cache_time > _crypto_cache_ttl):
-        try:
-            fresh = _fetch_crypto_from_external()
-            if fresh and (fresh["BTC"]["price"] > 0 or fresh["ETH"]["price"] > 0):
-                _crypto_cache = fresh
-                _crypto_cache_time = now
-                save_market_cache("crypto", fresh)
-                return _crypto_cache
-        except Exception as e:
-            print(f"Error fetching fresh crypto prices: {e}")
-        # 외부 수집 실패 시 기존 캐시 폴백 반환
-        if _crypto_cache is not None:
-            return _crypto_cache
-
-    # 3. 아직 유효한 캐시(60초 이내)가 있으면 즉시 반환
-    return _crypto_cache or _fetch_crypto_from_external()
-
+def get_crypto_status():
+    return getattr(_crypto_request, "status", _crypto_snapshots.status())

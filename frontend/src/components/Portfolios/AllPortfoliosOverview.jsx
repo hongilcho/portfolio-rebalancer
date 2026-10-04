@@ -23,16 +23,19 @@ import { api } from '../../utils/api';
 import { formatKRW, formatUSD, formatPercent, getProfitColor } from '../../utils/formatters';
 import DonutChart from '../common/DonutChart';
 import { createOverviewCache } from '../../utils/overviewCache';
+import MarketStatus from '../common/MarketStatus';
+import { useMarketRevalidation } from '../../utils/useMarketRevalidation';
 
 const overviewCache = createOverviewCache();
 
-export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode = 'KRW' }) {
+export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode = 'KRW', forceRefreshOnMount = false, onMarketUpdate }) {
   const [data, setData] = useState(() => overviewCache.get(true));
   const [loading, setLoading] = useState(() => !overviewCache.get(true));
   const [refreshing, setRefreshing] = useState(false);
   const [includeCrypto, setIncludeCrypto] = useState(true);
   const [error, setError] = useState('');
   const requestSequence = useRef(0);
+  const initialRefresh = useRef(forceRefreshOnMount);
 
   const [chartView, setChartView] = useState('dual'); // 'dual' | 'portfolios' | 'assetClasses'
 
@@ -124,6 +127,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
       if (sequence !== requestSequence.current) return;
       overviewCache.set(cryptoToggle, res);
       setData(res);
+      onMarketUpdate?.(res);
     } catch (err) {
       if (sequence !== requestSequence.current) return;
       console.error('Failed to load portfolios overview:', err);
@@ -134,12 +138,16 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
         setRefreshing(false);
       }
     }
-  }, [includeCrypto]);
+  }, [includeCrypto, onMarketUpdate]);
 
   useEffect(() => {
-    loadOverview(false, includeCrypto);
+    const force = initialRefresh.current;
+    initialRefresh.current = false;
+    loadOverview(force, includeCrypto);
     return () => { requestSequence.current += 1; };
   }, [loadOverview, includeCrypto]);
+
+  useMarketRevalidation(data?.market_status, () => loadOverview(false, includeCrypto), includeCrypto, !refreshing);
 
   const handleToggleCrypto = () => {
     const nextVal = !includeCrypto;
@@ -164,6 +172,7 @@ export default function AllPortfoliosOverview({ onSelectPortfolio, currencyMode 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      <MarketStatus status={data?.market_status} />
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: 0 }}>
         보유자산 수익률 = (평가손익 + 세후 배당) ÷ 보유자산 매입원가. 예수금은 총자산에만 포함됩니다.
       </p>

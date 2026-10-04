@@ -14,11 +14,14 @@ import { api } from '../../utils/api';
 import { formatKRW, formatPercent } from '../../utils/formatters';
 import DonutChart from '../common/DonutChart';
 import EditCryptoModal from './EditCryptoModal';
+import MarketStatus from '../common/MarketStatus';
+import { useMarketRevalidation } from '../../utils/useMarketRevalidation';
 
 export default function CryptoTab({ 
-  currentPortfolioId = 'default'
+  currentPortfolioId = 'default', forceRefreshOnMount = false
 }) {
   const [data, setData] = useState(null);
+  const requestSequence = useRef(0);
   const dataRef = useRef(data);
   dataRef.current = data;
   const [loading, setLoading] = useState(true);
@@ -76,26 +79,33 @@ export default function CryptoTab({
   }, [data?.crypto_assets_combined]);
 
   const loadCryptoSummary = useCallback(async (isRefresh = false) => {
+    const sequence = ++requestSequence.current;
     if (isRefresh && dataRef.current) setRefreshing(true);
     else setLoading(true);
     setError('');
 
     try {
       const res = await api.getCryptoSummary(currentPortfolioId, isRefresh);
+      if (sequence !== requestSequence.current) return;
       setData(res);
     } catch (err) {
+      if (sequence !== requestSequence.current) return;
       console.error('Failed to load crypto summary:', err);
       setError(err.message || '가상화폐 데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (sequence === requestSequence.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [currentPortfolioId]);
 
   useEffect(() => {
-    // 최초 진입 시에도 업비트 실시간 시세를 직접 수집(force_refresh=true)하여 즉시 반영
-    loadCryptoSummary(true);
-  }, [loadCryptoSummary]);
+    loadCryptoSummary(forceRefreshOnMount);
+    return () => { requestSequence.current += 1; };
+  }, [loadCryptoSummary, forceRefreshOnMount]);
+
+  useMarketRevalidation(data?.market_status, () => loadCryptoSummary(false), currentPortfolioId, !refreshing);
 
   const handleSaveHoldings = async (holdings) => {
     await api.updateCryptoHoldings(holdings);
@@ -117,6 +127,7 @@ export default function CryptoTab({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <MarketStatus status={data?.market_status} />
       {/* Top Action Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <div>

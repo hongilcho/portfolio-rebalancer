@@ -20,9 +20,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
  */
 async function request(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-  };
+  // GET requests have no JSON body; avoid an unnecessary CORS preflight.
+  const defaultHeaders = options.body ? { 'Content-Type': 'application/json' } : {};
 
   const config = {
     ...options,

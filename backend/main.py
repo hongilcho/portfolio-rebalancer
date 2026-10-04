@@ -24,6 +24,8 @@ if BASE_DIR not in sys.path:
 import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from logic.refreshing_cache import MarketRefreshUnavailable
 from data.data_manager import init_db
 from backend.services import market_service
 from logic.crypto_price_fetcher import get_crypto_prices
@@ -51,6 +53,11 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan
 )
+
+@app.exception_handler(MarketRefreshUnavailable)
+async def market_unavailable(request, error):
+    return JSONResponse(status_code=503, content={
+        "detail": "최신 시장 데이터 수집에 실패했습니다. 잠시 후 다시 시도해주세요."})
 
 # Server-Timing Middleware (W3C standard header for performance measurement)
 @app.middleware("http")

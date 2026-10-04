@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from data.data_manager import get_crypto_holdings, save_crypto_holding, get_portfolio
-from logic.crypto_price_fetcher import get_crypto_prices
+from logic.crypto_price_fetcher import get_crypto_prices, get_crypto_status
 from backend.routers.dashboard import get_dashboard_summary
 
 router = APIRouter(prefix="/api/crypto", tags=["crypto"])
@@ -206,6 +206,7 @@ def get_crypto_summary(
             )
 
     return {
+        "market_status": {"crypto": get_crypto_status()},
         "by_owner": by_owner,
         "crypto_assets_combined": crypto_assets_combined,
         "crypto_assets": crypto_assets_combined,  # Backwards compatibility

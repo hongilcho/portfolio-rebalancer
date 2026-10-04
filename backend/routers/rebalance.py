@@ -85,7 +85,7 @@ def calculate_plan(req: CalculateRebalanceRequest):
         holdings=holdings_raw,
         price_map=price_map,
         total_krw_cash=total_krw_cash,
-        usd_krw_rate=market_service.usd_krw,
+        usd_krw_rate=market_service.request_snapshot()['usd_krw'],
         scenario=req.scenario,
         new_cash_krw=req.new_cash_krw,
         drift_threshold=req.drift_threshold

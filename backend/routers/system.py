@@ -77,9 +77,10 @@ def run_system_benchmark() -> Dict[str, Any]:
 
     # 5. 인메모리 캐시 상태
     now = time.time()
-    last_fetch = market_service.last_price_fetch_time
+    last_fetch = market_service._cache.updated_at
     cache_age_sec = round(now - last_fetch, 1) if last_fetch > 0 else None
-    cache_alive = bool(market_service.price_data and cache_age_sec is not None and cache_age_sec < market_service.cache_ttl_seconds)
+    cached_prices = market_service.current_snapshot()["prices"]
+    cache_alive = bool(cached_prices and cache_age_sec is not None and cache_age_sec < market_service.cache_ttl_seconds)
 
     total_duration_sec = round(time.time() - total_start, 2)
 
@@ -120,7 +121,7 @@ def run_system_benchmark() -> Dict[str, Any]:
                 "is_active": cache_alive,
                 "age_seconds": cache_age_sec,
                 "ttl_seconds": market_service.cache_ttl_seconds,
-                "cached_items_count": len(market_service.price_data) if market_service.price_data else 0
+                "cached_items_count": len(cached_prices)
             }
         }
     }

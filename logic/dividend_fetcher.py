@@ -15,70 +15,70 @@ import yfinance as yf
 from data.data_manager import get_market_cache, save_market_cache
 from logic.trade_accounting import trade_sort_key
 
-_dividend_memory_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
-CACHE_TTL = 86400.0  # 24시간 캐시
+from logic.refreshing_cache import RefreshingCache
+import threading
+
+_dividend_memory_cache = {}  # one cache per market/ticker, including empty lists
+_dividend_lock = threading.Lock()
+_dividend_request = threading.local()
+CACHE_TTL = 86400.0
+
+
+def begin_dividend_request(force=False):
+    _dividend_request.force = force
+    _dividend_request.statuses = {}
+
+
+def get_dividend_status():
+    statuses = list(getattr(_dividend_request, "statuses", {}).values())
+    times = [s["updated_at"] for s in statuses if s["updated_at"]]
+    return {"updated_at": min(times) if times else None,
+            "stale": any(s["stale"] for s in statuses),
+            "refreshing": any(s["refreshing"] for s in statuses),
+            "refresh_failed": any(s["refresh_failed"] for s in statuses)}
+
 
 def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
-    """
-    종목의 거래소 공식 배당/분배금 이력을 수집하여 반환합니다.
-    (메모리 캐시 -> PostgreSQL market_cache -> yfinance 순으로 조회)
-    """
-    clean_ticker = (ticker or '').strip().upper()
-    if not clean_ticker or clean_ticker in ['없음', '-', 'M04020000']:
+    clean_ticker = (ticker or "").strip().upper()
+    if not clean_ticker or clean_ticker in ("없음", "-", "M04020000"):
         return []
+    key = f"div_{market}_{clean_ticker}"
 
-    cache_key = f"div_{market}_{clean_ticker}"
-    now = time.time()
+    def load():
+        value, age = get_market_cache(key)
+        return (value, age) if isinstance(value, list) else (None, 0)
 
-    # 1. 인메모리 캐시 확인
-    if cache_key in _dividend_memory_cache:
-        cached_time, records = _dividend_memory_cache[cache_key]
-        if now - cached_time < CACHE_TTL:
-            return records
-
-    # 2. PostgreSQL 지속성 캐시 확인
-    try:
-        db_cache, age = get_market_cache(cache_key)
-        if db_cache and isinstance(db_cache, list) and age < CACHE_TTL:
-            _dividend_memory_cache[cache_key] = (now - age, db_cache)
-            return db_cache
-    except Exception as e:
-        print(f"Notice: Failed to read dividend DB cache for {cache_key}: {e}")
-
-    # 3. 외부 API (yfinance) 수집
-    sym = clean_ticker
-    if market == 'KR':
-        if not sym.endswith('.KS') and not sym.endswith('.KQ'):
-            sym = f"{sym}.KS"
-
-    try:
-        t = yf.Ticker(sym)
-        divs = t.dividends
-        if divs is None or len(divs) == 0:
-            records = []
-        else:
-            records = []
+    def fetch():
+        sym = clean_ticker
+        if market == "KR" and not sym.endswith((".KS", ".KQ")):
+            sym += ".KS"
+        divs = yf.Ticker(sym).dividends
+        records = []
+        if divs is not None:
             for dt, amt in divs.items():
-                if pd.isna(amt) or amt <= 0:
-                    continue
-                dt_str = dt.strftime("%Y-%m-%d")
-                records.append({"date": dt_str, "amount": round(float(amt), 4)})
-            records.sort(key=lambda x: x["date"])
-
-        # 캐시 저장
-        _dividend_memory_cache[cache_key] = (now, records)
-        save_market_cache(cache_key, records)
+                if not pd.isna(amt) and amt > 0:
+                    records.append({"date": dt.strftime("%Y-%m-%d"), "amount": round(float(amt), 4)})
+        records.sort(key=lambda x: x["date"])
+        if not records and cache.value:
+            # yfinance can return an empty series after an upstream failure.
+            # Previously recorded dividends must not silently disappear.
+            raise RuntimeError('Empty dividend response would erase known history')
+        save_market_cache(key, records)
         return records
-    except Exception as e:
-        print(f"Notice: Failed to fetch dividends from yfinance for {sym}: {e}")
-        # 실패 시 기존 만료된 DB 캐시라도 있으면 반환
-        try:
-            old_cache, _ = get_market_cache(cache_key)
-            if old_cache and isinstance(old_cache, list):
-                return old_cache
-        except Exception:
-            pass
-        return []
+
+    with _dividend_lock:
+        cache = _dividend_memory_cache.setdefault(key, RefreshingCache(CACHE_TTL, load, fetch))
+    try:
+        force = getattr(_dividend_request, "force", False) and key not in getattr(_dividend_request, "statuses", {})
+        records, status = cache.get(force=force)
+    except RuntimeError:
+        if getattr(_dividend_request, "force", False):
+            raise
+        # No history available: label unavailable, do not persist a guessed zero.
+        records, status = [], cache.status()
+    _dividend_request.statuses = getattr(_dividend_request, "statuses", {})
+    _dividend_request.statuses[key] = status
+    return records
 
 def get_dividend_tax_rate(account_type: str, market: str) -> float:
     """

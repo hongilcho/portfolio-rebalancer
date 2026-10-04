@@ -575,10 +575,20 @@ def fetch_asset_prices(assets: list, usd_krw: float = None) -> Tuple[list, float
         elif usd_krw is None:
             usd_krw = 1380.0
 
+        # Start US/gold/deposit work before waiting for the domestic batch.
+        # Preserve input ordering; domestic assets still reuse the batch result.
+        batch_indices = {
+            i for i, asset in enumerate(assets)
+            if asset.get('market') == 'KR' and not asset.get('is_deposit')
+            and str(asset.get('ticker') or '').strip() in kr_tickers
+        }
+        futures = {
+            i: executor.submit(_fetch_single_asset_price, asset, usd_krw, now_str, {})
+            for i, asset in enumerate(assets) if i not in batch_indices
+        }
         kr_batch_prices = f_kr_batch.result() if f_kr_batch else {}
-
-        # 3. 개별 자산 병렬 처리 (국내 주식은 배치 맵 활용, 예금은 0ms 계산, 미국/금현물은 병렬 수집)
-        futures = [executor.submit(_fetch_single_asset_price, a, usd_krw, now_str, kr_batch_prices) for a in assets]
-        results = [f.result() for f in futures]
+        for i in batch_indices:
+            futures[i] = executor.submit(_fetch_single_asset_price, assets[i], usd_krw, now_str, kr_batch_prices)
+        results = [futures[i].result() for i in range(len(assets))]
 
     return results, usd_krw

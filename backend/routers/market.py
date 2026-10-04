@@ -23,9 +23,10 @@ class RateOverrideRequest(BaseModel):
 
 @router.get("/exchange-rate")
 def get_exchange_rate():
+    snapshot = market_service.current_snapshot()
     return {
-        "usd_krw": market_service.usd_krw,
-        "rate_source": market_service.rate_source,
+        "usd_krw": snapshot['usd_krw'],
+        "rate_source": snapshot['rate_source'],
         "is_custom": market_service.is_custom_rate
     }
 
@@ -51,6 +52,7 @@ def refresh_exchange_rate():
 @router.get("/prices")
 def get_prices(force_refresh: bool = False, portfolio_id: Optional[str] = None):
     prices, price_map = market_service.get_prices(force_refresh=force_refresh)
+    snapshot = market_service.request_snapshot()
     if portfolio_id and portfolio_id != 'all':
         portfolio_assets = get_all_assets(portfolio_id=portfolio_id)
         portfolio_asset_ids = {str(a['id']) for a in portfolio_assets}
@@ -58,8 +60,9 @@ def get_prices(force_refresh: bool = False, portfolio_id: Optional[str] = None):
     return {
         "prices": prices,
         "price_map": price_map,
-        "usd_krw": market_service.usd_krw,
-        "rate_source": market_service.rate_source
+        "usd_krw": snapshot['usd_krw'],
+        "rate_source": snapshot['rate_source'],
+        "market_status": {"prices": market_service.request_status()}
     }
 
 @router.get("/export-csv")

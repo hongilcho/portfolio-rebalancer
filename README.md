@@ -16,7 +16,7 @@ portfolio-rebalancer/
 │   ├── routers/        # 도메인별 라우터 (대시보드 번들, 계좌, 자산, 거래, 리밸런싱, 가상화폐, 시스템 진단 등)
 │   ├── config.py       # 중앙 환경변수 및 보안 설정 (.env & 하위호환 지원)
 │   ├── main.py         # FastAPI 애플리케이션 진입점 및 CORS 설정
-│   └── services.py     # MarketStateService 싱글톤 (시작 시 예열, 캐시 만료 시 동기 갱신)
+│   └── services.py     # MarketStateService 싱글톤 (시작 시 예열, 캐시 만료 시 백그라운드 갱신)
 ├── frontend/           # React 19 + Vite 모던 웹 프론트엔드 (Dark/Light/Sepia 테마)
 │   ├── src/components/ # 탭별 컴포넌트 (포트폴리오 현황, 예금 토글, 목표비중, 리밸런싱, 거래내역, 가상자산, 설정)
 │   └── src/utils/      # 고속 번들 API 클라이언트 및 통화/비율 포맷터

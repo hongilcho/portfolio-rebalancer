@@ -41,7 +41,7 @@ class SaveAccountHoldingsRequest(BaseModel):
 @router.get("/account/{account_id}")
 def get_account_holdings(account_id: str):
     holdings = get_holdings_by_account(account_id)
-    usd_krw = market_service.usd_krw or 1350.0
+    usd_krw = market_service.current_snapshot()['usd_krw'] or 1350.0
 
     conn = get_connection()
     try:
@@ -110,7 +110,7 @@ def save_holdings(req: SaveAccountHoldingsRequest):
     
     # 2. Save holdings
     assets_map = {str(a['id']): a for a in get_all_assets()}
-    usd_krw = market_service.usd_krw or 1350.0
+    usd_krw = market_service.current_snapshot()['usd_krw'] or 1350.0
 
     holdings_data = []
     for item in req.holdings:

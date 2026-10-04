@@ -21,7 +21,8 @@ from data.data_manager import (
 from backend.services import market_service
 from backend.routers.dashboard import get_dashboard_summary
 from backend.routers.crypto import get_crypto_summary
-from logic.crypto_price_fetcher import get_crypto_prices
+from logic.crypto_price_fetcher import get_crypto_prices, get_crypto_status
+from logic.dividend_fetcher import begin_dividend_request, get_dividend_status
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
@@ -85,7 +86,8 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
 
     # 2. 가격 데이터 가져오기 (인메모리 캐시 및 SWR 적용)
     prices, price_map = market_service.get_prices(force_refresh=force_refresh)
-    usd_krw = market_service.usd_krw
+    usd_krw = market_service.request_snapshot()['usd_krw']
+    begin_dividend_request(force_refresh)
 
     # 3. 가상화폐 요약 (사전 조회된 crypto_holdings 및 캐시 시세 사용 -> 0ms)
     c_res = None
@@ -434,6 +436,10 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
     }
 
     return {
+        "usd_krw": usd_krw,
+        "rate_source": market_service.request_snapshot()['rate_source'],
+        "market_status": {"prices": market_service.request_status(), "dividends": get_dividend_status(),
+                          **({"crypto": get_crypto_status()} if include_crypto else {})},
         "grand_total": {
             "total_buy": grand_total_buy,
             "total_eval": grand_total_eval,

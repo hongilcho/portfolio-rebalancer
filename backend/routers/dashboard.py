@@ -17,7 +17,7 @@ from typing import Dict, Any, List, Optional
 
 from data.data_manager import get_overview_batch_data
 from backend.services import market_service
-from logic.dividend_fetcher import calculate_adjusted_holding_prices
+from logic.dividend_fetcher import calculate_adjusted_holding_prices, begin_dividend_request, get_dividend_status
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -44,8 +44,10 @@ def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = Fa
     p_assets = [a for a in all_assets if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
 
     prices, price_map = market_service.get_prices(force_refresh=force_refresh)
-    usd_krw = market_service.usd_krw
-    rate_source = market_service.rate_source
+    snapshot = market_service.request_snapshot()
+    usd_krw = snapshot['usd_krw']
+    rate_source = snapshot['rate_source']
+    begin_dividend_request(force_refresh)
 
     dash = get_dashboard_summary(
         portfolio_id=portfolio_id,
@@ -57,6 +59,7 @@ def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = Fa
         price_data=prices,
         all_trades=all_trades
     )
+    dash['market_status'] = {'prices': market_service.request_status(), 'dividends': get_dividend_status()}
 
     p_asset_ids = {str(a["id"]) for a in p_assets}
     p_prices = [p for p in prices if str(p["id"]) in p_asset_ids]
@@ -106,9 +109,12 @@ def get_dashboard_summary(
             assets = [a for a in all_assets if str(a.get("portfolio_id") or "default") == str(portfolio_id)]
     
     if price_map is None:
+        begin_dividend_request()
         price_data, price_map = market_service.get_prices()
+        if usd_krw is None:
+            usd_krw = market_service.request_snapshot()['usd_krw']
     elif price_data is None:
-        price_data = market_service.price_data or []
+        price_data = market_service.request_snapshot()['prices']
     if usd_krw is None:
         usd_krw = market_service.usd_krw
 
@@ -679,5 +685,6 @@ def get_dashboard_summary(
         "account_summaries": account_summaries,
         "drift_scale_max": scale_max,
         "usd_krw": usd_krw,
-        "rate_source": market_service.rate_source
+        "rate_source": market_service.request_snapshot()['rate_source'],
+        "market_status": {"prices": market_service.request_status(), "dividends": get_dividend_status()}
     }

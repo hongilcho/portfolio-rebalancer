@@ -27,6 +27,7 @@ import DriftBar from '../common/DriftBar';
 import DonutChart from '../common/DonutChart';
 import EditHoldingsModal from './EditHoldingsModal';
 import { api } from '../../utils/api';
+import MarketStatus from '../common/MarketStatus';
 
 export default function DashboardTab({ 
   dashboardData, 
@@ -347,6 +348,7 @@ export default function DashboardTab({
 
   return (
     <div>
+      <MarketStatus status={dashboardData?.market_status} />
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
         보유자산 수익률 = (평가손익 + 세후 배당) ÷ 보유자산 매입원가. 예수금은 총자산에만 포함됩니다.
       </p>

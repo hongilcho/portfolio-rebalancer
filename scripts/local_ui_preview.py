@@ -8,6 +8,13 @@ import json
 import os
 from pathlib import Path
 import sys
+import argparse
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--port', type=int, default=8547)
+parser.add_argument('--simulate-refresh', action='store_true')
+args = parser.parse_args()
 
 import psycopg2
 from psycopg2 import sql
@@ -78,7 +85,44 @@ dividend_fetcher.fetch_dividend_history = lambda *_: [{"date":"2026-02-01","amou
 for module in (main, crypto, portfolios):
     module.get_crypto_prices = lambda **_: crypto_quotes
 
+if args.simulate_refresh:
+    from logic import crypto_price_fetcher
+    from backend.services import MarketStateService
+    market_service.get_prices = MarketStateService.get_prices.__get__(market_service)
+    market_service._cache.seed({'prices': quotes, 'usd_krw': 1400, 'rate_source': '고정 검증 환율'}, time.time()-400)
+    simulation = {'fail': False, 'delay': 3}
+    def delayed_market():
+        time.sleep(simulation['delay'])
+        if simulation['fail']:
+            raise RuntimeError('Synthetic provider offline')
+        return {'prices': [{**quotes[0], 'price_krw': 120000}], 'usd_krw': 1400, 'rate_source': '갱신된 검증 환율'}
+    market_service._cache.fetch = delayed_market
+    crypto_price_fetcher._crypto_snapshots.seed(crypto_quotes, time.time()-120)
+    def delayed_crypto():
+        time.sleep(simulation['delay'])
+        if simulation['fail']:
+            raise RuntimeError('Synthetic provider offline')
+        return {**crypto_quotes, 'BTC': {**crypto_quotes['BTC'], 'price': 1300000}}
+    crypto_price_fetcher._crypto_snapshots.fetch = delayed_crypto
+    for module in (main, crypto, portfolios):
+        module.get_crypto_prices = crypto_price_fetcher.get_crypto_prices
+
+    @main.app.post('/qa/reset-cache')
+    def reset_qa_cache(fail: bool = False, delay: float = 3):
+        simulation['fail'] = fail
+        simulation['delay'] = max(0, min(delay, 20))
+        for cache, value, age in (
+            (market_service._cache, {'prices': quotes, 'usd_krw': 1400, 'rate_source': '고정 검증 환율'}, 400),
+            (crypto_price_fetcher._crypto_snapshots, crypto_quotes, 120),
+        ):
+            with cache.condition:
+                if cache.refreshing:
+                    raise RuntimeError('Wait for the current QA refresh')
+                cache.seed(value, time.time()-age)
+                cache.last_error, cache.retry_at = False, 0
+        return {'ok': True}
+
 if __name__ == '__main__':
     import uvicorn
-    print("Synthetic QA backend: http://127.0.0.1:8547; local DB:",name, flush=True)
-    uvicorn.run(main.app, host='127.0.0.1', port=8547)
+    print(f"Synthetic QA backend: http://127.0.0.1:{args.port}; local DB:",name, flush=True)
+    uvicorn.run(main.app, host='127.0.0.1', port=args.port)

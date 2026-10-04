@@ -32,6 +32,7 @@ import CryptoTab from './components/Tab5Crypto/CryptoTab';
 import SettingsTab from './components/Tab5Settings/SettingsTab';
 import ManagePortfoliosModal from './components/Portfolios/ManagePortfoliosModal';
 import AllPortfoliosOverview from './components/Portfolios/AllPortfoliosOverview';
+import { useMarketRevalidation } from './utils/useMarketRevalidation';
 
 const TABS = [
   { id: 'tab1', label: '📊 1. 포트폴리오 현황', icon: BarChart3 },
@@ -87,6 +88,10 @@ export default function App() {
   const [pricesData, setPricesData] = useState(null);
   const [usdKrw, setUsdKrw] = useState(1380.0);
   const [rateSource, setRateSource] = useState('');
+  const updateMarketHeader = useCallback((snapshot) => {
+    if (snapshot?.usd_krw) setUsdKrw(snapshot.usd_krw);
+    if (snapshot?.rate_source) setRateSource(snapshot.rate_source);
+  }, []);
 
   // Apply Theme to document root
   useEffect(() => {
@@ -95,6 +100,7 @@ export default function App() {
   }, [theme]);
 
   const handleSelectPortfolio = (pid) => {
+    setChildRefreshKey(0);
     setCurrentPortfolioId(pid);
     localStorage.setItem('active_portfolio_id', pid);
     // 복원 가능한 세션 캐시가 있는 경우 즉시 반영
@@ -111,9 +117,11 @@ export default function App() {
   dashboardDataRef.current = dashboardData;
 
   const [childRefreshKey, setChildRefreshKey] = useState(0);
+  const requestSequence = useRef(0);
 
   const loadAllData = useCallback(async (forceRefresh = false, targetPid = null) => {
     const pid = targetPid || currentPortfolioIdRef.current;
+    const sequence = ++requestSequence.current;
     if (forceRefresh) {
       setRefreshing(true);
       setChildRefreshKey(k => k + 1);
@@ -130,6 +138,7 @@ export default function App() {
           api.getPortfolios(),
           api.getExchangeRate(),
         ]);
+        if (sequence !== requestSequence.current || pid !== currentPortfolioIdRef.current) return;
         setPortfolios(portsRes.portfolios || []);
         if (rateRes) {
           setUsdKrw(rateRes.usd_krw || 1380.0);
@@ -140,6 +149,7 @@ export default function App() {
 
       // If viewing a specific portfolio, fetch all portfolio-specific data in ONE single unified bundle request
       const bundle = await api.getPortfolioBundle(pid, forceRefresh);
+      if (sequence !== requestSequence.current || pid !== currentPortfolioIdRef.current) return;
 
       setPortfolios(bundle.portfolios || []);
       setPricesData(bundle.prices_data);
@@ -152,11 +162,14 @@ export default function App() {
       setUsdKrw(bundle.usd_krw || 1380.0);
       setRateSource(bundle.rate_source || '');
     } catch (err) {
+      if (sequence !== requestSequence.current || pid !== currentPortfolioIdRef.current) return;
       console.error('Failed to load portfolio data:', err);
       setError(err.message || '데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (sequence === requestSequence.current && pid === currentPortfolioIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -165,6 +178,9 @@ export default function App() {
       loadAllData(false, currentPortfolioId);
     }
   }, [isAuthenticated, currentPortfolioId, loadAllData]);
+
+  useMarketRevalidation(dashboardData?.market_status, () => loadAllData(false, currentPortfolioId),
+    currentPortfolioId, isAuthenticated && !refreshing && !['all', 'crypto'].includes(currentPortfolioId));
 
   if (!isAuthenticated) {
     return <AuthModal onAuthenticated={() => setIsAuthenticated(true)} />;
@@ -202,6 +218,8 @@ export default function App() {
         <main>
           <AllPortfoliosOverview 
             key={childRefreshKey}
+            onMarketUpdate={updateMarketHeader}
+            forceRefreshOnMount={childRefreshKey > 0}
             currencyMode={currencyMode}
             onSelectPortfolio={(id) => {
               if (id === 'tab_crypto' || id === 'crypto') {
@@ -216,7 +234,7 @@ export default function App() {
       ) : currentPortfolioId === 'crypto' ? (
         /* Content View: When 'crypto' is selected -> Independent Crypto Dashboard */
         <main>
-          <CryptoTab key={childRefreshKey} currentPortfolioId={currentPortfolioId} />
+          <CryptoTab key={childRefreshKey} forceRefreshOnMount={childRefreshKey > 0} currentPortfolioId={currentPortfolioId} />
         </main>
       ) : (
         <>
