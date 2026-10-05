@@ -14,8 +14,8 @@ import { parseSync } from 'rolldown/experimental';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fixture = JSON.parse(await readFile(new URL('./fixtures/uiPresentation.json', import.meta.url), 'utf8'));
 const baselineUrl = new URL('./fixtures/uiPresentationBeforeSplit.json', import.meta.url);
-// Captured from b273a8a before extracting any JSX; never regenerate as part
-// of the test run, so accidental UI changes cannot bless their own output.
+// Captured from b273a8a; explicit feature updates are documented in the fixture.
+// Never regenerate during tests: accidental UI changes cannot bless themselves.
 const baseline = JSON.parse(await readFile(baselineUrl, 'utf8'));
 const noop = () => {};
 const realDate = globalThis.Date;

@@ -314,6 +314,8 @@ def execute_trade(
     price,
     currency=None,
     exchange_rate=None,
+    import_source=None,
+    broker_order_no=None,
 ):
     return trades.execute_trade(
         _context(),
@@ -325,6 +327,8 @@ def execute_trade(
         price,
         currency,
         exchange_rate,
+        import_source,
+        broker_order_no,
     )
 
 

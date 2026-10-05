@@ -36,12 +36,14 @@ export default function TradeBatchForm({
               className="input-text"
               style={{ width: '150px', padding: '6px 10px' }}
               value={tradeDate}
-              disabled={savingBatch}
+              disabled={savingBatch || buyRows.some(r => r.importSource)}
+              title={buyRows.some(r => r.importSource) ? '가져온 매수 행을 삭제하면 체결일을 변경할 수 있습니다.' : undefined}
               onChange={(e) => setTradeDate(e.target.value)}
             />
           </div>
         </div>
 
+        {buyRows.some(r => r.importSource) && <p>가져온 거래는 선택한 체결일에 고정됩니다. 날짜를 바꾸려면 가져온 행을 먼저 삭제해주세요.</p>}
         <div className="trade-forms-grid" inert={savingBatch || undefined}>
           {/* 🔴 BUY Column */}
           <div style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.2)' }}>
@@ -61,6 +63,7 @@ export default function TradeBatchForm({
 
               return (
                 <div key={row.id} className="trade-row-card">
+                  {row.importSource && <p style={{ fontSize: '0.85rem' }}>카카오톡 가져오기 · 주문 {row.brokerOrderNo} · {row.importDate}</p>}
                   {/* Desktop Layout */}
                   <div className="trade-row-desktop">
                     <select

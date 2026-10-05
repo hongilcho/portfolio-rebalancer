@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=8547)
 parser.add_argument('--simulate-refresh', action='store_true')
 parser.add_argument('--usd-ledger', action='store_true', help='Add synthetic USD cash and VT/PDBC opening positions')
+parser.add_argument('--message-import', action='store_true', help='Add synthetic NH domestic full-buy message fixtures')
 args = parser.parse_args()
 
 import psycopg2
@@ -67,6 +68,14 @@ with dm.get_connection() as conn:
         cursor.execute("UPDATE crypto_holdings SET quantity=0.01,avg_price=1000000 WHERE owner='홍일' AND symbol='BTC'")
     conn.commit()
 assert dm.execute_trade('2026-01-01','qa_acc','qa_asset','INIT',10,100000,'KRW',1)[0]
+if args.message_import:
+    with dm.get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE accounts SET account_no='212-03-521234',account_alias='검증 IRP',account_type='IRP' WHERE id='qa_acc'")
+            cursor.execute('''INSERT INTO assets (id,name,ticker,market,target_weight,allowed_accounts,portfolio_id)
+                VALUES ('qa_nh_bond','ACE 미국10년국채액티브','0085P0','KR',20,'["qa_acc"]','default'),
+                       ('qa_nh_stock','TIGER 미국S&P500','360750','KR',20,'["qa_acc"]','default')''')
+        conn.commit()
 if args.usd_ledger:
     with dm.get_connection() as conn:
         with conn.cursor() as cursor:
@@ -85,6 +94,9 @@ from logic import dividend_fetcher
 
 quotes = [{"id":"qa_asset", "name":"검증 ETF", "ticker":"QA_ETF", "market":"KR",
            "price_krw":110000, "price_usd":0, "source":"고정 검증 시세"}]
+if args.message_import:
+    quotes.extend([{'id':'qa_nh_bond','name':'ACE 미국10년국채액티브','ticker':'0085P0','market':'KR','price_krw':9000,'price_usd':0,'source':'고정 검증 시세'},
+                   {'id':'qa_nh_stock','name':'TIGER 미국S&P500','ticker':'360750','market':'KR','price_krw':20000,'price_usd':0,'source':'고정 검증 시세'}])
 if args.usd_ledger:
     quotes.extend([{'id': 'qa_vt', 'name': 'Vanguard Total World Stock ETF', 'ticker': 'VT', 'market': 'US', 'price_usd': 100, 'price_krw': 140000, 'source': '고정 검증 시세'},
                    {'id': 'qa_pdbc', 'name': 'Invesco PDBC', 'ticker': 'PDBC', 'market': 'US', 'price_usd': 20, 'price_krw': 28000, 'source': '고정 검증 시세'}])

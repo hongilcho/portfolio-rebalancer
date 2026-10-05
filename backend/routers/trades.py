@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Literal, Optional
 from data.data_manager import execute_trade, get_trade_history, delete_trades
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
@@ -21,6 +21,8 @@ class TradeBatchItem(BaseModel):
     price: float
     currency: Optional[str] = None
     exchange_rate: Optional[float] = None
+    import_source: Optional[Literal['NAMUH_KAKAO']] = None
+    broker_order_no: Optional[str] = None
 
 class BatchTradeRequest(BaseModel):
     """일괄 매매 기록 실행 요청 스키마"""
@@ -76,6 +78,7 @@ def execute_batch_trades(req: BatchTradeRequest):
             errors.append(results[-1]["message"])
             continue
             
+        import_identity = {"import_source": item.import_source, "broker_order_no": item.broker_order_no} if item.import_source or item.broker_order_no else {}
         success, msg = execute_trade(
             trade_date=req.trade_date,
             account_id=item.account_id,
@@ -84,7 +87,8 @@ def execute_batch_trades(req: BatchTradeRequest):
             quantity=item.quantity,
             price=item.price,
             currency=item.currency,
-            exchange_rate=item.exchange_rate
+            exchange_rate=item.exchange_rate,
+            **import_identity,
         )
         if success:
             success_count += 1

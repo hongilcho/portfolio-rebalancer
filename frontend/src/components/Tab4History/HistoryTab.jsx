@@ -14,6 +14,8 @@ import PriceReference from './PriceReference';
 import TradeBatchForm from './TradeBatchForm';
 import TradeHistorySection from './TradeHistorySection';
 import UsdLedgerPanel from './UsdLedgerPanel';
+import NamuhMessageImport from './NamuhMessageImport';
+import { appendNamuhRows } from '../../utils/namuhMessage';
 
 export default function HistoryTab({
   assets,
@@ -122,7 +124,10 @@ export default function HistoryTab({
   };
 
   const removeBuyRow = (id) => {
-    if (buyRows.length <= 1) return;
+    if (buyRows.length <= 1) {
+      if (buyRows[0]?.importSource) setBuyRows([{ id: crypto.randomUUID(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
+      return;
+    }
     setBuyRows((prev) => prev.filter((r) => r.id !== id));
   };
 
@@ -181,6 +186,16 @@ export default function HistoryTab({
 
   // Submit Batch Trades
   const handleSaveBatchTrades = async () => {
+    if (buyRows.some(r => r.importSource && r.importDate !== tradeDate)) {
+      alert('가져온 거래의 체결일자가 다릅니다. 해당 행을 삭제한 뒤 올바른 날짜로 다시 가져오세요.');
+      return;
+    }
+    if (buyRows.some(r => r.importSource && (!accounts.some(a => String(a.id) === r.accountId)
+      || !assets.some(a => String(a.id) === r.assetId && a.market === 'KR' && !a.is_deposit
+        && (a.allowed_accounts || []).map(String).includes(r.accountId))))) {
+      alert('가져온 거래의 계좌와 종목을 현재 포트폴리오에서 다시 확인해주세요.');
+      return;
+    }
     const submittedBuys = buyRows.filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0);
     const submittedSells = sellRows.filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0);
     const validBuys = submittedBuys
@@ -194,7 +209,8 @@ export default function HistoryTab({
           quantity: Number(r.quantity),
           price: Number(r.price),
           currency: isUS ? 'USD' : 'KRW',
-          exchange_rate: isUS ? Number(r.exchangeRate || usdKrw) : 1.0
+          exchange_rate: isUS ? Number(r.exchangeRate || usdKrw) : 1.0,
+          ...(r.importSource ? { import_source: r.importSource, broker_order_no: r.brokerOrderNo } : {})
         };
       });
 
@@ -287,6 +303,10 @@ export default function HistoryTab({
         priceMap={priceMap}
         usdKrw={usdKrw}
       />
+
+      <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
+        tradeDate={tradeDate} buyRows={buyRows} disabled={savingBatch}
+        onAppend={drafts => setBuyRows(appendNamuhRows(buyRows, drafts, tradeDate))} />
 
       <TradeBatchForm
         tradeDate={tradeDate}

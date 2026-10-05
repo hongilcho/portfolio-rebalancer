@@ -1,5 +1,8 @@
 """Trade execution, reversal and transfers; no nested connection leases."""
 import math
+import json
+import re
+from datetime import date
 from typing import Tuple
 from psycopg2.extras import RealDictCursor
 from logic.trade_accounting import cash_movement, replay_holding
@@ -16,6 +19,8 @@ def execute_trade(
     price,
     currency=None,
     exchange_rate=None,
+    import_source=None,
+    broker_order_no=None,
 ):
     if not all(math.isfinite(v) and v > 0 for v in (quantity, price)):
         return False, "수량과 단가는 0보다 커야 합니다."
@@ -35,6 +40,28 @@ def execute_trade(
         acc_row = cursor.fetchone()
         if not acc_row:
             raise ValueError("존재하지 않는 계좌입니다.")
+        if import_source is not None or broker_order_no is not None:
+            if import_source != 'NAMUH_KAKAO' or not re.fullmatch(r'[0-9]{1,10}', broker_order_no or ''):
+                raise ValueError('가져오기 출처 또는 주문번호를 확인해주세요.')
+            if trade_type != 'BUY' or currency != 'KRW' or quantity != int(quantity):
+                raise ValueError('체결 메시지 가져오기는 국내 원화 매수만 지원합니다.')
+            if date.fromisoformat(trade_date).isoformat() != trade_date:
+                raise ValueError('체결일을 확인해주세요.')
+            cursor.execute('''SELECT a.market, a.is_deposit, a.ticker, a.allowed_accounts,
+                a.portfolio_id, c.portfolio_id AS account_portfolio FROM assets a
+                JOIN accounts c ON c.id=%s WHERE a.id=%s''', (str(account_id), str(asset_id)))
+            imported_asset = cursor.fetchone()
+            if not imported_asset or imported_asset['market'] != 'KR' or imported_asset['is_deposit'] or imported_asset['portfolio_id'] != imported_asset['account_portfolio']:
+                raise ValueError('계좌와 같은 포트폴리오의 국내 종목을 선택해주세요.')
+            allowed = imported_asset['allowed_accounts'] or []
+            if isinstance(allowed, str):
+                allowed = json.loads(allowed)
+            if str(account_id) not in map(str, allowed):
+                raise ValueError('이 계좌에 허용된 종목이 아닙니다.')
+            cursor.execute('''SELECT id FROM trade_history WHERE account_id=%s AND trade_date=%s
+                AND import_source=%s AND broker_order_no=%s''', (str(account_id), trade_date, import_source, broker_order_no))
+            if cursor.fetchone():
+                raise ValueError('이미 장부에 저장된 주문입니다. 기존 기록을 확인해주세요.')
         dep_krw = float(acc_row.get('deposit_krw') or 0.0)
         dep_usd = float(acc_row.get('deposit_usd') or 0.0)
         state = forex.load_state(cursor, account_id)
@@ -73,6 +100,9 @@ def execute_trade(
             INSERT INTO trade_history (id, trade_date, account_id, asset_id, trade_type, quantity, price, currency, exchange_rate, cash_delta_krw, cash_delta_usd)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (new_trade_id, trade_date, str(account_id), str(asset_id), trade_type, quantity, price, currency, exchange_rate, delta_krw, delta_usd))
+        if import_source:
+            cursor.execute('UPDATE trade_history SET import_source=%s, broker_order_no=%s WHERE id=%s',
+                           (import_source, broker_order_no, new_trade_id))
         if trade_type in ('BUY', 'SELL'):
             cursor.execute("""
                 UPDATE accounts SET deposit_krw = %s, deposit_usd = %s WHERE id = %s
