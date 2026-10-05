@@ -293,6 +293,7 @@ export default function App() {
 
                 {activeTab === 'tab3' && (
                   <RebalanceTab
+                    key={currentPortfolioId}
                     onRefresh={() => loadAllData(true, currentPortfolioId)}
                     currentPortfolioId={currentPortfolioId}
                   />

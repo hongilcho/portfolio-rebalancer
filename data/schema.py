@@ -2,6 +2,7 @@
 from datetime import datetime
 from data.repository_context import RepositoryContext
 from data.usd_schema import initialize as initialize_usd_ledger
+from data.workflow_schema import initialize as initialize_workflow
 
 def init_db(db: RepositoryContext, schema_initializer=None):
     """
@@ -276,6 +277,7 @@ def _do_init_db_schema(db: RepositoryContext, conn, cursor):
             cursor.execute("UPDATE accounts SET current_year_deposit = 0.0, last_updated_year = %s WHERE id = %s", (current_year, row[0]))
 
     initialize_usd_ledger(cursor)
+    initialize_workflow(cursor)
     conn.commit()
     clean_deposit_shadow_accounts(db)
 

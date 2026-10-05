@@ -23,6 +23,7 @@ import { api } from '../../utils/api';
 import { formatKRW, formatQuantity, formatPercent } from '../../utils/formatters';
 import KoreanNumberInput from '../common/KoreanNumberInput';
 import DriftBar from '../common/DriftBar';
+import SavedPlans from './SavedPlans';
 
 export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default' }) {
   const [scenario, setScenario] = useState('NEW_CASH');
@@ -42,7 +43,7 @@ export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default'
         drift_threshold: Number(driftThreshold),
         portfolio_id: currentPortfolioId || 'default'
       });
-      setResult(res);
+      setResult({...res,inputs:{scenario,new_cash_krw:Number(newCash),drift_threshold:Number(driftThreshold)}});
     } catch (err) {
       setResult({ success: false, message: err.message });
     } finally {
@@ -66,6 +67,7 @@ export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default'
 
   return (
     <div>
+      <SavedPlans portfolioId={currentPortfolioId} result={result} />
       {/* 1. Configuration Card */}
       <div className="section-card">
         <div className="section-title">
