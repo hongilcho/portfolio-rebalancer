@@ -4,6 +4,7 @@ from typing import Tuple
 from psycopg2.extras import RealDictCursor
 from logic.trade_accounting import cash_movement, replay_holding
 from data.repository_context import RepositoryContext
+from data.repositories import forex
 
 def execute_trade(
     db: RepositoryContext,
@@ -29,7 +30,29 @@ def execute_trade(
         if currency is None:
             currency = 'USD' if is_us else 'KRW'
 
-        if is_us or currency == 'USD':
+        # Lock before reading balances; deletion takes the same account lock.
+        cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
+        acc_row = cursor.fetchone()
+        if not acc_row:
+            raise ValueError("존재하지 않는 계좌입니다.")
+        dep_krw = float(acc_row.get('deposit_krw') or 0.0)
+        dep_usd = float(acc_row.get('deposit_usd') or 0.0)
+        state = forex.load_state(cursor, account_id)
+        if state:
+            cursor.execute('SELECT market FROM assets WHERE id = %s', (str(asset_id),))
+            asset = cursor.fetchone()
+            if asset and asset['market'] == 'US':
+                if currency != 'USD':
+                    raise ValueError('달러 원가 추적 계좌의 미국 자산은 달러 단가로 입력해주세요.')
+                if trade_type == 'SELL' and (exchange_rate is None or not math.isfinite(float(exchange_rate)) or float(exchange_rate) <= 0):
+                    raise ValueError('매도대금 수취기준환율을 입력해주세요.')
+                forex.execute_managed_trade(db, cursor, account_id, asset_id, new_trade_id,
+                                            state, acc_row, trade_date, trade_type, quantity, price, exchange_rate)
+                conn.commit()
+                return True, '계좌 달러 평균환율로 매매 기록과 원가를 저장했습니다.'
+            if currency == 'USD':
+                raise ValueError('달러 원가 추적 계좌에서는 미국 자산에만 달러 거래를 등록할 수 있습니다.')
+        if currency == 'USD':
             if exchange_rate is None or float(exchange_rate) <= 1.0:
                 try:
                     exchange_rate = db.exchange_rate() or 1380.0
@@ -39,18 +62,10 @@ def execute_trade(
                 exchange_rate = float(exchange_rate)
         else:
             exchange_rate = 1.0
-
         if not math.isfinite(exchange_rate) or exchange_rate <= 0:
             raise ValueError("매입환율은 양수여야 합니다.")
         if not math.isfinite(quantity * price * exchange_rate):
             raise ValueError("거래 금액이 허용 범위를 초과합니다.")
-        # Lock before reading balances; deletion takes the same account lock.
-        cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
-        acc_row = cursor.fetchone()
-        if not acc_row:
-            raise ValueError("존재하지 않는 계좌입니다.")
-        dep_krw = float(acc_row.get('deposit_krw') or 0.0)
-        dep_usd = float(acc_row.get('deposit_usd') or 0.0)
         delta_krw, delta_usd = cash_movement(
             trade_type, quantity, price, currency, exchange_rate, dep_krw, dep_usd
         )
@@ -222,6 +237,23 @@ def delete_trades(db: RepositoryContext, trade_ids):
         selected = cursor.fetchall()
         if len(selected) != len(ids):
             raise ValueError("이미 삭제된 매매 기록이 있습니다.")
+        cursor.execute(f'SELECT * FROM usd_cash_events WHERE trade_id IN ({placeholders}) AND reversed_at IS NULL ORDER BY sequence DESC', tuple(ids))
+        managed = cursor.fetchall()
+        managed_ids = {event['trade_id'] for event in managed}
+        for trade in selected:
+            if trade['id'] not in managed_ids and forex.enabled(cursor, trade['account_id']):
+                cursor.execute('SELECT market FROM assets WHERE id = %s', (trade['asset_id'],))
+                asset = cursor.fetchone()
+                if asset and asset['market'] == 'US':
+                    raise ValueError('달러 추적 시작 이전의 미국 자산 기록은 현재 원가의 기준입니다. 삭제할 수 없습니다.')
+        for event in managed:
+            forex.reverse_latest(cursor, event['account_id'], event['id'])
+        selected = [trade for trade in selected if trade['id'] not in managed_ids]
+        if not selected:
+            conn.commit()
+            return True, '매매를 취소하고 달러·보유 원가를 복원했습니다.'
+        ids = [trade['id'] for trade in selected]
+        placeholders = ', '.join(['%s'] * len(ids))
         for trade in selected:
             if trade['trade_type'] != 'INIT' and (
                 trade.get('cash_delta_krw') is None or trade.get('cash_delta_usd') is None

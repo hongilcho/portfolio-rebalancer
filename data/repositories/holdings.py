@@ -2,6 +2,7 @@
 from datetime import datetime
 from psycopg2.extras import RealDictCursor
 from data.repository_context import RepositoryContext
+from data.repositories.forex import enabled
 
 def get_holdings_by_account(db: RepositoryContext, account_id):
     conn = db.connect()
@@ -65,6 +66,9 @@ def save_account_holdings(db: RepositoryContext, account_id, holdings_data):
     conn = db.connect()
     cursor = conn.cursor()
     try:
+        cursor.execute('SELECT id FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
+        if enabled(cursor, account_id):
+            raise ValueError('달러 원가 추적 중인 계좌의 보유 잔고는 매매 기록으로 관리해주세요. 기존 매입원가를 보호합니다.')
         today_str = datetime.now().strftime('%Y-%m-%d')
         for item in holdings_data:
             aid = str(item['asset_id'])
@@ -152,6 +156,18 @@ def sync_account_with_api(db: RepositoryContext, account_id, api_data):
     conn = db.connect()
     cursor = conn.cursor()
     try:
+        cursor.execute('SELECT id FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
+        tracked = enabled(cursor, account_id)
+        tracked_us = {}
+        protected_us_ids = set()
+        if tracked:
+            cursor.execute("SELECT a.ticker, h.quantity, h.asset_id FROM holdings h JOIN assets a ON a.id=h.asset_id WHERE h.account_id=%s AND a.market='US'", (str(account_id),))
+            us_rows = cursor.fetchall()
+            tracked_us = {row[0]: float(row[1]) for row in us_rows if float(row[1]) > 0}
+            protected_us_ids = {row[2] for row in us_rows}
+            incoming = {h['ticker']: float(h['quantity']) for h in api_data.get('holdings', [])}
+            if any(abs(incoming.get(ticker, 0) - qty) > 1e-8 for ticker, qty in tracked_us.items()):
+                raise ValueError('미국 자산 수량이 매매 기록과 다릅니다. 누락된 매매를 먼저 기록해주세요. 동기화는 원가를 덮어쓰지 않습니다.')
         # 0. Migration: Fix gold ticker if it was set to '없음'
         cursor.execute("UPDATE assets SET ticker = 'M04020000' WHERE name LIKE '%금%' AND ticker = '없음'")
         
@@ -166,8 +182,10 @@ def sync_account_with_api(db: RepositoryContext, account_id, api_data):
             cursor.execute("UPDATE accounts SET deposit_krw = %s WHERE id = %s", (deposit_krw, str(account_id)))
         
         # 2. Get asset mapping
-        cursor.execute("SELECT id, ticker FROM assets")
-        asset_map = {row[1]: row[0] for row in cursor.fetchall()}
+        cursor.execute("SELECT id, ticker, market FROM assets")
+        asset_rows = cursor.fetchall()
+        asset_map = {row[1]: row[0] for row in asset_rows}
+        asset_markets = {row[1]: row[2] for row in asset_rows}
         
         # 3. Get existing holdings to zero out removed assets
         cursor.execute("SELECT asset_id FROM holdings WHERE account_id = %s", (str(account_id),))
@@ -184,6 +202,10 @@ def sync_account_with_api(db: RepositoryContext, account_id, api_data):
                 aid = asset_map[ticker]
                 incoming_asset_ids.add(aid)
                 qty = float(h['quantity'])
+                if tracked and asset_markets[ticker] == 'US':
+                    if abs(qty - tracked_us.get(ticker, 0)) > 1e-8:
+                        raise ValueError('새 미국 자산은 매매 기록으로 먼저 등록해주세요.')
+                    continue  # Preserve accepted/purchased funding cost, not broker FX.
                 avg_p = float(h['avg_price'])
                 avg_p_usd = float(h.get('avg_price_usd', 0.0))
                 buy_fx = float(h.get('buy_fx_rate', 0.0))
@@ -220,7 +242,7 @@ def sync_account_with_api(db: RepositoryContext, account_id, api_data):
         # 5. Delete holdings that are no longer in the account (protecting deposits)
         cursor.execute("SELECT id FROM assets WHERE is_deposit = TRUE")
         deposit_asset_ids = {row[0] for row in cursor.fetchall()}
-        to_delete_ids = (existing_asset_ids - incoming_asset_ids) - deposit_asset_ids
+        to_delete_ids = (existing_asset_ids - incoming_asset_ids) - deposit_asset_ids - protected_us_ids
         for z_id in to_delete_ids:
             cursor.execute("DELETE FROM holdings WHERE account_id = %s AND asset_id = %s", (str(account_id), z_id))
             

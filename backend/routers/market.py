@@ -12,8 +12,9 @@ import pandas as pd
 import io
 import zipfile
 import datetime
+import json
 from backend.services import market_service
-from data.data_manager import get_all_accounts, get_all_assets, get_all_holdings, get_trade_history
+from data.data_manager import get_all_accounts, get_all_assets, get_all_holdings, get_trade_history, get_usd_ledgers, get_usd_events
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
@@ -71,6 +72,12 @@ def export_csv_backup():
     assets_df = pd.DataFrame(get_all_assets())
     holdings_df = pd.DataFrame(get_all_holdings())
     trades_df = pd.DataFrame(get_trade_history())
+    usd_df = pd.DataFrame(get_usd_ledgers())
+    usd_events = get_usd_events()
+    for event in usd_events:
+        for field in ('before_state', 'after_state'):
+            event[field] = json.dumps(event[field], ensure_ascii=False, default=str)
+    usd_events_df = pd.DataFrame(usd_events)
     
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
@@ -82,6 +89,10 @@ def export_csv_backup():
             zip_file.writestr("holdings.csv", holdings_df.to_csv(index=False).encode('utf-8-sig'))
         if not trades_df.empty:
             zip_file.writestr("trade_history.csv", trades_df.to_csv(index=False).encode('utf-8-sig'))
+        if not usd_df.empty:
+            zip_file.writestr('usd_cash_state.csv', usd_df.to_csv(index=False).encode('utf-8-sig'))
+        if not usd_events_df.empty:
+            zip_file.writestr('usd_cash_events.csv', usd_events_df.to_csv(index=False).encode('utf-8-sig'))
     
     zip_buffer.seek(0)
     filename = f"portfolio_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"

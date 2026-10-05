@@ -20,6 +20,7 @@ def test_execute_trade_deposit_update(mock_get_connection):
     # 1. Test BUY (should deduct from deposit_krw)
     mock_cursor.fetchone.side_effect = [
         {'deposit_krw': 19000.0}, # account balance
+        None, # USD ledger is opt-in
         None # holdings lookup
     ]
 
@@ -35,6 +36,7 @@ def test_execute_trade_deposit_update(mock_get_connection):
     mock_cursor.reset_mock()
     mock_cursor.fetchone.side_effect = [
         {'deposit_krw': 10000.0}, # account balance
+        None, # USD ledger is opt-in
         {'quantity': 10, 'avg_price': 25000.0} # holdings lookup (selling 5 at 26000)
     ]
 

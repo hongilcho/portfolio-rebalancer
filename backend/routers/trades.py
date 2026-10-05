@@ -68,9 +68,12 @@ def list_trades(
 def execute_batch_trades(req: BatchTradeRequest):
     success_count = 0
     errors = []
+    results = []
     
-    for item in req.trades:
+    for index, item in enumerate(req.trades):
         if item.quantity <= 0 or item.price <= 0:
+            results.append({"index": index, "success": False, "message": "수량과 단가는 양수여야 합니다."})
+            errors.append(results[-1]["message"])
             continue
             
         success, msg = execute_trade(
@@ -87,12 +90,14 @@ def execute_batch_trades(req: BatchTradeRequest):
             success_count += 1
         else:
             errors.append(msg)
+        results.append({"index": index, "success": success, "message": msg})
             
     if errors:
         return {
             "success": success_count > 0,
             "success_count": success_count,
             "errors": errors,
+            "results": results,
             "message": f"{success_count}건 처리 완료, {len(errors)}건 실패"
         }
         
@@ -100,6 +105,7 @@ def execute_batch_trades(req: BatchTradeRequest):
         "success": True,
         "success_count": success_count,
         "errors": [],
+        "results": results,
         "message": f"{success_count}건의 매매 기록이 성공적으로 저장되었습니다."
     }
 

@@ -4,6 +4,17 @@
 
 ---
 
+### 달러 원가 추적 기능 (2026-10-05)
+
+`codex/usd-cost-ledger`에서 계좌별 달러 취득원가·환전 이벤트를 개발했습니다.
+기존 미국 자산 원가를 시작 기준으로 보존하며 이후 매수에는 달러 현금의
+이동평균 취득환율을 적용합니다. 운영 DB에 자동으로 시작 원가를 설정하지 않습니다.
+사용자가 계좌별 시작 환율을 등록해야 새 거래 정책이 적용됩니다.
+설계·사용법·배포 및 검증 기준은 [docs/USD_COST_LEDGER.md](docs/USD_COST_LEDGER.md)를 참고하세요.
+새 테이블 DDL은 `data/usd_schema.py`, 거래 연결은 `data/repositories/forex.py`에 있습니다.
+
+---
+
 ## 1. 프로젝트 요약 (Executive Summary)
 
 * **프로젝트명**: Portfolio Rebalancer (자산 배분 포트폴리오 리밸런서)

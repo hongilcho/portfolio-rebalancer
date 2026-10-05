@@ -14,7 +14,7 @@ from data.normalization import (
 )
 from data.repository_context import RepositoryContext
 from data.repositories import (
-    portfolios, accounts, assets, holdings, trades, crypto, snapshots, market_cache,
+    portfolios, accounts, assets, holdings, trades, crypto, snapshots, market_cache, forex,
 )
 
 PoolConnectionWrapper = connection.PoolConnectionWrapper
@@ -23,6 +23,22 @@ get_connection_pool = connection.get_connection_pool
 
 def get_connection() -> PoolConnectionWrapper:
     return connection.get_connection(pool_provider=get_connection_pool)
+
+
+def get_usd_ledgers(portfolio_id=None):
+    return forex.get_ledgers(_context(), portfolio_id)
+
+
+def get_usd_events(account_id=None):
+    return forex.get_events(_context(), account_id)
+
+
+def record_usd_event(account_id, kind, occurred_at, usd_amount=0, krw_amount=0, rate=0, notes=''):
+    return forex.record_cash_event(_context(), account_id, kind, occurred_at, usd_amount, krw_amount, rate, notes)
+
+
+def undo_usd_event(account_id, event_id):
+    return forex.undo_event(_context(), account_id, event_id)
 
 
 def clear_all_caches():

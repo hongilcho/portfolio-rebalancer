@@ -5,6 +5,7 @@ It verifies real commit/rollback behavior, not PostgreSQL concurrency or DDL.
 """
 
 import sqlite3
+from decimal import Decimal
 import pytest
 from data import data_manager as dm
 from backend.routers import trades as router
@@ -29,7 +30,8 @@ class CursorAdapter:
     def execute(self, sql, params=()):
         if self.db.fail_on and self.db.fail_on in sql:
             raise sqlite3.OperationalError("injected write failure")
-        return self.cursor.execute(sql.replace('%s', '?').replace(' FOR UPDATE', ''), params)
+        return self.cursor.execute(sql.replace('%s', '?').replace(' FOR UPDATE', ''),
+                                   tuple(float(v) if isinstance(v, Decimal) else v for v in params))
 
     def fetchone(self):
         row = self.cursor.fetchone()
@@ -62,6 +64,14 @@ class DatabaseAdapter:
             );
             INSERT INTO accounts VALUES ('acc', 1000000, 1000);
             INSERT INTO assets VALUES ('ast', 'KR');
+            CREATE TABLE usd_cash_state (account_id TEXT PRIMARY KEY, usd_balance NUMERIC,
+                cost_krw NUMERIC, last_event_date TEXT, started_at TEXT DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE usd_cash_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE,
+                account_id TEXT, kind TEXT, occurred_at TEXT, event_date TEXT,
+                recorded_at TEXT DEFAULT CURRENT_TIMESTAMP, usd_amount NUMERIC, krw_amount NUMERIC,
+                fx_rate NUMERIC, cash_delta_krw REAL, cash_delta_usd REAL, trade_id TEXT UNIQUE,
+                trade_reference TEXT, asset_id TEXT, before_state TEXT, after_state TEXT, notes TEXT,
+                reversed_at TEXT);
         ''')
 
     def cursor(self, **kwargs):

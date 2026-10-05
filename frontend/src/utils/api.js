@@ -45,6 +45,14 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  getUsdLedgers: (portfolioId) => request(`/api/forex/?portfolio_id=${encodeURIComponent(portfolioId)}`),
+  getUsdEvents: (accountId) => request(`/api/forex/${encodeURIComponent(accountId)}/events`),
+  recordUsdEvent: (accountId, event) => request(`/api/forex/${encodeURIComponent(accountId)}/events`, {
+    method: 'POST', body: JSON.stringify(event),
+  }),
+  undoUsdEvent: (accountId, eventId) => request(`/api/forex/${encodeURIComponent(accountId)}/events/${encodeURIComponent(eventId)}`, {
+    method: 'DELETE',
+  }),
   // Auth
   verifyPassword: (password) => request('/api/auth/verify', {
     method: 'POST',

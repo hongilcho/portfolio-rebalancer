@@ -87,6 +87,9 @@ def get_all_holdings_list(portfolio_id: Optional[str] = None):
 
 @router.post("/save")
 def save_holdings(req: SaveAccountHoldingsRequest):
+    from data.data_manager import get_usd_ledgers
+    if any(str(s['account_id']) == str(req.account_id) for s in get_usd_ledgers()):
+        raise HTTPException(status_code=400, detail='달러 원가 추적 중인 계좌는 매매·환전 기록으로 관리해주세요. 기존 원가를 보호합니다.')
     accounts = get_all_accounts()
     target_acc = next((a for a in accounts if str(a['id']) == str(req.account_id)), None)
     if not target_acc:

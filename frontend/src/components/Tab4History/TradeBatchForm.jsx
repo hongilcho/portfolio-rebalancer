@@ -21,6 +21,7 @@ export default function TradeBatchForm({
   addSellRow,
   handleSaveBatchTrades,
   savingBatch,
+  usdLedgers = [],
 }) {
   return (
     <>
@@ -35,12 +36,13 @@ export default function TradeBatchForm({
               className="input-text"
               style={{ width: '150px', padding: '6px 10px' }}
               value={tradeDate}
+              disabled={savingBatch}
               onChange={(e) => setTradeDate(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="trade-forms-grid">
+        <div className="trade-forms-grid" inert={savingBatch || undefined}>
           {/* 🔴 BUY Column */}
           <div style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.2)' }}>
             <h4 style={{ color: 'var(--color-profit)', fontWeight: 700, marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -54,6 +56,8 @@ export default function TradeBatchForm({
               );
               const selectedAst = assets.find((a) => String(a.id) === String(row.assetId));
               const isUS = selectedAst?.market === 'US';
+              const ledger = usdLedgers.find(s => String(s.account_id) === String(row.accountId));
+              const appliedRate = ledger ? Number(ledger.average_rate) : (row.exchangeRate || usdKrw);
 
               return (
                 <div key={row.id} className="trade-row-card">
@@ -187,25 +191,27 @@ export default function TradeBatchForm({
                       fontSize: '0.8rem'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>🇺🇸 체결환율:</span>
+                        <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{ledger ? '🇺🇸 달러 평균 취득환율:' : '🇺🇸 체결환율:'}</span>
                         <input
                           type="number"
                           step="0.1"
                           style={{ width: '85px', padding: '3px 6px', fontSize: '0.8rem' }}
                           className="input-number"
-                          value={row.exchangeRate ?? usdKrw}
+                          value={ledger ? appliedRate : (row.exchangeRate ?? usdKrw)}
+                          readOnly={!!ledger}
                           onChange={(e) => updateBuyRow(row.id, 'exchangeRate', parseFloat(e.target.value) || 0)}
                         />
                         <span>원/$</span>
                       </div>
                       <div style={{ color: 'var(--text-secondary)' }}>
-                        1주당 ≈ <b>{formatKRW(row.price * (row.exchangeRate || usdKrw))}</b>
+                        1주당 ≈ <b>{formatKRW(row.price * appliedRate)}</b>
                         {row.quantity > 0 && (
-                          <span> | 총액: <b>{formatUSD(row.quantity * row.price)}</b> (≈ {formatKRW(row.quantity * row.price * (row.exchangeRate || usdKrw))})</span>
+                          <span> | 총액: <b>{formatUSD(row.quantity * row.price)}</b> (≈ {formatKRW(row.quantity * row.price * appliedRate)})</span>
                         )}
                       </div>
                     </div>
                   )}
+                  {isUS && ledger && <p role="status">{ledger.needs_reconciliation ? '달러 잔고 대사가 필요합니다.' : `사용 가능한 달러 ${formatUSD(ledger.usd_balance)}. 부족하면 실제 환전 후 기록을 먼저 등록하세요.`}</p>}
                 </div>
               );
             })}
@@ -230,6 +236,7 @@ export default function TradeBatchForm({
 
             {sellRows.map((row) => {
               const accHoldings = (accountHoldingsMap[String(row.accountId)] || []).filter((h) => h.quantity > 0);
+              const ledger = usdLedgers.find(s => String(s.account_id) === String(row.accountId));
               const selectedAst = assets.find((a) => String(a.id) === String(row.assetId));
               const isUS = selectedAst?.market === 'US';
 
@@ -375,7 +382,7 @@ export default function TradeBatchForm({
                       fontSize: '0.8rem'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>🇺🇸 체결환율:</span>
+                        <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{ledger ? '🇺🇸 매도대금 수취기준환율:' : '🇺🇸 체결환율:'}</span>
                         <input
                           type="number"
                           step="0.1"
@@ -387,6 +394,7 @@ export default function TradeBatchForm({
                         <span>원/$</span>
                       </div>
                       <div style={{ color: 'var(--text-secondary)' }}>
+                        {ledger && <span>수령할 달러의 원가 평가 기준입니다. 실제 환전이 발생한 기록은 아닙니다. </span>}
                         1주당 ≈ <b>{formatKRW(row.price * (row.exchangeRate || usdKrw))}</b>
                         {row.quantity > 0 && (
                           <span> | 총액: <b>{formatUSD(row.quantity * row.price)}</b> (≈ {formatKRW(row.quantity * row.price * (row.exchangeRate || usdKrw))})</span>

@@ -5,7 +5,7 @@
  * 과거 거래 내역의 다차원 필터링 조회 및 일괄 삭제(평단가 자동 롤백)를 지원합니다.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 import { api } from '../../utils/api';
 
@@ -13,6 +13,7 @@ import { loadAccountHoldings } from '../../utils/accountHoldings';
 import PriceReference from './PriceReference';
 import TradeBatchForm from './TradeBatchForm';
 import TradeHistorySection from './TradeHistorySection';
+import UsdLedgerPanel from './UsdLedgerPanel';
 
 export default function HistoryTab({
   assets,
@@ -24,10 +25,26 @@ export default function HistoryTab({
   currentPortfolioId = 'default',
 }) {
   // Batch Trade Form State
-  const [tradeDate, setTradeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [tradeDate, setTradeDate] = useState(new Date(Date.now() + 9 * 3600000).toISOString().split('T')[0]);
   const [buyRows, setBuyRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
   const [sellRows, setSellRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
   const [savingBatch, setSavingBatch] = useState(false);
+  const [usdLedgers, setUsdLedgers] = useState(null);
+  const [ledgerError, setLedgerError] = useState('');
+  const ledgerScope = useRef(currentPortfolioId);
+  useEffect(() => {
+    let cancelled = false;
+    if (ledgerScope.current !== currentPortfolioId) setUsdLedgers(null);
+    ledgerScope.current = currentPortfolioId;
+    setLedgerError('');
+    api.getUsdLedgers(currentPortfolioId).then(res => { if (!cancelled) setUsdLedgers(res.ledgers); })
+      .catch(error => { if (!cancelled) setLedgerError(error.message); });
+    return () => { cancelled = true; };
+  }, [currentPortfolioId, accounts]);
+  const refreshLedgers = async () => {
+    const res = await api.getUsdLedgers(currentPortfolioId);
+    setUsdLedgers(res.ledgers);
+  };
 
   // Price map lookup for USD native prices
   const usdPriceMap = useMemo(() => {
@@ -164,8 +181,9 @@ export default function HistoryTab({
 
   // Submit Batch Trades
   const handleSaveBatchTrades = async () => {
-    const validBuys = buyRows
-      .filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0)
+    const submittedBuys = buyRows.filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0);
+    const submittedSells = sellRows.filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0);
+    const validBuys = submittedBuys
       .map((r) => {
         const ast = assets.find((a) => String(a.id) === String(r.assetId));
         const isUS = ast?.market === 'US';
@@ -180,8 +198,7 @@ export default function HistoryTab({
         };
       });
 
-    const validSells = sellRows
-      .filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0)
+    const validSells = submittedSells
       .map((r) => {
         const ast = assets.find((a) => String(a.id) === String(r.assetId));
         const isUS = ast?.market === 'US';
@@ -205,11 +222,16 @@ export default function HistoryTab({
     setSavingBatch(true);
     try {
       const res = await api.batchExecuteTrades(tradeDate, allTrades);
-      alert(res.message || '매매 내역이 성공적으로 저장되었습니다.');
-      // Reset form
-      setBuyRows([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
-      setSellRows([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
+      alert([res.message || '매매 내역이 성공적으로 저장되었습니다.', ...(res.errors || [])].join('\n'));
+      // Keep failed rows for correction, removing only confirmed successful requests.
+      const successful = new Set((res.results || []).filter(r => r.success).map(r => r.index));
+      const submitted = [...submittedBuys, ...submittedSells];
+      const completedIds = new Set(submitted.filter((_, index) => successful.has(index)).map(r => r));
+      const blank = () => ({ id: Date.now().toString(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw });
+      setBuyRows(prev => { const remaining = prev.filter(r => !completedIds.has(r)); return remaining.length ? remaining : [blank()]; });
+      setSellRows(prev => { const remaining = prev.filter(r => !completedIds.has(r)); return remaining.length ? remaining : [blank()]; });
       loadTrades();
+      await refreshLedgers();
       onSaved();
     } catch (err) {
       alert(`저장 실패: ${err.message}`);
@@ -243,6 +265,7 @@ export default function HistoryTab({
       const res = await api.batchDeleteTrades(selectedTradeIds);
       alert(res.message || '삭제 및 예수금·보유 잔고 복원이 완료되었습니다.');
       loadTrades();
+      await refreshLedgers();
       onSaved();
     } catch (err) {
       alert(`삭제 실패: ${err.message}`);
@@ -253,6 +276,9 @@ export default function HistoryTab({
 
   return (
     <div>
+      {usdLedgers !== null && <UsdLedgerPanel key={currentPortfolioId} accounts={accounts} assets={assets} ledgers={usdLedgers} portfolioId={currentPortfolioId}
+        onChanged={async () => { await refreshLedgers(); loadTrades(); onSaved(); }} />}
+      {ledgerError && <p role="alert">달러 원가 조회 실패: {ledgerError}</p>}
       <PriceReference
         setIsPriceRefOpen={setIsPriceRefOpen}
         isPriceRefOpen={isPriceRefOpen}
@@ -280,6 +306,7 @@ export default function HistoryTab({
         addSellRow={addSellRow}
         handleSaveBatchTrades={handleSaveBatchTrades}
         savingBatch={savingBatch}
+        usdLedgers={usdLedgers || []}
       />
 
       <TradeHistorySection

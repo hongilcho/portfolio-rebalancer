@@ -14,6 +14,7 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=8547)
 parser.add_argument('--simulate-refresh', action='store_true')
+parser.add_argument('--usd-ledger', action='store_true', help='Add synthetic USD cash and VT/PDBC opening positions')
 args = parser.parse_args()
 
 import psycopg2
@@ -66,6 +67,16 @@ with dm.get_connection() as conn:
         cursor.execute("UPDATE crypto_holdings SET quantity=0.01,avg_price=1000000 WHERE owner='홍일' AND symbol='BTC'")
     conn.commit()
 assert dm.execute_trade('2026-01-01','qa_acc','qa_asset','INIT',10,100000,'KRW',1)[0]
+if args.usd_ledger:
+    with dm.get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE accounts SET deposit_krw=5000000,deposit_usd=400 WHERE id='qa_acc'")
+            cursor.execute('''INSERT INTO assets (id,name,ticker,market,target_weight,allowed_accounts,portfolio_id)
+                VALUES ('qa_vt','Vanguard Total World Stock ETF','VT','US',20,'["qa_acc"]','default'),
+                       ('qa_pdbc','Invesco PDBC','PDBC','US',10,'["qa_acc"]','default')''')
+        conn.commit()
+    assert dm.execute_trade('2026-01-01','qa_acc','qa_vt','INIT',5,100,'USD',1250)[0]
+    assert dm.execute_trade('2026-01-01','qa_acc','qa_pdbc','INIT',10,20,'USD',1350)[0]
 
 from backend import main
 from backend.services import market_service
@@ -74,12 +85,15 @@ from logic import dividend_fetcher
 
 quotes = [{"id":"qa_asset", "name":"검증 ETF", "ticker":"QA_ETF", "market":"KR",
            "price_krw":110000, "price_usd":0, "source":"고정 검증 시세"}]
+if args.usd_ledger:
+    quotes.extend([{'id': 'qa_vt', 'name': 'Vanguard Total World Stock ETF', 'ticker': 'VT', 'market': 'US', 'price_usd': 100, 'price_krw': 140000, 'source': '고정 검증 시세'},
+                   {'id': 'qa_pdbc', 'name': 'Invesco PDBC', 'ticker': 'PDBC', 'market': 'US', 'price_usd': 20, 'price_krw': 28000, 'source': '고정 검증 시세'}])
 crypto_quotes = {"BTC":{"price":1200000,"source":"고정 검증 시세"},
                  "ETH":{"price":0,"source":"고정 검증 시세"}}
 market_service.price_data = quotes
 market_service.usd_krw = 1400
 market_service.rate_source = "고정 검증 환율"
-market_service.get_prices = lambda **_: (quotes, {"qa_asset":110000})
+market_service.get_prices = lambda **_: (quotes, {q['id']: q['price_krw'] for q in quotes})
 market_service.warmup = lambda: None
 dividend_fetcher.fetch_dividend_history = lambda *_: [{"date":"2026-02-01","amount":5000}]
 for module in (main, crypto, portfolios):
