@@ -154,9 +154,13 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
         {daily && <p>평가액 {performanceValue(selected.value_krw, 'value_krw')} · 누적 순입금 {performanceValue(selected.net_flow, 'profit')} · 누적 손익 {performanceValue(selected.profit, 'profit')}
           {selected.warning?.includes('외부 입출금 기록 확인') && ' (입출금 확인 전 잠정 손익)'}</p>}
         {daily && selected.recorded_at && <p>마지막 기록 시각 {new Date(selected.recorded_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간)</p>}
+        {daily && <p>평가 기준 {selected.record_kind === 'close' ? '정규장 종가' : selected.record_kind === 'baseline' ? '시작 기준 등록 시점' : '이전 조회 시점 기록'}</p>}
+        {daily && selected.fx && <p>적용 환율 {Number(selected.fx.rate).toLocaleString('ko-KR')} 원/USD · 고시 {new Date(selected.fx.published_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})}</p>}
+        {daily && selected.ledger_at && <p>장부 수집 시각 {new Date(selected.ledger_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국 시간)</p>}
+        {daily && selected.closes?.length>0 && <details><summary>종가 날짜·출처 확인</summary>{selected.closes.map(c=><p key={c.id}>{c.ticker || '예금'} · {c.price_date} · {c.source}</p>)}</details>}
         {selected.warning && <p>{selected.warning}</p>}
       </div>}
-      <p className="performance-chart-note">{daily ? '기록이 없는 날짜와 계산 대기 구간은 선을 연결하지 않습니다. 하루만 기록되어 있으면 점 하나가 표시됩니다. 평가액은 입출금으로도 변하므로 수익률과 다릅니다. 앱을 조회한 날의 마지막 평가액이며, 앱을 열지 않은 날은 자동 수집하지 않습니다.' : '계산 대기는 0%·0원으로 표시하지 않습니다. 진행 중인 기간은 최근 평가일까지 표시하며, 정확한 금액과 계산 상태는 아래 표에서 확인할 수 있습니다.'}</p>
+      <p className="performance-chart-note">{daily ? '종가 기록은 연속된 거래일 사이에 선을 연결합니다. 주말·휴장일은 건너뛰고, 누락된 거래일과 계산 대기 구간은 연결하지 않습니다. 하루만 기록되면 점 하나가 표시됩니다. 평가액은 입출금으로도 변하므로 수익률과 다릅니다. 기존 조회 기록은 날짜별 상세의 평가 기준으로 구분합니다.' : '계산 대기는 0%·0원으로 표시하지 않습니다. 진행 중인 기간은 최근 평가일까지 표시하며, 정확한 금액과 계산 상태는 아래 표에서 확인할 수 있습니다.'}</p>
       {daily && !series.some(row => row.value !== null) && <p>수익률을 표시하려면 외부 입출금 기록을 확인해주세요. 시작일 평가액이 변경된 경우 다음 날짜의 기록부터 수익률을 계산할 수 있습니다.</p>}
       {series.some(row => row.provisional) && <p>{daily ? '점선과 속이 빈 점' : '점선 막대'}은 입출금 확인 전의 잠정 손익입니다. 입출금 기록을 확인하면 잠정치 표시를 해제합니다.</p>}
     </>}

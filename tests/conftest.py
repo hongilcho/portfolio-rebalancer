@@ -16,6 +16,7 @@ from curl_cffi import requests as curl_requests
 _isolation = pytest.MonkeyPatch()
 for key, value in {
     "PORTFOLIO_LOAD_CONFIG_FILES": "0",
+    "PERFORMANCE_CLOSE_SCHEDULER_ENABLED": "0",
     "SUPABASE_URL": "",
     "APP_PASSWORD": "test-only",
     "NAMUH_APP_KEY": "",

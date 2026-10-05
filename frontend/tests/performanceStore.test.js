@@ -17,7 +17,7 @@ test('viewing an unregistered portfolio does not create a baseline or capture', 
   assert.equal(store.getSnapshot().data.tracking, null);
 });
 
-test('fresh portfolio refresh captures registered performance without an analysis tab', async () => {
+test('viewing registered performance is read-only and never overwrites a close', async () => {
   const calls = [];
   const store = createPerformanceStore('first', {
     getPerformance: async pid => { calls.push(`get:${pid}`); return active(); },
@@ -25,12 +25,12 @@ test('fresh portfolio refresh captures registered performance without an analysi
   });
   store.setEnabled(true);
   await store.refresh();
-  assert.deepEqual(calls, ['get:first', 'capture:first', 'get:first']);
+  assert.deepEqual(calls, ['get:first']);
   assert.equal(store.getSnapshot().busy, false);
-  assert.match(store.getSnapshot().notice, /평가액을 저장/);
+  assert.equal(store.getSnapshot().notice, '');
 });
 
-test('user changes wait for automatic capture; its older read cannot erase new flows', async () => {
+test('user changes wait for the preceding read; its older response cannot erase new flows', async () => {
   const gate = deferred();
   const entered = deferred();
   let flows = [];
@@ -51,7 +51,7 @@ test('user changes wait for automatic capture; its older read cannot erase new f
   assert.equal(store.getSnapshot().busy, true);
   gate.resolve();
   await Promise.all([refresh, mutation]);
-  assert.deepEqual(calls, ['capture', 'add']);
+  assert.deepEqual(calls, ['add']);
   assert.deepEqual(store.getSnapshot().data.flows, flows);
   assert.equal(store.getSnapshot().busy, false);
 });
@@ -89,14 +89,14 @@ test('rejected changes refresh current records and release the busy state for re
   assert.equal(store.getSnapshot().error, '');
 });
 
-test('failed market capture retains its warning and the previously recorded evaluation', async () => {
+test('explicit close retry retains its warning and the previously recorded evaluation', async () => {
   const data = { ...active(), snapshots: [{ value_krw: 100 }] };
   const store = createPerformanceStore('first', {
     getPerformance: async () => data,
     capturePerformance: async () => ({ saved: false, message: '시세 갱신 중' }),
   });
   store.setEnabled(true);
-  await store.refresh();
+  await store.run(store.capture);
   assert.equal(store.getSnapshot().notice, '시세 갱신 중');
   assert.equal(store.getSnapshot().data.snapshots[0].value_krw, 100);
 });

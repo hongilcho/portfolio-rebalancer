@@ -32,3 +32,23 @@ def initialize(cursor):
         notes TEXT NOT NULL DEFAULT '', voided BOOLEAN NOT NULL DEFAULT FALSE,
         recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(portfolio_id,request_id))''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_performance_flows_scope ON performance_flows(portfolio_id,event_date)')
+    # Preserve existing intraday records, never relabel them as closing prices.
+    cursor.execute("ALTER TABLE performance_tracking ADD COLUMN IF NOT EXISTS close_started_on DATE")
+    cursor.execute("UPDATE performance_tracking SET close_started_on=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date WHERE close_started_on IS NULL")
+    cursor.execute("ALTER TABLE performance_snapshots ADD COLUMN IF NOT EXISTS record_kind TEXT NOT NULL DEFAULT 'legacy_view'")
+    cursor.execute("ALTER TABLE performance_snapshots ADD COLUMN IF NOT EXISTS valuation_at TIMESTAMPTZ")
+    cursor.execute("ALTER TABLE performance_snapshots ADD COLUMN IF NOT EXISTS previous_close_date DATE")
+    cursor.execute('''CREATE TABLE IF NOT EXISTS performance_close_jobs (
+        portfolio_id TEXT NOT NULL REFERENCES performance_tracking(portfolio_id) ON DELETE CASCADE,
+        snapshot_date DATE NOT NULL, state TEXT NOT NULL DEFAULT 'pending'
+            CHECK(state IN ('pending','running','retry','complete','missed')),
+        attempts INTEGER NOT NULL DEFAULT 0, lease_token TEXT, lease_until TIMESTAMPTZ,
+        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        inputs JSONB, error TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(portfolio_id,snapshot_date))''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS performance_snapshot_revisions (
+        id BIGSERIAL PRIMARY KEY, portfolio_id TEXT NOT NULL REFERENCES performance_tracking(portfolio_id) ON DELETE CASCADE,
+        snapshot_date DATE NOT NULL, value_krw NUMERIC(28,8) NOT NULL, payload JSONB NOT NULL,
+        record_kind TEXT NOT NULL, recorded_at TIMESTAMPTZ NOT NULL,
+        replaced_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_performance_revisions_scope ON performance_snapshot_revisions(portfolio_id,snapshot_date)')

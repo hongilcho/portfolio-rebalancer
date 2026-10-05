@@ -30,6 +30,7 @@ from data.data_manager import init_db, get_overview_batch_data
 from backend.routers import forex, plans, performance
 from logic.dividend_fetcher import prepare_dividend_cache
 from backend.services import market_service
+from backend.close_performance import start_scheduler
 from logic.crypto_price_fetcher import get_crypto_prices
 from backend.routers import auth, market, dashboard, accounts, assets, holdings, rebalance, trades, sync, crypto, portfolios, system
 
@@ -53,7 +54,14 @@ async def lifespan(app: FastAPI):
             print(f"Dividend cache warmup notice: {type(e).__name__}")
 
     threading.Thread(target=_background_dividend_warmup, daemon=True).start()
-    yield
+    stop, close_thread = start_scheduler()
+    try:
+        yield
+    finally:
+        stop.set()
+        # Provider requests are bounded; DB leases survive a forced shutdown.
+        if close_thread:
+            close_thread.join(timeout=1)
 
 app = FastAPI(
     title="Portfolio Rebalancer API",

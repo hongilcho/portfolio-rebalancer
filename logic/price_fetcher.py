@@ -123,7 +123,7 @@ def get_us_stock_price(ticker_symbol: str, usd_krw: float = 1380.0) -> Tuple[flo
     return None, '시세를 찾을 수 없음'
 
 
-def calculate_deposit_price(asset: dict) -> Tuple[float, int, float, float]:
+def calculate_deposit_price(asset: dict, valuation_date=None) -> Tuple[float, int, float, float]:
     """
     정기예금 자산의 일할(Daily) 세후 누적이자를 계산하여 현재 평가액을 산출합니다.
     
@@ -158,7 +158,7 @@ def calculate_deposit_price(asset: dict) -> Tuple[float, int, float, float]:
     except Exception:
         return principal, 0, 0.0, 0.0
 
-    today = datetime.now().date()
+    today = valuation_date or datetime.now().date()
 
     maturity_date = None
     if maturity_date_str:

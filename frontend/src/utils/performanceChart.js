@@ -9,7 +9,7 @@ export function performanceSeries(reports, kind, metric, year) {
         : null;
       const periodEnd = kind === '연' ? `${row.label}-12-31`
         : new Date(Date.UTC(Number(row.label.slice(0, 4)), Number(row.label.slice(5, 7)), 0)).toISOString().slice(0, 10);
-      return { ...row, value, key: `${row.kind}/${row.label}`, ongoing: row.end < periodEnd,
+      return { ...row, value, key: `${row.kind}/${row.label}`, ongoing: row.period_complete == null ? row.end < periodEnd : !row.period_complete,
         provisional: value !== null && metric === 'profit' && (row.warning || '').includes('외부 입출금 기록 확인') };
     });
 }
@@ -43,7 +43,11 @@ export function dailyPerformanceSeries(reports, metric, range = '90') {
 export function dailyPerformanceSegments(series) {
   return series.slice(1).flatMap((row, index) => {
     const previous = series[index];
-    return previous.value !== null && row.value !== null && performanceDay(row.label) - performanceDay(previous.label) === 1
+    const consecutive = row.record_kind === 'close' && ['close','baseline'].includes(previous.record_kind)
+      ? row.previous_close_date === previous.label || (previous.record_kind === 'baseline' &&
+        previous.label > row.previous_close_date && previous.label < row.label)
+      : performanceDay(row.label) - performanceDay(previous.label) === 1;
+    return previous.value !== null && row.value !== null && consecutive
       ? [{ from: previous, to: row, provisional: previous.provisional || row.provisional }] : [];
   });
 }

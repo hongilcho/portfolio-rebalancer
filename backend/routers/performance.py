@@ -7,6 +7,7 @@ from backend.services import market_service
 from backend.performance_valuation import current_nav
 from data import data_manager as dm
 from data.repositories import performance
+from backend.close_performance import ClosePerformance, schedule_info
 
 router=APIRouter(prefix='/api/performance',tags=['performance'])
 
@@ -33,6 +34,8 @@ class Confirmation(BaseModel):
 
 
 def capture_current(pid,start=False):
+    if not start:
+        return {'saved':False,'message':'조회 시점 평가액은 기록하지 않습니다. 종가 수집을 사용해주세요.'}
     batch=dm.get_rebalance_batch_data(pid)
     prices,price_map=market_service.get_prices()
     status=market_service.request_status()
@@ -54,7 +57,12 @@ def capture_current(pid,start=False):
 
 @router.get('/{pid}')
 def get_performance(pid:str):
-    return perform(performance.read,pid)
+    result = perform(performance.read,pid)
+    try:
+        result['close_schedule'] = schedule_info()
+    except Exception:
+        result['close_schedule'] = {'enabled': False, 'error': '거래소 달력을 확인할 수 없습니다. 서버 로그를 확인해주세요.'}
+    return result
 
 
 @router.post('/{pid}/start')
@@ -64,7 +72,10 @@ def start_performance(pid:str):
 
 @router.post('/{pid}/snapshot')
 def capture_snapshot(pid:str):
-    return capture_current(pid)
+    try:
+        return ClosePerformance().request(pid)
+    except ValueError as exc:
+        raise HTTPException(status_code=409,detail=str(exc)) from exc
 
 
 @router.post('/{pid}/flows')

@@ -9,6 +9,9 @@ def today():
 
 
 def capture(ctx, pid, value, payload, *, start=False):
+    # Old clients must never overwrite a closing snapshot with a live quote.
+    if not start:
+        return False
     day=today()
     with ctx.connect() as conn, conn.cursor(cursor_factory=RealDictCursor) as c:
         # Serialize initial registration and same-day writes by portfolio.
@@ -22,8 +25,8 @@ def capture(ctx, pid, value, payload, *, start=False):
                 raise ValueError('이미 시작 기준이 등록되어 있습니다.')
             if value<=0:
                 raise ValueError('시작 평가액이 양수여야 합니다.')
-            c.execute('''INSERT INTO performance_tracking(portfolio_id,baseline_date,baseline_value,baseline_payload)
-                VALUES(%s,%s,%s,%s)''', (pid,day,value,Json(payload)))
+            c.execute('''INSERT INTO performance_tracking(portfolio_id,baseline_date,baseline_value,baseline_payload,close_started_on)
+                VALUES(%s,%s,%s,%s,%s)''', (pid,day,value,Json(payload),day))
         elif not tracking:
             return False
         c.execute('SELECT value_krw FROM performance_snapshots WHERE portfolio_id=%s AND snapshot_date=%s', (pid,day))
@@ -32,9 +35,8 @@ def capture(ctx, pid, value, payload, *, start=False):
             # Later same-day balances may contain a new, not-yet-recorded flow.
             c.execute('''UPDATE performance_tracking SET confirmed_through=LEAST(confirmed_through,%s)
                 WHERE portfolio_id=%s AND confirmed_through IS NOT NULL''', (day-timedelta(days=1),pid))
-        c.execute('''INSERT INTO performance_snapshots(portfolio_id,snapshot_date,value_krw,payload) VALUES(%s,%s,%s,%s)
-            ON CONFLICT(portfolio_id,snapshot_date) DO UPDATE SET value_krw=EXCLUDED.value_krw,
-            payload=EXCLUDED.payload,recorded_at=CURRENT_TIMESTAMP''', (pid,day,value,Json(payload)))
+        c.execute('''INSERT INTO performance_snapshots(portfolio_id,snapshot_date,value_krw,payload,record_kind)
+            VALUES(%s,%s,%s,%s,'baseline')''', (pid,day,value,Json(payload)))
         conn.commit()
         return True
 
@@ -43,19 +45,27 @@ def read(ctx, pid):
     with ctx.connect() as conn, conn.cursor() as c:
         c.execute('''SELECT json_build_object(
             'tracking',(SELECT row_to_json(t) FROM (SELECT portfolio_id,baseline_date,baseline_value,created_at,
-                revision,confirmed_revision,confirmed_through FROM performance_tracking WHERE portfolio_id=%s) t),
+                revision,confirmed_revision,confirmed_through,close_started_on FROM performance_tracking WHERE portfolio_id=%s) t),
             'snapshots',COALESCE((SELECT json_agg(s ORDER BY snapshot_date) FROM
-                (SELECT portfolio_id,snapshot_date,value_krw,recorded_at FROM performance_snapshots WHERE portfolio_id=%s) s),'[]'::json),
-            'flows',COALESCE((SELECT json_agg(f ORDER BY event_date DESC,recorded_at DESC) FROM performance_flows f WHERE portfolio_id=%s),'[]'::json))''', (pid,pid,pid))
+                (SELECT portfolio_id,snapshot_date,value_krw,recorded_at,record_kind,valuation_at,previous_close_date,
+                    payload->>'ledger_at' AS ledger_at,payload->'fx' AS fx,
+                    (SELECT json_agg(p.value) FROM jsonb_each(CASE WHEN record_kind='close' THEN payload->'prices' ELSE '{}'::jsonb END) p) AS closes
+                    FROM performance_snapshots WHERE portfolio_id=%s) s),'[]'::json),
+            'close_jobs',COALESCE((SELECT json_agg(j ORDER BY snapshot_date DESC) FROM
+                (SELECT snapshot_date,state,attempts,error,updated_at FROM performance_close_jobs WHERE portfolio_id=%s ORDER BY snapshot_date DESC LIMIT 10) j),'[]'::json),
+            'missed_close_count',(SELECT COUNT(*) FROM performance_close_jobs WHERE portfolio_id=%s AND state='missed'),
+            'flows',COALESCE((SELECT json_agg(f ORDER BY event_date DESC,recorded_at DESC) FROM performance_flows f WHERE portfolio_id=%s),'[]'::json))''', (pid,pid,pid,pid,pid))
         result=c.fetchone()[0]
     # SQL JSON dates are ISO strings; calculations keep real dates.
     from datetime import date
     tracking=result['tracking']
     if tracking:
-        for key in ('baseline_date','confirmed_through'):
+        for key in ('baseline_date','confirmed_through','close_started_on'):
             if tracking[key]: tracking[key]=date.fromisoformat(tracking[key])
     for item in result['snapshots']:
         item['snapshot_date']=date.fromisoformat(item['snapshot_date'])
+        if item['previous_close_date']:
+            item['previous_close_date']=date.fromisoformat(item['previous_close_date'])
     for item in result['flows']:
         item['event_date']=date.fromisoformat(item['event_date'])
     result['reports']=report_periods(tracking,result['snapshots'],result['flows'])

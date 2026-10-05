@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 import calendar
 import math
+from logic.close_calendar import last_session
 
 
 def money_weighted_return(start, end, start_value, end_value, flows):
@@ -48,6 +49,9 @@ def report_periods(tracking, snapshots, flows):
     baseline=tracking['baseline_date']
     latest=max(s['snapshot_date'] for s in snapshots)
     values={s['snapshot_date']:float(s['value_krw']) for s in snapshots}
+    closing_dates={s['snapshot_date'] for s in snapshots if s.get('record_kind')=='close'}
+    baseline_dates={s['snapshot_date'] for s in snapshots if s.get('record_kind')=='baseline'}
+    close_start=tracking.get('close_started_on')
     active=[f for f in flows if not f['voided']]
     periods=[]
     first=date(baseline.year,baseline.month,1)
@@ -64,10 +68,31 @@ def report_periods(tracking, snapshots, flows):
         periods.append(('연',str(year),start,end,year==baseline.year))
     result=[]
     for kind,label,start,end,partial in periods:
+        # Closing history uses the actual last KRX session at a boundary. It
+        # does not fill a missing trading day with an earlier available value.
+        complete=None
+        boundary = (date(int(label[:4]),int(label[5:]),calendar.monthrange(int(label[:4]),int(label[5:]))[1])
+                    if kind=='월' else date(int(label),12,31))
+        if close_start and end>=close_start and last_session(end)>=baseline:
+            expected_end=last_session(end)
+            if expected_end>=close_start:
+                end=expected_end
+            if not partial and start>=close_start:
+                start=max(baseline,last_session(start))
+            complete=last_session(boundary)<=latest
         sv=float(tracking['baseline_value']) if partial else values.get(start)
         ev=values.get(end)
+        if close_start and end>=close_start and end not in closing_dates:
+            # A baseline/old query may be present on a date whose close failed.
+            ev=None
+        baseline_boundary=start==baseline and start in baseline_dates
+        if baseline_boundary and not partial:
+            sv=float(tracking['baseline_value'])
+        if not partial and close_start and start>=close_start and start not in closing_dates and not baseline_boundary:
+            sv=None
         row={'kind':kind,'label':label,'start':start,'end':end,'partial':partial,
-             'start_value':sv,'end_value':ev,'profit':None,'return_pct':None,'warning':''}
+             'start_value':sv,'end_value':ev,'profit':None,'return_pct':None,'warning':'',
+             'period_complete':complete}
         if sv is None or ev is None:
             missing=[str(d) for d,v in ((start,sv),(end,ev)) if v is None]
             row['warning']='경계일 평가액 없음: '+', '.join(missing)
@@ -120,5 +145,10 @@ def report_daily(tracking, snapshots, flows):
                        'partial': True, 'start_value': start_value, 'end_value': end_value,
                        'value_krw': end_value, 'net_flow': net, 'profit': end_value - start_value - net,
                        'return_pct': rate, 'warning': warning,
-                       'recorded_at': snapshot.get('recorded_at')})
+                       'recorded_at': snapshot.get('recorded_at'),
+                       'record_kind': snapshot.get('record_kind', 'legacy_view'),
+                       'previous_close_date': snapshot.get('previous_close_date'),
+                       'valuation_at': snapshot.get('valuation_at'),
+                       'ledger_at': snapshot.get('ledger_at'), 'fx':snapshot.get('fx'),
+                       'closes':snapshot.get('closes')})
     return result

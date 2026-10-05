@@ -17,6 +17,7 @@ parser.add_argument('--simulate-refresh', action='store_true')
 parser.add_argument('--usd-ledger', action='store_true', help='Add synthetic USD cash and VT/PDBC opening positions')
 parser.add_argument('--message-import', action='store_true', help='Add synthetic NH domestic full-buy message fixtures')
 parser.add_argument('--workflow', action='store_true', help='Add synthetic maturity/workflow fixtures')
+parser.add_argument('--closing', action='store_true', help='Add synthetic regular closing history; keep scheduler disabled')
 args = parser.parse_args()
 
 import psycopg2
@@ -36,6 +37,7 @@ with admin.cursor() as cursor:
 admin.close()
 settings["dbname"] = name
 os.environ.update(PORTFOLIO_LOAD_CONFIG_FILES="0", SUPABASE_URL=make_dsn(**settings),
+                  PERFORMANCE_CLOSE_SCHEDULER_ENABLED="0",
                   APP_PASSWORD="ui-test-only", NAMUH_APP_KEY="", NAMUH_APP_SECRET="")
 
 # Explicitly prevent accidental production connections and external market IO.
@@ -169,6 +171,39 @@ if args.simulate_refresh:
         return {'ok': True}
 
 if __name__ == '__main__':
+    if args.closing:
+        from backend.close_performance import ClosePerformance, context
+        from data.repositories import performance, close_jobs
+        from logic.close_calendar import KST, previous_session, cutoff, us_session
+        from backend.performance_valuation import current_nav
+        from datetime import date
+        base = date(2026,9,29)
+        actual_today = performance.today
+        performance.today = lambda: base
+        performance.capture(context(),'default',current_nav(dm.get_rebalance_batch_data('default'),
+            {q['id']:q['price_krw'] for q in quotes},1400),{'source':'QA synthetic baseline'},start=True)
+        performance.today = actual_today
+        with dm.get_connection() as conn, conn.cursor() as cursor:
+            cursor.execute("UPDATE portfolios SET name='종가 기록 합성 검증' WHERE id='default'")
+            cursor.execute("UPDATE performance_tracking SET created_at='2026-09-29T14:00:00+09:00',close_started_on='2026-09-30' WHERE portfolio_id='default'")
+            conn.commit()
+        class SyntheticCloses:
+            def exchange_rate(self, now):
+                return {'rate':1400,'source':'QA 합성 환율','published_at':now.isoformat(),'collected_at':now.isoformat()}
+            def asset(self, a, day, fx):
+                price = calculate_deposit_price(a,day)[0] if a.get('is_deposit') else next(q['price_krw'] for q in quotes if q['id']==a['id']) * {date(2026,9,30):0.98,date(2026,10,1):1.01,date(2026,10,2):1.03}[day]
+                return {'id':a['id'],'ticker':a['ticker'],'price_krw':price,
+                    'price_date':str(us_session(cutoff(day)) if a['market']=='US' else day),'source':'QA 합성 종가 (실제 투자자료 아님)'}
+        for day in (date(2026,9,30),date(2026,10,1),date(2026,10,2)):
+            now = cutoff(day)
+            worker = ClosePerformance(prices=SyntheticCloses(),now=lambda:now)
+            worker.schedule(now,'default')
+            with dm.get_connection() as conn, conn.cursor() as cursor:
+                cursor.execute("UPDATE performance_close_jobs SET next_attempt_at=%s WHERE portfolio_id='default' AND snapshot_date=%s",(now,day))
+                conn.commit()
+            assert worker.tick('default')
+        latest = performance.read(context(),'default')['snapshots'][-1]
+        performance.confirm(context(),'default',0,latest['snapshot_date'],float(latest['value_krw']))
     import uvicorn
     print(f"Synthetic QA backend: http://127.0.0.1:{args.port}; local DB:",name, flush=True)
     uvicorn.run(main.app, host='127.0.0.1', port=args.port)

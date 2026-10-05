@@ -27,6 +27,7 @@ def guarded_connect(dsn=None,*args,**kwargs):
     return original_connect(dsn,*args,**kwargs)
 psycopg2.connect=guarded_connect
 os.environ.update(PORTFOLIO_LOAD_CONFIG_FILES='0',SUPABASE_URL=make_dsn(**settings),NAMUH_APP_KEY='',NAMUH_APP_SECRET='')
+os.environ['PERFORMANCE_CLOSE_SCHEDULER_ENABLED']='0'
 from data import data_manager as dm
 from backend.routers import plans
 from fastapi import FastAPI
@@ -98,29 +99,27 @@ call('post','/api/performance/default/confirm',400,json={**confirmation,'revisio
 call('post','/api/performance/default/confirm',400,json={**confirmation,'value':confirmation['value']+1})
 call('post','/api/performance/default/confirm',json=confirmation)
 assert call('get','/api/performance/default')['tracking']['confirmed_revision']==1
-market_service.get_prices=lambda **_: ([{'id':'s','price_krw':120}],{'s':120})
-call('post','/api/performance/default/snapshot')
-assert call('get','/api/performance/default')['tracking']['confirmed_through']<day
-call('post','/api/performance/default/confirm',400,json=confirmation)
-market_service.get_prices=lambda **_: ([{'id':'s','price_krw':110}],{'s':110})
-call('post','/api/performance/default/snapshot')
+# Live queries cannot overwrite snapshots. Close collection/correction and
+# concurrent DB leases are covered by verify_closing_performance.py.
+from data.repositories import performance as performance_repo
+assert not performance_repo.capture(plans.context(),'default',999,{},start=False)
+assert call('get','/api/performance/default')['tracking']['confirmed_through']==day
 call('patch',f'/api/performance/default/flows/{fid}',json={'voided':True})
 assert call('get','/api/performance/default')['tracking']['revision']==2
 call('patch',f'/api/performance/default/flows/{fid}',json={'voided':False})
 assert call('get','/api/performance/default')['tracking']['revision']==3
-call('post','/api/performance/default/snapshot')
 assert len(call('get','/api/performance/default')['snapshots'])==1
 saved=call('get','/api/performance/default')['snapshots']
 market_service.request_status=lambda: {'updated_at':None,'stale':True}
-assert call('post','/api/performance/default/snapshot')['saved'] is False
+assert not performance_repo.capture(plans.context(),'default',999,{},start=False)
 assert call('get','/api/performance/default')['snapshots']==saved
 market_service.request_status=lambda: {'updated_at':datetime.now(timezone.utc).isoformat(),'stale':False}
 market_service.get_prices=lambda **_: ([],{})
-call('post','/api/performance/default/snapshot',400)
+assert not performance_repo.capture(plans.context(),'default',999,{},start=False)
 assert call('get','/api/performance/default')['snapshots']==saved
 with dm.get_connection() as conn, conn.cursor() as c:
     c.execute("SELECT deposit_krw FROM accounts WHERE id='a'")
     assert c.fetchone()[0]==cash
 assert dm.get_trade_history()==before
-print('PASS performance opt-in, immutable baseline, one daily snapshot, retry identity, scope/date guards, reversible flows, confirmation revisions, stale/missing-price preservation, unchanged cash/trades')
+print('PASS performance opt-in, immutable baseline, read-only live capture, retry identity, scope/date guards, reversible flows, confirmation revisions, unchanged cash/trades')
 print('Synthetic local database:',name)

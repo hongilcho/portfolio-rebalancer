@@ -1,5 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+
+test('closing lines cross verified holidays but break at missing trading sessions', () => {
+  const series = dailyPerformanceSeries([
+    {label:'2026-10-02',profit:0,record_kind:'close',previous_close_date:'2026-10-01'},
+    {label:'2026-10-06',profit:1,record_kind:'close',previous_close_date:'2026-10-02'},
+    {label:'2026-10-08',profit:2,record_kind:'close',previous_close_date:'2026-10-07'},
+  ], 'profit', 'all');
+  assert.deepEqual(dailyPerformanceSegments(series).map(s=>[s.from.label,s.to.label]), [['2026-10-02','2026-10-06']]);
+});
+
+test('baseline connects to first close over holidays but not across a missing session', () => {
+  const rows=[{label:'2026-10-02',profit:0,record_kind:'baseline'},
+    {label:'2026-10-06',profit:1,record_kind:'close',previous_close_date:'2026-10-02'}];
+  assert.equal(dailyPerformanceSegments(dailyPerformanceSeries(rows,'profit','all')).length,1);
+  rows[1]={...rows[1],label:'2026-10-07',previous_close_date:'2026-10-06'};
+  assert.equal(dailyPerformanceSegments(dailyPerformanceSeries(rows,'profit','all')).length,0);
+});
 import { performanceSeries, performanceValue, performanceScale, performanceDomain,
   dailyPerformanceSeries, dailyPerformanceSegments } from '../src/utils/performanceChart.js';
 

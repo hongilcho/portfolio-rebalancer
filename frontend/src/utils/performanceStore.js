@@ -1,5 +1,5 @@
 // Shared by tabs 4 and 6. A store belongs to one portfolio and serializes
-// background captures with user changes, so older reads cannot replace newer ones.
+// reads with user changes, so older reads cannot replace newer ones.
 export function createPerformanceStore(portfolioId, client) {
   let state = { data: null, busy: false, error: '', notice: '' };
   let enabled = false;
@@ -19,7 +19,7 @@ export function createPerformanceStore(portfolioId, client) {
   const capture = async () => {
     if (!enabled) return;
     const result = await client.capturePerformance(portfolioId);
-    update({ notice: result.saved ? '오늘의 최신 조회 평가액을 저장했습니다.' : result.message });
+    update({ notice: result.saved ? '오늘의 종가로 평가 기록을 저장했습니다.' : result.message });
   };
   const enqueue = action => {
     pending++;
@@ -45,13 +45,8 @@ export function createPerformanceStore(portfolioId, client) {
     getSnapshot: () => state,
     subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
     setEnabled: value => { enabled = value; },
-    refresh: () => enqueue(async () => {
-      const data = await read();
-      if (enabled && data.tracking) {
-        await capture();
-        if (enabled) await read();
-      }
-    }),
+    // Viewing the app is read-only; the backend owns closing collection.
+    refresh: () => enqueue(read),
     run: action => enqueue(async () => {
       // Even a rejected change may mean another client has changed the record.
       try { await action(); }
