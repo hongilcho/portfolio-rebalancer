@@ -1,11 +1,14 @@
 {
   "source_commit": "b273a8a",
-  "reviewed_updates": { "history": "2026-10-05: reviewed NH import and local draft controls; other snapshots retain b273a8a baseline" },
+  "reviewed_updates": {
+    "history": "2026-10-05: reviewed NH import and local draft controls; other snapshots retain b273a8a baseline",
+    "dashboard": "2026-10-05: reviewed dividend detail disclosure; other snapshots unchanged"
+  },
   "sha256": {
-    "dashboard/KRW": "ee199b71110fcabe95d110623e19c99f0da3ee3fc8aa562e1187f6eb8998d2d0",
-    "dashboard/USD": "316ed1b793f1139bd3a1ca45c5c754e45f926191e141a9db3424108767ad75e8",
-    "dashboard/no-deposit": "3f5129c8c339c2e337af8734c132e16a628a7551bfe814cf39c2fa6d7bb29768",
-    "dashboard/collapsed": "c91e81a33807b4d1e4889b289a14478b93a3c213e9a8a3f5df3909a239450418",
+    "dashboard/KRW": "1c50b0edeeb89f2cd6a5d2ab8a555f0a3b4cec96a4be97441809caeb7c093a7b",
+    "dashboard/USD": "c70c06805d42923673216386e77acbe089258dc7662cfaa20284f2d610ae46c9",
+    "dashboard/no-deposit": "4fb3cb51d1d2691b097905d8b986e21dc6908fc07cd99911987fa4361d9fae5d",
+    "dashboard/collapsed": "9282befe4bb4afa555ec7d6f21d886b4d5443c12fa277f45373af2acdb9436a2",
     "dashboard/no-data": "48af2e6aa349ca6c381ecddfcad6c35b5d15f3454a88d4aff9f6ca2e85492e7b",
     "settings/tables": "d3acd6e8dd61bc6a92113320d760176ac59c1f0650680b5057d458dc2cce7e23",
     "settings/new-account": "602251a022c453f6c5cda8e05d3b2dca8be5330276d45e4fca6708ef5bf85b4c",

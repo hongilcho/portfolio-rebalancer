@@ -29,6 +29,7 @@ import InvestmentAssetsSection from './InvestmentAssetsSection';
 import CashAssetsSection from './CashAssetsSection';
 import AccountBreakdown from './AccountBreakdown';
 import DepositMaturities from './DepositMaturities';
+import DividendDetails from './DividendDetails';
 
 const EditHoldingsModal = lazy(() => import('./EditHoldingsModal'));
 
@@ -385,6 +386,7 @@ export default function DashboardTab({
       <CashAssetsSection cash_assets={cash_assets} />
 
       <DepositMaturities assets={assets || []} accounts={accSummaries} />
+      <DividendDetails accounts={accSummaries} />
 
       <AccountBreakdown
         handleSyncNamuh={handleSyncNamuh}
