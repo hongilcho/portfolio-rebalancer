@@ -48,7 +48,7 @@ const stateNames = {
 };
 const server = await createServer({ root, logLevel: 'error',
   cacheDir: 'node_modules/.vite-test-presentation',
-  server: { middlewareMode: true, watch: null, hmr: false },
+  server: { middlewareMode: true, watch: null, hmr: false, ws: false },
   plugins: [{ name: 'synthetic-presentation-state', enforce: 'pre',
     transform(source, id, options) {
       if (!options?.ssr) return;

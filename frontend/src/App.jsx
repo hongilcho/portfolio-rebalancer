@@ -9,12 +9,13 @@
  *    - 포트폴리오 전환 또는 새로고침 시 1회의 API 호출로 전체 현황 일괄 수신
  * 2. 0초 반응성 세션 캐시:
  *    - 브라우저 sessionStorage를 활용하여 포트폴리오 전환 즉시 이전 대시보드를 렌더링
- * 3. 5대 핵심 탭 네비게이션:
+ * 3. 6대 핵심 탭 네비게이션:
  *    - 1. 포트폴리오 현황 (DashboardTab)
  *    - 2. 목표 비중 설정 (WeightsTab)
  *    - 3. 리밸런싱 전략 (RebalanceTab)
- *    - 4. 매매 기록 (HistoryTab)
+ *    - 4. 매매 및 입출금 기록 (HistoryTab)
  *    - 5. 계좌 마스터 관리 (SettingsTab)
+ *    - 6. 분석 및 확인 (AnalysisTab)
  */
 
 import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
@@ -28,6 +29,7 @@ import DashboardTab from './components/Tab1Dashboard/DashboardTab';
 import ViewLoading from './components/common/ViewLoading';
 import DeferredDialog from './components/common/DeferredDialog';
 import { useMarketRevalidation } from './utils/useMarketRevalidation';
+import { usePortfolioPerformance } from './utils/usePortfolioPerformance';
 
 // Keep the initial dashboard eager; fetch other screens only when selected.
 const WeightsTab = lazy(() => import('./components/Tab2Weights/WeightsTab'));
@@ -35,6 +37,7 @@ const RebalanceTab = lazy(() => import('./components/Tab3Rebalance/RebalanceTab'
 const HistoryTab = lazy(() => import('./components/Tab4History/HistoryTab'));
 const CryptoTab = lazy(() => import('./components/Tab5Crypto/CryptoTab'));
 const SettingsTab = lazy(() => import('./components/Tab5Settings/SettingsTab'));
+const AnalysisTab = lazy(() => import('./components/Tab6Analysis/AnalysisTab'));
 const ManagePortfoliosModal = lazy(() => import('./components/Portfolios/ManagePortfoliosModal'));
 const AllPortfoliosOverview = lazy(() => import('./components/Portfolios/AllPortfoliosOverview'));
 
@@ -42,8 +45,9 @@ const TABS = [
   { id: 'tab1', label: '📊 1. 포트폴리오 현황', icon: BarChart3 },
   { id: 'tab2', label: '🎯 2. 목표 비중 설정', icon: Target },
   { id: 'tab3', label: '⚖️ 3. 리밸런싱 전략', icon: Scale },
-  { id: 'tab4', label: '📝 4. 매매 기록', icon: History },
+  { id: 'tab4', label: '📝 4. 매매 및 입출금 기록', icon: History },
   { id: 'tab5', label: '⚙️ 5. 계좌 마스터 관리', icon: Settings },
+  { id: 'tab6', label: '🔎 6. 분석 및 확인', icon: BarChart3 },
 ];
 
 export default function App() {
@@ -92,6 +96,8 @@ export default function App() {
   const [pricesData, setPricesData] = useState(null);
   const [usdKrw, setUsdKrw] = useState(1380.0);
   const [rateSource, setRateSource] = useState('');
+  const [loadedBundle, setLoadedBundle] = useState(null);
+  const performance = usePortfolioPerformance(currentPortfolioId, loadedBundle, isAuthenticated);
   const updateMarketHeader = useCallback((snapshot) => {
     if (snapshot?.usd_krw) setUsdKrw(snapshot.usd_krw);
     if (snapshot?.rate_source) setRateSource(snapshot.rate_source);
@@ -105,6 +111,7 @@ export default function App() {
 
   const handleSelectPortfolio = (pid) => {
     setChildRefreshKey(0);
+    setLoadedBundle(null);
     setCurrentPortfolioId(pid);
     localStorage.setItem('active_portfolio_id', pid);
     // 복원 가능한 세션 캐시가 있는 경우 즉시 반영
@@ -165,6 +172,7 @@ export default function App() {
       setAccounts(bundle.accounts || []);
       setUsdKrw(bundle.usd_krw || 1380.0);
       setRateSource(bundle.rate_source || '');
+      setLoadedBundle({ portfolioId: pid });
     } catch (err) {
       if (sequence !== requestSequence.current || pid !== currentPortfolioIdRef.current) return;
       console.error('Failed to load portfolio data:', err);
@@ -255,6 +263,7 @@ export default function App() {
                 <button
                   key={tab.id}
                   className={`tab-btn ${isActive ? 'active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => setActiveTab(tab.id)}
                 >
                   <Icon size={18} />
@@ -310,6 +319,8 @@ export default function App() {
                     usdKrw={usdKrw}
                     pricesData={pricesData}
                     currentPortfolioId={currentPortfolioId}
+                    performance={performance}
+                    onOpenAnalysis={() => setActiveTab('tab6')}
                     onSaved={() => loadAllData(false, currentPortfolioId)}
                   />
                 )}
@@ -321,6 +332,16 @@ export default function App() {
                     assets={assets}
                     currentPortfolioId={currentPortfolioId}
                     onSaved={() => loadAllData(false, currentPortfolioId)}
+                  />
+                )}
+                {activeTab === 'tab6' && (
+                  <AnalysisTab
+                    key={currentPortfolioId}
+                    portfolioId={currentPortfolioId}
+                    assets={assets}
+                    dashboardData={dashboardData}
+                    performance={performance}
+                    onOpenHistory={() => setActiveTab('tab4')}
                   />
                 )}
               </Suspense>

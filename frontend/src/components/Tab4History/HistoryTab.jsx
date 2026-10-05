@@ -1,5 +1,5 @@
 /**
- * 탭 4. 매매 기록 관리 컴포넌트 (HistoryTab.jsx)
+ * 탭 4. 매매 및 입출금 기록 관리 컴포넌트 (HistoryTab.jsx)
  * ===============================================
  * 수동 매매 내역(매수/매도)의 일괄 입력 및 체결 기록을 수행하고,
  * 과거 거래 내역의 다차원 필터링 조회 및 일괄 삭제(평단가 자동 롤백)를 지원합니다.
@@ -15,6 +15,7 @@ import TradeBatchForm from './TradeBatchForm';
 import TradeHistorySection from './TradeHistorySection';
 import UsdLedgerPanel from './UsdLedgerPanel';
 import NamuhMessageImport from './NamuhMessageImport';
+import ExternalCashFlowPanel from './ExternalCashFlowPanel';
 import { appendNamuhRows } from '../../utils/namuhMessage';
 import { readTradeDraft, writeTradeDraft, remainingTradeRows, draftStorage } from '../../utils/tradeDraft';
 
@@ -26,6 +27,8 @@ export default function HistoryTab({
   pricesData,
   onSaved,
   currentPortfolioId = 'default',
+  performance,
+  onOpenAnalysis,
 }) {
   // Batch Trade Form State
   const [initialDraft] = useState(() => readTradeDraft(draftStorage(), currentPortfolioId));
@@ -314,6 +317,8 @@ export default function HistoryTab({
 
   return (
     <div>
+      {performance && <ExternalCashFlowPanel key={currentPortfolioId} portfolioId={currentPortfolioId}
+        accounts={accounts} performance={performance} onOpenAnalysis={onOpenAnalysis} />}
       {usdLedgers !== null && <UsdLedgerPanel key={currentPortfolioId} accounts={accounts} assets={assets} ledgers={usdLedgers} portfolioId={currentPortfolioId}
         onChanged={async () => { await refreshLedgers(); loadTrades(); onSaved(); }} />}
       {ledgerError && <p role="alert">달러 원가 조회 실패: {ledgerError}</p>}

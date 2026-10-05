@@ -28,9 +28,6 @@ import DashboardCharts from './DashboardCharts';
 import InvestmentAssetsSection from './InvestmentAssetsSection';
 import CashAssetsSection from './CashAssetsSection';
 import AccountBreakdown from './AccountBreakdown';
-import DepositMaturities from './DepositMaturities';
-import DividendDetails from './DividendDetails';
-import PeriodPerformance from './PeriodPerformance';
 
 const EditHoldingsModal = lazy(() => import('./EditHoldingsModal'));
 
@@ -40,7 +37,6 @@ export default function DashboardTab({
   accounts, 
   currencyMode = 'KRW',
   onRefresh,
-  currentPortfolioId
 }) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [expandedAccs, setExpandedAccs] = useState({});
@@ -387,9 +383,6 @@ export default function DashboardTab({
 
       <CashAssetsSection cash_assets={cash_assets} />
 
-      <DepositMaturities assets={assets || []} accounts={accSummaries} />
-      <DividendDetails accounts={accSummaries} />
-      {currentPortfolioId && <PeriodPerformance key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts || []} dashboardData={dashboardData} />}
 
       <AccountBreakdown
         handleSyncNamuh={handleSyncNamuh}

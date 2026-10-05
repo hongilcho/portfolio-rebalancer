@@ -5,7 +5,7 @@ import { formatKRW, formatUSD, formatQuantity } from '../../utils/formatters';
 export default function DividendDetails({ accounts }) {
   const [selected, setSelected] = useState('all');
   const groups = dividendGroups(accounts);
-  if (!groups.length) return null;
+  if (!groups.length) return <div className="section-card"><h3>💰 배당 계산 상세 보기</h3><p>현재 표시할 배당 계산 내역이 없습니다.</p></div>;
   const visible = selected === 'all' ? groups : groups.filter(g => g.accountId === selected);
   const totals = visible.reduce((sum,g) => ({...sum,[g.currency]:sum[g.currency]+g.reflected}),{KRW:0,USD:0});
   return <div className="section-card"><details>

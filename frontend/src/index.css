@@ -253,6 +253,7 @@ body {
 /* Tab Navigation */
 .tabs-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   background: var(--bg-surface);
   padding: 6px;
