@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { performanceSeries, performanceValue, performanceScale } from '../src/utils/performanceChart.js';
+import { performanceSeries, performanceValue, performanceScale, performanceDomain,
+  dailyPerformanceSeries, dailyPerformanceSegments } from '../src/utils/performanceChart.js';
 
 const row = (label, patch = {}) => ({ kind: '월', label, start: `${label}-01`, end: `${label}-28`, partial: false,
   return_pct: 2, profit: 120000, warning: '', ...patch });
@@ -42,4 +43,47 @@ test('scale covers both signs and remains finite for all missing/zero values', (
   assert.equal(performanceScale([], 'profit'), 100000);
   assert.equal(performanceValue(-1234567, 'profit'), '-1,234,567 원');
   assert.equal(performanceValue(120000, 'profit', true), '+12만 원');
+});
+
+const dailyRow = (label, patch = {}) => ({ kind: '일', label, start: '2025-12-01', end: label,
+  return_pct: 2, profit: 1000, value_krw: 101000, warning: '', ...patch });
+
+test('daily range crosses years and is anchored on last recorded date, preserving cumulative baseline', () => {
+  const reports = [dailyRow('2026-01-02'), dailyRow('2025-12-03'), dailyRow('2025-12-04')];
+  const original = structuredClone(reports);
+  const series = dailyPerformanceSeries(reports, 'return_pct', '30');
+  assert.deepEqual(series.map(r => r.label), ['2025-12-04', '2026-01-02']);
+  assert.equal(series[0].start, '2025-12-01');
+  assert.equal(dailyPerformanceSeries(reports, 'return_pct', 'all').length, 3);
+  assert.deepEqual(reports, original);
+});
+
+test('daily lines break at missing dates and null results, connect genuine zero and cross leap day', () => {
+  const series = dailyPerformanceSeries([dailyRow('2024-02-28', { return_pct: 0 }), dailyRow('2024-02-29'),
+    dailyRow('2024-03-01'), dailyRow('2024-03-03'), dailyRow('2024-03-04', { return_pct: null }),
+    dailyRow('2024-03-05'), dailyRow('2024-03-06')], 'return_pct', 'all');
+  assert.deepEqual(dailyPerformanceSegments(series).map(s => [s.from.label, s.to.label]),
+    [['2024-02-28', '2024-02-29'], ['2024-02-29', '2024-03-01'], ['2024-03-05', '2024-03-06']]);
+  assert.deepEqual(dailyPerformanceSegments([]), []);
+  assert.deepEqual(dailyPerformanceSegments([series[0]]), []);
+});
+
+test('unconfirmed profit lines are provisional but valuation remains available without provisional markers', () => {
+  const rows = [dailyRow('2026-01-01'), dailyRow('2026-01-02', { return_pct: null, warning: '外' }),
+    dailyRow('2026-01-03', { return_pct: null, warning: '해당 기간의 외부 입출금 기록 확인이 필요합니다.' })];
+  const profits = dailyPerformanceSeries(rows, 'profit', 'all');
+  assert.deepEqual(profits.map(r => r.provisional), [false, false, true]);
+  assert.deepEqual(dailyPerformanceSegments(profits).map(s => s.provisional), [false, true]);
+  assert.ok(dailyPerformanceSeries(rows, 'value_krw').every(r => r.value === 101000 && !r.provisional));
+  assert.deepEqual(dailyPerformanceSeries(rows, 'return_pct').map(r => r.value), [2, null, null]);
+});
+
+test('valuation axis zooms around real values, has a finite span for a single point or zero, and shows unsigned values', () => {
+  const [min, max] = performanceDomain([{ value: 1000000 }, { value: 1010000 }], 'value_krw');
+  assert.ok(min > 0 && min < 1000000 && max > 1010000);
+  assert.deepEqual(performanceDomain([{ value: 0 }], 'value_krw'), [0, 1]);
+  assert.deepEqual(performanceDomain([], 'value_krw'), [0, 100000]);
+  assert.deepEqual(performanceDomain([{ value: -6 }], 'return_pct'), [-10, 10]);
+  assert.equal(performanceValue(100000, 'value_krw'), '100,000 원');
+  assert.equal(performanceValue(100000, 'value_krw', true), '10만 원');
 });

@@ -45,6 +45,21 @@ try {
     assert.match(html, /4\. 매매 및 입출금 기록으로 이동/);
     assert.doesNotMatch(html, /aria-label="입출금 금액"|기록 취소|기록 복원/);
   });
+  await test('daily chart defaults to cumulative line view, exposes valuation and range, and renders a single zero point', () => {
+    const dailyReports = [{ kind: '일', label: '2026-10-05', start: '2026-10-05', end: '2026-10-05',
+      return_pct: 0, profit: 0, value_krw: 100, net_flow: 0, warning: '', partial: true, recorded_at: '2026-10-05T01:00:00Z' }];
+    const html = renderToStaticMarkup(React.createElement(Chart, { reports: [], dailyReports }));
+    assert.match(html, /aria-pressed="true">일별 추이/);
+    assert.match(html, /일별 누적/);
+    assert.match(html, /평가액 \(원\)/);
+    assert.match(html, /일별 그래프 표시 범위/);
+    assert.match(html, /시작 기준일부터의 누적 성과/);
+    assert.match(html, /class="performance-chart-point"/);
+    assert.match(html, /2026-10-05 기준일부터 누적 금액가중 수익률 0.00%/);
+    assert.match(html, /점 하나가 표시/);
+    assert.match(html, /마지막 기록 시각/);
+    assert.doesNotMatch(html, /NaN|Infinity/);
+  });
   await test('tab 4 panel owns external flow input, history and reversible cancellation', () => {
     const html = renderToStaticMarkup(React.createElement(Flows, { portfolioId: 'default', accounts: fixture.bundle.accounts, performance, onOpenAnalysis: noop }));
     assert.match(html, /aria-label="입출금 금액"/);

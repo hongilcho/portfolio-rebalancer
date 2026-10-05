@@ -14,6 +14,8 @@ def money_weighted_return(start, end, start_value, end_value, flows):
     days = (end-start).days
     if days <= 0 or start_value <= 0:
         return None, '기간이 하루 이상이고 시작 평가액이 양수여야 합니다.'
+    if not flows:
+        return (end_value / start_value - 1) * 100, ''
     amounts = defaultdict(float)
     amounts[start] -= start_value
     amounts[end] += end_value
@@ -22,8 +24,6 @@ def money_weighted_return(start, end, start_value, end_value, flows):
     ordered = sorted((d,v) for d,v in amounts.items() if abs(v)>1e-8)
     signs = [v>0 for _,v in ordered]
     changes = sum(a!=b for a,b in zip(signs, signs[1:]))
-    if end_value==0 and not flows:
-        return -100.0, ''
     if not ordered or ordered[0][1]>=0 or changes!=1:
         return None, '입출금 부호가 여러 번 바뀌거나 해가 확정되지 않아 수익률을 표시하지 않습니다.'
     scale=max(abs(v) for _,v in ordered)
@@ -81,4 +81,44 @@ def report_periods(tracking, snapshots, flows):
             row['return_pct']=rate if confirmed else None
             row['warning']=warning if confirmed else '해당 기간의 외부 입출금 기록 확인이 필요합니다.'
         result.append(row)
+    return result
+
+
+def report_daily(tracking, snapshots, flows):
+    """Cumulative performance from the registered baseline on recorded dates.
+
+    Missing dates stay absent. Daily points are NOT one-day returns, and cash
+    contributions are subtracted from profit and dated for money-weighted return.
+    """
+    if not tracking or not snapshots:
+        return []
+    baseline = tracking['baseline_date']
+    start_value = float(tracking['baseline_value'])
+    active = sorted((f for f in flows if not f['voided'] and f['event_date'] >= baseline),
+                    key=lambda f: f['event_date'])
+    included, result = [], []
+    flow_index, net = 0, 0.0
+    for snapshot in sorted(snapshots, key=lambda s: s['snapshot_date']):
+        end = snapshot['snapshot_date']
+        if end < baseline:
+            continue
+        while flow_index < len(active) and active[flow_index]['event_date'] <= end:
+            f = active[flow_index]
+            included.append(f)
+            net += float(f['amount_krw'])
+            flow_index += 1
+        end_value = float(snapshot['value_krw'])
+        confirmed = (tracking['confirmed_revision'] == tracking['revision'] and
+                     tracking['confirmed_through'] is not None and tracking['confirmed_through'] >= end)
+        if not confirmed:
+            rate, warning = None, '해당 기간의 외부 입출금 기록 확인이 필요합니다.'
+        elif end == baseline and not included and end_value == start_value:
+            rate, warning = 0.0, ''
+        else:
+            rate, warning = money_weighted_return(baseline, end, start_value, end_value, included)
+        result.append({'kind': '일', 'label': end.isoformat(), 'start': baseline, 'end': end,
+                       'partial': True, 'start_value': start_value, 'end_value': end_value,
+                       'value_krw': end_value, 'net_flow': net, 'profit': end_value - start_value - net,
+                       'return_pct': rate, 'warning': warning,
+                       'recorded_at': snapshot.get('recorded_at')})
     return result

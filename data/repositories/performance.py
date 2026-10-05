@@ -1,7 +1,7 @@
 """Performance bookkeeping only; external-flow records never adjust actual cash."""
 from datetime import datetime, timezone, timedelta
 from psycopg2.extras import RealDictCursor, Json
-from logic.period_performance import report_periods
+from logic.period_performance import report_periods, report_daily
 
 
 def today():
@@ -59,6 +59,7 @@ def read(ctx, pid):
     for item in result['flows']:
         item['event_date']=date.fromisoformat(item['event_date'])
     result['reports']=report_periods(tracking,result['snapshots'],result['flows'])
+    result['daily_reports']=report_daily(tracking,result['snapshots'],result['flows'])
     return result
 
 

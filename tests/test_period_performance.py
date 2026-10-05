@@ -1,6 +1,6 @@
 from datetime import date
 import pytest
-from logic.period_performance import money_weighted_return, report_periods
+from logic.period_performance import money_weighted_return, report_periods, report_daily
 from backend.performance_valuation import current_nav
 
 START=date(2026,1,1)
@@ -78,3 +78,65 @@ def test_nav_includes_actual_cash_and_pure_deposits_once_and_no_dividend_topup()
     with pytest.raises(ValueError): current_nav(batch,{'dep':1010},1400)
     with pytest.raises(ValueError): current_nav(batch,{'stock':float('nan'),'dep':1010},1400)
     with pytest.raises(ValueError): current_nav(batch,{},0)
+
+
+def test_daily_points_are_baseline_cumulative_not_one_day_returns():
+    snapshots = [{'snapshot_date': date(2026, 1, 3), 'value_krw': 121},
+                 {'snapshot_date': START, 'value_krw': 100},
+                 {'snapshot_date': date(2026, 1, 2), 'value_krw': 110}]
+    rows = report_daily(tracking(), snapshots, [])
+    assert [r['label'] for r in rows] == ['2026-01-01', '2026-01-02', '2026-01-03']
+    assert [r['return_pct'] for r in rows] == pytest.approx([0, 10, 21])
+    assert [r['profit'] for r in rows] == [0, 10, 21]
+    assert all(r['start'] == START and r['value_krw'] == r['end_value'] for r in rows)
+
+
+def test_daily_flows_change_valuation_but_do_not_become_profit():
+    snapshots = [{'snapshot_date': date(2026, 1, 2), 'value_krw': 200},
+                 {'snapshot_date': date(2026, 1, 3), 'value_krw': 160}]
+    flows = [flow(date(2026, 1, 2), 100), flow(date(2026, 1, 3), -40),
+             flow(date(2026, 1, 3), 999, True), flow(date(2026, 1, 4), 500)]
+    rows = report_daily(tracking(), snapshots, flows)
+    assert [r['net_flow'] for r in rows] == [100, 60]
+    assert [r['profit'] for r in rows] == [0, 0]
+    assert [r['return_pct'] for r in rows] == pytest.approx([0, 0], abs=1e-7)
+
+
+def test_daily_flow_timing_uses_same_money_weighted_method_as_periods():
+    middle = date(2026, 7, 1)
+    terminal = 100 * 1.1 + 100 * 1.1 ** ((END - middle).days / (END - START).days)
+    rows = report_daily(tracking(), [{'snapshot_date': END, 'value_krw': terminal}], [flow(middle, 100)])
+    assert rows[0]['return_pct'] == pytest.approx(10)
+
+
+def test_daily_missing_days_are_not_fabricated_and_require_no_month_boundary():
+    rows = report_daily(tracking(), [{'snapshot_date': date(2026, 2, 10), 'value_krw': 150}], [])
+    assert len(rows) == 1 and rows[0]['return_pct'] == pytest.approx(50)
+    assert report_daily(None, [], []) == []
+    assert report_daily(tracking(), [], []) == []
+    assert report_daily(tracking(), [{'snapshot_date': date(2025, 12, 31), 'value_krw': 10}], []) == []
+
+
+def test_daily_confirmation_hides_only_unconfirmed_return_and_keeps_raw_value():
+    snapshots = [{'snapshot_date': START, 'value_krw': 100},
+                 {'snapshot_date': date(2026, 1, 2), 'value_krw': 110}]
+    rows = report_daily({**tracking(), 'confirmed_through': START}, snapshots, [])
+    assert rows[0]['return_pct'] == 0
+    assert rows[1]['return_pct'] is None and rows[1]['profit'] == 10 and rows[1]['value_krw'] == 110
+    assert '외부 입출금' in rows[1]['warning']
+    rows = report_daily({**tracking(), 'confirmed_revision': 0}, snapshots, [])
+    assert all(r['return_pct'] is None for r in rows)
+
+
+def test_daily_same_day_value_changes_do_not_claim_zero_return():
+    rows = report_daily(tracking(), [{'snapshot_date': START, 'value_krw': 110}], [])
+    assert rows[0]['return_pct'] is None and rows[0]['profit'] == 10 and '하루 이상' in rows[0]['warning']
+    rows = report_daily(tracking(), [{'snapshot_date': date(2026, 1, 2), 'value_krw': 200}], [flow(START, 100)])
+    assert rows[0]['profit'] == 0 and rows[0]['return_pct'] == pytest.approx(0, abs=1e-7)
+
+
+def test_daily_ambiguous_return_is_not_fabricated_but_profit_is_available():
+    rows = report_daily(tracking(), [{'snapshot_date': END, 'value_krw': 100}],
+                        [flow(date(2026, 3, 1), -300), flow(date(2026, 6, 1), 300)])
+    assert rows[0]['return_pct'] is None and rows[0]['profit'] == 0
+    assert '부호' in rows[0]['warning']
