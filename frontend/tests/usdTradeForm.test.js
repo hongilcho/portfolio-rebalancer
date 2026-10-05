@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const noop = () => {};
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)),
+  cacheDir: 'node_modules/.vite-test-usd-form',
   logLevel: 'error', server: { middlewareMode: true, watch: null, hmr: false, ws: false } });
 const { default: TradeBatchForm } = await server.ssrLoadModule('/src/components/Tab4History/TradeBatchForm.jsx');
 const props = {

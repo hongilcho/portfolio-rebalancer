@@ -47,6 +47,7 @@ const stateNames = {
   CryptoTab: ['data', 'loading'],
 };
 const server = await createServer({ root, logLevel: 'error',
+  cacheDir: 'node_modules/.vite-test-presentation',
   server: { middlewareMode: true, watch: null, hmr: false },
   plugins: [{ name: 'synthetic-presentation-state', enforce: 'pre',
     transform(source, id, options) {

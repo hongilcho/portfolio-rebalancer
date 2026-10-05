@@ -3,7 +3,7 @@
 Requires the dedicated PostgreSQL server from predeploy verification.
 This script is never imported by production; every run creates a fresh local DB.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import os
 from pathlib import Path
@@ -16,6 +16,7 @@ parser.add_argument('--port', type=int, default=8547)
 parser.add_argument('--simulate-refresh', action='store_true')
 parser.add_argument('--usd-ledger', action='store_true', help='Add synthetic USD cash and VT/PDBC opening positions')
 parser.add_argument('--message-import', action='store_true', help='Add synthetic NH domestic full-buy message fixtures')
+parser.add_argument('--workflow', action='store_true', help='Add synthetic maturity/workflow fixtures')
 args = parser.parse_args()
 
 import psycopg2
@@ -87,6 +88,18 @@ if args.usd_ledger:
     assert dm.execute_trade('2026-01-01','qa_acc','qa_vt','INIT',5,100,'USD',1250)[0]
     assert dm.execute_trade('2026-01-01','qa_acc','qa_pdbc','INIT',10,20,'USD',1350)[0]
 
+if args.workflow:
+    today = (datetime.now(timezone.utc) + timedelta(hours=9)).date()
+    with dm.get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE assets SET target_weight=60 WHERE id='qa_asset'")
+            cursor.execute('''INSERT INTO assets(id,name,ticker,market,allowed_accounts,portfolio_id,is_deposit,
+                deposit_principal,interest_rate,start_date,maturity_date,tax_rate,is_risk_asset,include_in_rebalance)
+                VALUES('qa_deposit','검증 정기예금','-','KR','["qa_acc"]','default',TRUE,1000000,4,%s,%s,15.4,0,FALSE)''',
+                (str(today-timedelta(days=355)), str(today+timedelta(days=10))))
+        conn.commit()
+    assert dm.execute_trade(str(today),'qa_acc','qa_deposit','INIT',1,1000000,'KRW',1)[0]
+
 from backend import main
 from backend.services import market_service
 from backend.routers import crypto, portfolios
@@ -100,6 +113,11 @@ if args.message_import:
 if args.usd_ledger:
     quotes.extend([{'id': 'qa_vt', 'name': 'Vanguard Total World Stock ETF', 'ticker': 'VT', 'market': 'US', 'price_usd': 100, 'price_krw': 140000, 'source': '고정 검증 시세'},
                    {'id': 'qa_pdbc', 'name': 'Invesco PDBC', 'ticker': 'PDBC', 'market': 'US', 'price_usd': 20, 'price_krw': 28000, 'source': '고정 검증 시세'}])
+if args.workflow:
+    from logic.price_fetcher import calculate_deposit_price
+    dep = next(a for a in dm.get_all_assets() if a['id']=='qa_deposit')
+    quotes.append({'id':'qa_deposit','name':'검증 정기예금','ticker':'-','market':'KR',
+                   'price_krw':calculate_deposit_price(dep)[0], 'price_usd':0,'source':'검증 예금 계산'})
 crypto_quotes = {"BTC":{"price":1200000,"source":"고정 검증 시세"},
                  "ETH":{"price":0,"source":"고정 검증 시세"}}
 market_service.price_data = quotes
