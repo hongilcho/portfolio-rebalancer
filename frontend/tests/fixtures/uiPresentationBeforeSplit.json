@@ -1,6 +1,6 @@
 {
   "source_commit": "b273a8a",
-  "reviewed_updates": { "history": "2026-10-05: reviewed NH message import panel addition; other snapshots retain b273a8a baseline" },
+  "reviewed_updates": { "history": "2026-10-05: reviewed NH import and local draft controls; other snapshots retain b273a8a baseline" },
   "sha256": {
     "dashboard/KRW": "ee199b71110fcabe95d110623e19c99f0da3ee3fc8aa562e1187f6eb8998d2d0",
     "dashboard/USD": "316ed1b793f1139bd3a1ca45c5c754e45f926191e141a9db3424108767ad75e8",
@@ -12,8 +12,8 @@
     "settings/edit-account": "fed93aabb3e2a2fdcc03b0ec7d90b9a82cdcf631b6fbe2c6841c9bfe5fe73c43",
     "settings/new-US-asset": "c43e14b7142de6472ab196586aad2be60f156c786f4ff2ab2403e59f02d31471",
     "settings/edit-deposit": "d02fb4415e43592e07b2ac6695b68f9515761341240337953690513cc428cbe4",
-    "history/empty": "98ea0b1b68e8c63c83f361b35b18fb8c3b988b396d3e4e46bdb018bb0a9a3514",
-    "history/filled-forms": "fac6386b1f6849ede95caddb27288ee29308d87d4f0017325beed349ee332506",
+    "history/empty": "d93028d9e0e0d0392e90254e19b158d7382e2c9428ea400512fd473e6af9097f",
+    "history/filled-forms": "c974f9f0dcb97ca571b414eeea8f4362eb236a96a0e3b253c782c2f934a7a543",
     "overview/KRW": "ad703d16caad5132a682394a3a358d7c6b709b6a5c15ecaa27f225d03020498b",
     "overview/USD": "1162b5dc324691a7af8b194cd3733b1ece5c8ebaef1f4ddbb8ede45aa8b8d42f",
     "overview/no-crypto": "ae95dc5b044bc5e8d2ff29079fd3ffacefa93491d0de2dd4756bf96d2ca7b242",

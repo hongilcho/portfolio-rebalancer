@@ -16,6 +16,7 @@ import TradeHistorySection from './TradeHistorySection';
 import UsdLedgerPanel from './UsdLedgerPanel';
 import NamuhMessageImport from './NamuhMessageImport';
 import { appendNamuhRows } from '../../utils/namuhMessage';
+import { readTradeDraft, writeTradeDraft, remainingTradeRows, draftStorage } from '../../utils/tradeDraft';
 
 export default function HistoryTab({
   assets,
@@ -27,10 +28,22 @@ export default function HistoryTab({
   currentPortfolioId = 'default',
 }) {
   // Batch Trade Form State
-  const [tradeDate, setTradeDate] = useState(new Date(Date.now() + 9 * 3600000).toISOString().split('T')[0]);
-  const [buyRows, setBuyRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
-  const [sellRows, setSellRows] = useState([{ id: '1', accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
+  const [initialDraft] = useState(() => readTradeDraft(draftStorage(), currentPortfolioId));
+  const [tradeDate, setTradeDate] = useState(initialDraft?.tradeDate || new Date(Date.now() + 9 * 3600000).toISOString().split('T')[0]);
+  const [buyRows, setBuyRows] = useState(initialDraft?.buyRows.length ? initialDraft.buyRows : [{ id: '1', accountId: String(accounts[0]?.id || ''), assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
+  const [sellRows, setSellRows] = useState(initialDraft?.sellRows.length ? initialDraft.sellRows : [{ id: '1', accountId: String(accounts[0]?.id || ''), assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
+  const [draftReviewed, setDraftReviewed] = useState(!initialDraft);
+  const [uncertainSubmission, setUncertainSubmission] = useState(Boolean(initialDraft?.uncertainSubmission));
+  const [draftStorageError, setDraftStorageError] = useState(false);
   const [savingBatch, setSavingBatch] = useState(false);
+  useEffect(() => {
+    if (!savingBatch) setDraftStorageError(!writeTradeDraft(draftStorage(), currentPortfolioId, { tradeDate, buyRows, sellRows, uncertainSubmission }));
+  }, [currentPortfolioId, tradeDate, buyRows, sellRows, savingBatch, uncertainSubmission]);
+  const clearDraft = () => {
+    if (!window.confirm('입력 중인 매수·매도 행을 모두 비울까요? 저장된 장부는 변경되지 않습니다.')) return;
+    const blank = () => ({ id: crypto.randomUUID(), accountId: String(accounts[0]?.id || ''), assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw });
+    setBuyRows([blank()]); setSellRows([blank()]); setDraftReviewed(true); setUncertainSubmission(false);
+  };
   const [usdLedgers, setUsdLedgers] = useState(null);
   const [ledgerError, setLedgerError] = useState('');
   const ledgerScope = useRef(currentPortfolioId);
@@ -186,6 +199,11 @@ export default function HistoryTab({
 
   // Submit Batch Trades
   const handleSaveBatchTrades = async () => {
+    if (!draftReviewed) { alert('복원된 입력 내용과 기존 장부의 중복 여부를 먼저 확인해주세요.'); return; }
+    if ([...buyRows, ...sellRows].some(r => r.assetId && (!accounts.some(a => String(a.id) === String(r.accountId))
+      || !assets.some(a => String(a.id) === String(r.assetId) && (a.allowed_accounts || []).map(String).includes(String(r.accountId)))))) {
+      alert('입력 행의 계좌·종목이 현재 포트폴리오에 없거나 허용되지 않습니다. 해당 행을 수정하거나 삭제해주세요.'); return;
+    }
     if (buyRows.some(r => r.importSource && r.importDate !== tradeDate)) {
       alert('가져온 거래의 체결일자가 다릅니다. 해당 행을 삭제한 뒤 올바른 날짜로 다시 가져오세요.');
       return;
@@ -236,20 +254,24 @@ export default function HistoryTab({
     }
 
     setSavingBatch(true);
+    // A refresh/network loss during submission must never silently retry manual rows.
+    writeTradeDraft(draftStorage(), currentPortfolioId, { tradeDate, buyRows, sellRows, uncertainSubmission: true });
     try {
       const res = await api.batchExecuteTrades(tradeDate, allTrades);
-      alert([res.message || '매매 내역이 성공적으로 저장되었습니다.', ...(res.errors || [])].join('\n'));
       // Keep failed rows for correction, removing only confirmed successful requests.
-      const successful = new Set((res.results || []).filter(r => r.success).map(r => r.index));
       const submitted = [...submittedBuys, ...submittedSells];
-      const completedIds = new Set(submitted.filter((_, index) => successful.has(index)).map(r => r));
+      const remaining = remainingTradeRows(buyRows, sellRows, submitted, res.results);
+      writeTradeDraft(draftStorage(), currentPortfolioId, { tradeDate, ...remaining, uncertainSubmission: false });
       const blank = () => ({ id: Date.now().toString(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw });
-      setBuyRows(prev => { const remaining = prev.filter(r => !completedIds.has(r)); return remaining.length ? remaining : [blank()]; });
-      setSellRows(prev => { const remaining = prev.filter(r => !completedIds.has(r)); return remaining.length ? remaining : [blank()]; });
+      setBuyRows(remaining.buyRows.length ? remaining.buyRows : [blank()]);
+      setSellRows(remaining.sellRows.length ? remaining.sellRows : [blank()]);
+      setUncertainSubmission(false);
+      alert([res.message || '매매 내역이 성공적으로 저장되었습니다.', ...(res.errors || [])].join('\n'));
       loadTrades();
       await refreshLedgers();
       onSaved();
     } catch (err) {
+      setUncertainSubmission(true); setDraftReviewed(false);
       alert(`저장 실패: ${err.message}`);
     } finally {
       setSavingBatch(false);
@@ -307,6 +329,14 @@ export default function HistoryTab({
       <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
         tradeDate={tradeDate} buyRows={buyRows} disabled={savingBatch}
         onAppend={drafts => setBuyRows(appendNamuhRows(buyRows, drafts, tradeDate))} />
+
+      <div className="section-card">
+        <p>입력 행은 이 브라우저에 30일간 자동 임시 저장됩니다. 다른 기기에는 공유되지 않으며 장부 저장과는 별개입니다.</p>
+        {draftStorageError && <p role="alert">브라우저 임시 저장을 사용할 수 없습니다. 화면을 닫으면 입력 내용이 사라질 수 있습니다.</p>}
+        {(initialDraft || uncertainSubmission) && <label style={{ display: 'block', marginBottom: 12 }}><input type="checkbox" checked={draftReviewed} disabled={savingBatch} onChange={e => setDraftReviewed(e.target.checked)} />복원된 날짜·계좌·입력 내용과 기존 장부의 중복 여부를 확인했습니다.</label>}
+        {uncertainSubmission && <p role="alert">직전 저장의 완료 여부를 확인하지 못했습니다. 최근 매매 기록을 확인한 뒤 이미 저장된 행을 제거해주세요.</p>}
+        <button type="button" className="btn btn-secondary btn-sm" disabled={savingBatch} onClick={clearDraft}>임시 입력 모두 비우기</button>
+      </div>
 
       <TradeBatchForm
         tradeDate={tradeDate}

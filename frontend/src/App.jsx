@@ -300,6 +300,7 @@ export default function App() {
 
                 {activeTab === 'tab4' && (
                   <HistoryTab
+                    key={currentPortfolioId}
                     assets={assets}
                     accounts={accounts}
                     priceMap={priceMap}
