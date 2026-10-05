@@ -18,6 +18,23 @@ const performance = { data, busy: false, error: '', notice: '', run: noop, captu
 try {
   const Analysis = (await server.ssrLoadModule('/src/components/Tab6Analysis/AnalysisTab.jsx')).default;
   const Flows = (await server.ssrLoadModule('/src/components/Tab4History/ExternalCashFlowPanel.jsx')).default;
+  const Chart = (await server.ssrLoadModule('/src/components/Tab6Analysis/PerformanceChart.jsx')).default;
+  await test('chart offers accessible period and metric switches, real zero, missing reasons and unfinished labels', () => {
+    const reports = [
+      { kind: '월', label: '2026-01', start: '2026-01-01', end: '2026-01-31', return_pct: 0, profit: 0, partial: true, warning: '' },
+      { kind: '월', label: '2026-02', start: '2026-01-31', end: '2026-02-28', return_pct: 2, profit: 10000, warning: '' },
+      { kind: '월', label: '2026-03', start: '2026-02-28', end: '2026-03-10', return_pct: null, profit: null, warning: '경계일 평가액 없음' },
+    ];
+    const html = renderToStaticMarkup(React.createElement(Chart, { reports }));
+    assert.match(html, /성과 그래프 기간/);
+    assert.match(html, /성과 그래프 지표/);
+    assert.match(html, /aria-label="2026-01 0.00%"/);
+    assert.match(html, /aria-label="2026-03 계산 대기 · 경계일 평가액 없음"/);
+    assert.match(html, /03\/10까지/);
+    assert.match(html, /tabindex="0"/);
+    assert.match(html, /수익률 \(%\)/);
+    assert.match(html, /손익 \(원\)/);
+  });
   await test('analysis combines three panels and confirmation, with flow editing in tab 4 only', () => {
     const html = renderToStaticMarkup(React.createElement(Analysis, { portfolioId: 'default', assets: fixture.bundle.assets,
       dashboardData: fixture.bundle.dashboard, performance, onOpenHistory: noop }));

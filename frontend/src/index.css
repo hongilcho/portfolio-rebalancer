@@ -1034,3 +1034,19 @@ body {
 .workflow-form { border: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit,minmax(min(100%,260px),1fr)); }
 .workflow-form label { min-width: 0; }
 .workflow-wide { grid-column: 1 / -1; }
+
+.performance-chart { margin: 24px 0; padding: 20px; border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.performance-chart-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+.performance-chart-controls [role="group"] { display: flex; flex-wrap: wrap; gap: 6px; }
+.performance-chart-controls button[aria-pressed="true"] { background: var(--accent-primary); color: #fff; }
+.performance-chart-controls label { display: flex; align-items: center; gap: 8px; margin: 0; }
+.performance-chart-controls select { width: auto; }
+.performance-chart-scroll { overflow-x: auto; }
+.performance-chart-scroll svg { display: block; width: 100%; height: auto; }
+.performance-chart-period { cursor: pointer; }
+.performance-chart-period:focus { outline: none; }
+.performance-chart-period:focus > rect:first-of-type { stroke: var(--accent-primary); stroke-width: 2; }
+.performance-chart-detail { padding: 12px 16px; background: var(--bg-surface); border-radius: var(--radius-sm); margin-top: 12px; }
+.performance-chart-detail p { margin: 6px 0; }
+.performance-chart-note { color: var(--text-secondary); font-size: 0.85rem; }
+@media (max-width: 600px) { .performance-chart { padding: 12px; } }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../utils/api';
 import { formatKRW } from '../../utils/formatters';
+import PerformanceChart from './PerformanceChart';
 
 export default function PeriodPerformance({ portfolioId, performance, onOpenHistory }) {
   const { data, busy, error, notice, run, capture, setNotice } = performance;
@@ -25,6 +26,7 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
         <button type="button" className="btn btn-secondary" onClick={onOpenHistory}>4. 매매 및 입출금 기록으로 이동</button>
         <label style={{display:'block',margin:'16px 0 8px'}}><input type="checkbox" checked={completeChecked} disabled={busy} onChange={e=>setCompleteChecked(e.target.checked)} />시작 기준부터 최근 평가일까지 외부 입출금을 모두 기록했고 실제 잔고도 반영했습니다. 입출금이 없으면 없음으로 확인합니다.</label>
         <button className="btn btn-secondary" disabled={busy || !completeChecked || !lastSnapshot} onClick={()=>run(()=>api.confirmPerformanceFlows(portfolioId,{revision:data.tracking.revision,through:lastSnapshot.snapshot_date,value:Number(lastSnapshot.value_krw)}))}>기간 입출금 기록 확인 완료</button>
+        <PerformanceChart reports={data.reports} />
         <div className="table-container"><table className="custom-table"><thead><tr><th>구분</th><th>기간</th><th>평가 시작/종료</th><th>순입금</th><th>기간 손익</th><th>금액가중 기간 수익률</th></tr></thead><tbody>
           {data.reports.map(r=><tr key={`${r.kind}/${r.label}`}><td>{r.kind}</td><td>{r.label}{r.partial && ' (기준 등록 이후)'}<br />{r.start} ~ {r.end}</td><td>{r.start_value==null ? '미기록' : formatKRW(r.start_value)} / {r.end_value==null ? '미기록' : formatKRW(r.end_value)}</td><td>{r.net_flow==null ? '—' : formatKRW(r.net_flow)}</td><td>{r.profit==null ? '—' : formatKRW(r.profit)}{r.warning && <p>{r.warning}</p>}</td><td>{r.return_pct==null ? '계산 대기' : `${(Math.abs(r.return_pct)<0.005 ? 0 : r.return_pct).toFixed(2)}%`}</td></tr>)}
         </tbody></table></div>
