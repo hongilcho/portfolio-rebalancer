@@ -275,6 +275,8 @@ export default function App() {
               <Suspense fallback={<ViewLoading />}>
                 {activeTab === 'tab1' && (
                   <DashboardTab
+                    key={currentPortfolioId}
+                    currentPortfolioId={currentPortfolioId}
                     dashboardData={dashboardData}
                     assets={assets}
                     accounts={accounts}

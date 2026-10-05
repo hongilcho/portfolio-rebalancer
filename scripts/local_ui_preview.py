@@ -124,6 +124,8 @@ market_service.price_data = quotes
 market_service.usd_krw = 1400
 market_service.rate_source = "고정 검증 환율"
 market_service.get_prices = lambda **_: (quotes, {q['id']: q['price_krw'] for q in quotes})
+if args.workflow:
+    market_service.request_status = lambda: {'updated_at':datetime.now(timezone.utc).isoformat(), 'stale':False,'refreshing':False,'refresh_failed':False}
 market_service.warmup = lambda: None
 dividend_fetcher.fetch_dividend_history = lambda *_: [{"date":"2026-02-01","amount":5000}]
 for module in (main, crypto, portfolios):

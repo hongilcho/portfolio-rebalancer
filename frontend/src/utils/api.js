@@ -155,6 +155,12 @@ export const api = {
   }),
 
   // Rebalancing
+  getPerformance: pid => request(`/api/performance/${encodeURIComponent(pid)}`),
+  startPerformance: pid => request(`/api/performance/${encodeURIComponent(pid)}/start`, {method:'POST'}),
+  capturePerformance: pid => request(`/api/performance/${encodeURIComponent(pid)}/snapshot`, {method:'POST'}),
+  addPerformanceFlow: (pid,data) => request(`/api/performance/${encodeURIComponent(pid)}/flows`, {method:'POST',body:JSON.stringify(data)}),
+  voidPerformanceFlow: (pid,id,voided) => request(`/api/performance/${encodeURIComponent(pid)}/flows/${id}`, {method:'PATCH',body:JSON.stringify({voided})}),
+  confirmPerformanceFlows: (pid,data) => request(`/api/performance/${encodeURIComponent(pid)}/confirm`, {method:'POST',body:JSON.stringify(data)}),
   getPlans: (pid) => request(`/api/plans/${encodeURIComponent(pid)}`),
   savePlan: (pid, data) => request(`/api/plans/${encodeURIComponent(pid)}`, {method:'POST',body:JSON.stringify(data)}),
   linkPlanTrade: (pid, id, data) => request(`/api/plans/${encodeURIComponent(pid)}/${id}/links`, {method:'POST',body:JSON.stringify(data)}),

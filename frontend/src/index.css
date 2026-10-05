@@ -1026,3 +1026,10 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+.workflow-panel p { margin: 12px 0; line-height: 1.7; }
+.workflow-panel label { display: block; margin: 10px 0; line-height: 1.7; }
+.workflow-panel details details { margin: 16px 0; }
+.workflow-panel summary { cursor: pointer; font-weight: 700; }
+.workflow-form { border: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit,minmax(min(100%,260px),1fr)); }
+.workflow-form label { min-width: 0; }
+.workflow-wide { grid-column: 1 / -1; }

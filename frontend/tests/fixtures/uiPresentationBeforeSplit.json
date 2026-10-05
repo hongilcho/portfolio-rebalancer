@@ -2,13 +2,13 @@
   "source_commit": "b273a8a",
   "reviewed_updates": {
     "history": "2026-10-05: reviewed NH import and local draft controls; other snapshots retain b273a8a baseline",
-    "dashboard": "2026-10-05: reviewed dividend detail disclosure; other snapshots unchanged"
+    "dashboard": "2026-10-05: reviewed standalone deposit maturities, dividend details and opt-in period performance; other snapshots unchanged"
   },
   "sha256": {
-    "dashboard/KRW": "1c50b0edeeb89f2cd6a5d2ab8a555f0a3b4cec96a4be97441809caeb7c093a7b",
-    "dashboard/USD": "c70c06805d42923673216386e77acbe089258dc7662cfaa20284f2d610ae46c9",
-    "dashboard/no-deposit": "4fb3cb51d1d2691b097905d8b986e21dc6908fc07cd99911987fa4361d9fae5d",
-    "dashboard/collapsed": "9282befe4bb4afa555ec7d6f21d886b4d5443c12fa277f45373af2acdb9436a2",
+    "dashboard/KRW": "97297268ee2186bef5c9601032fada26100ffdb2dc59e33472b17492d6f40d3b",
+    "dashboard/USD": "0006f871a6cbbe02dcde108d4b8c9e704ef0a6757f63a9c39353284fd062b0e4",
+    "dashboard/no-deposit": "60ac8cb5cd5130925b6141a7aad3502f22ddf9bfadfa96c8d07a15deeb8328ec",
+    "dashboard/collapsed": "946897278aed618a7d79a9f25fcaff587e102c2eb23d5d3cad80783a3abb7e43",
     "dashboard/no-data": "48af2e6aa349ca6c381ecddfcad6c35b5d15f3454a88d4aff9f6ca2e85492e7b",
     "settings/tables": "d3acd6e8dd61bc6a92113320d760176ac59c1f0650680b5057d458dc2cce7e23",
     "settings/new-account": "602251a022c453f6c5cda8e05d3b2dca8be5330276d45e4fca6708ef5bf85b4c",

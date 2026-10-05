@@ -69,4 +69,58 @@ assert dm.delete_trade(new)[0]
 assert next(p for p in call('get','/api/plans/default')['plans'] if p['id']==second)['links']==[]
 assert dm.get_trade_history()==before
 print('PASS plan round-trip, scope, pre-save exclusion, idempotent linking, unique allocation, unlink, archive/restore, actual deletion cascade')
+from backend.routers import performance as perf
+from backend.services import market_service
+market_service.get_prices=lambda **_: ([{'id':'s','price_krw':110}],{'s':110})
+market_service.request_snapshot=lambda: {'usd_krw':1400,'rate_source':'QA'}
+market_service.request_status=lambda: {'updated_at':datetime.now(timezone.utc).isoformat(),'stale':False,'refreshing':False,'refresh_failed':False}
+app.include_router(perf.router)
+day=(datetime.now(timezone.utc)+__import__('datetime').timedelta(hours=9)).date().isoformat()
+call('post','/api/performance/default/start')
+call('post','/api/performance/default/start',400)
+state=call('get','/api/performance/default')
+assert state['tracking']['baseline_value']>0 and len(state['snapshots'])==1
+with dm.get_connection() as conn, conn.cursor() as c:
+    c.execute("SELECT deposit_krw FROM accounts WHERE id='a'")
+    cash=c.fetchone()[0]
+f={'request_id':'QA-request-0001','account_id':'a','event_date':day,'direction':'DEPOSIT','currency':'KRW','native_amount':1000,'exchange_rate':1,'notes':'Synthetic external flow'}
+fid=call('post','/api/performance/default/flows',json=f)['id']
+assert call('post','/api/performance/default/flows',json=f)['id']==fid
+call('post','/api/performance/default/flows',400,json={**f,'native_amount':2000})
+call('post','/api/performance/default/flows',400,json={**f,'request_id':'QA-future','event_date':'2099-01-01'})
+call('post','/api/performance/default/flows',400,json={**f,'account_id':'other'})
+call('post','/api/performance/other/flows',400,json=f)
+state=call('get','/api/performance/default')
+assert len(state['flows'])==1 and state['tracking']['revision']==1
+snap=state['snapshots'][-1]
+confirmation={'revision':state['tracking']['revision'],'through':snap['snapshot_date'],'value':snap['value_krw']}
+call('post','/api/performance/default/confirm',400,json={**confirmation,'revision':0})
+call('post','/api/performance/default/confirm',400,json={**confirmation,'value':confirmation['value']+1})
+call('post','/api/performance/default/confirm',json=confirmation)
+assert call('get','/api/performance/default')['tracking']['confirmed_revision']==1
+market_service.get_prices=lambda **_: ([{'id':'s','price_krw':120}],{'s':120})
+call('post','/api/performance/default/snapshot')
+assert call('get','/api/performance/default')['tracking']['confirmed_through']<day
+call('post','/api/performance/default/confirm',400,json=confirmation)
+market_service.get_prices=lambda **_: ([{'id':'s','price_krw':110}],{'s':110})
+call('post','/api/performance/default/snapshot')
+call('patch',f'/api/performance/default/flows/{fid}',json={'voided':True})
+assert call('get','/api/performance/default')['tracking']['revision']==2
+call('patch',f'/api/performance/default/flows/{fid}',json={'voided':False})
+assert call('get','/api/performance/default')['tracking']['revision']==3
+call('post','/api/performance/default/snapshot')
+assert len(call('get','/api/performance/default')['snapshots'])==1
+saved=call('get','/api/performance/default')['snapshots']
+market_service.request_status=lambda: {'updated_at':None,'stale':True}
+assert call('post','/api/performance/default/snapshot')['saved'] is False
+assert call('get','/api/performance/default')['snapshots']==saved
+market_service.request_status=lambda: {'updated_at':datetime.now(timezone.utc).isoformat(),'stale':False}
+market_service.get_prices=lambda **_: ([],{})
+call('post','/api/performance/default/snapshot',400)
+assert call('get','/api/performance/default')['snapshots']==saved
+with dm.get_connection() as conn, conn.cursor() as c:
+    c.execute("SELECT deposit_krw FROM accounts WHERE id='a'")
+    assert c.fetchone()[0]==cash
+assert dm.get_trade_history()==before
+print('PASS performance opt-in, immutable baseline, one daily snapshot, retry identity, scope/date guards, reversible flows, confirmation revisions, stale/missing-price preservation, unchanged cash/trades')
 print('Synthetic local database:',name)

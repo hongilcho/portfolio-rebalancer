@@ -6,18 +6,20 @@ const day = s => {
 };
 export function depositMaturities(assets, accounts, today = kstToday()) {
   const todayDay = day(today);
-  return accounts.flatMap(acc => (acc.holdings || []).filter(h => h.is_deposit && h.quantity > 0).map(h => {
-    const asset = assets.find(a => String(a.id) === String(h.asset_id)) || h;
+  // Pure deposits are master assets, even without a holding row. Match NAV:
+  // each positive principal is counted once rather than once per account.
+  return assets.filter(a => a.is_deposit && Number(a.deposit_principal)>0).map(asset => {
+    const holder = accounts.find(acc => (acc.holdings || []).some(h => String(h.asset_id)===String(asset.id) && h.quantity>0));
     const start = day(asset.start_date), end = day(asset.maturity_date);
-    const principal = Number(asset.deposit_principal || 0), quantity = Number(h.quantity);
+    const principal = Number(asset.deposit_principal || 0);
     const rate = Number(asset.interest_rate || 0), tax = Number(asset.tax_rate ?? 15.4);
     const valid = start !== null && end !== null && end >= start && principal > 0
-      && [principal, quantity, rate, tax].every(Number.isFinite) && rate >= 0 && tax >= 0 && tax <= 100;
+      && [principal, rate, tax].every(Number.isFinite) && rate >= 0 && tax >= 0 && tax <= 100;
     const interest = valid ? principal * rate / 100 * (end - start) / 365 : null;
-    return { key: `${acc.id}/${h.asset_id}`, name: asset.name || h.asset_name, account: acc.account_alias,
+    return { key: String(asset.id), name: asset.name, account: asset.account_no || holder?.account_alias || '등록 예금',
       maturityDate: end === null ? '' : asset.maturity_date,
       daysLeft: end === null || todayDay === null ? null : end - todayDay,
-      principal: principal * quantity, rate,
-      expectedAmount: valid ? Math.round(principal + interest - Math.floor(interest * tax / 100)) * quantity : null };
-  })).sort((a,b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity) || a.key.localeCompare(b.key));
+      principal, rate,
+      expectedAmount: valid ? Math.round(principal + interest - Math.floor(interest * tax / 100)) : null };
+  }).sort((a,b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity) || a.key.localeCompare(b.key));
 }

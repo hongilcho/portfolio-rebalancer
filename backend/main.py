@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from logic.refreshing_cache import MarketRefreshUnavailable
 from data.data_manager import init_db, get_overview_batch_data
-from backend.routers import forex, plans
+from backend.routers import forex, plans, performance
 from logic.dividend_fetcher import prepare_dividend_cache
 from backend.services import market_service
 from logic.crypto_price_fetcher import get_crypto_prices
@@ -100,6 +100,7 @@ app.include_router(portfolios.router)
 app.include_router(system.router)
 app.include_router(forex.router)
 app.include_router(plans.router)
+app.include_router(performance.router)
 
 @app.get("/api/health")
 def health_check():
