@@ -41,7 +41,7 @@ def tracking(day=START):
     return {'baseline_date':day,'baseline_value':100,'revision':1,'confirmed_revision':1,'confirmed_through':END}
 
 
-def test_reports_require_boundary_dates_and_flow_confirmation():
+def test_reports_require_boundary_dates_but_not_flow_confirmation():
     snaps=[{'snapshot_date':START,'value_krw':100},{'snapshot_date':date(2026,2,28),'value_krw':150}]
     reports=report_periods(tracking(),snaps,[])
     jan=next(r for r in reports if r['label']=='2026-01')
@@ -50,7 +50,7 @@ def test_reports_require_boundary_dates_and_flow_confirmation():
     assert feb['return_pct'] is None and feb['start_value'] is None
     year=next(r for r in reports if r['kind']=='연')
     assert year['return_pct']==pytest.approx(50) and year['end']==date(2026,2,28)
-    assert report_periods({**tracking(),'confirmed_revision':0},snaps,[])[-1]['return_pct'] is None
+    assert report_periods({**tracking(),'confirmed_revision':0},snaps,[])[-1]['return_pct']==pytest.approx(50)
 
 
 def test_baseline_on_month_last_day_does_not_duplicate_same_day_flows():
@@ -62,12 +62,13 @@ def test_baseline_on_month_last_day_does_not_duplicate_same_day_flows():
     assert reports[-1]['profit']==0
 
 
-def test_voided_flows_are_excluded_and_pending_profit_is_labelled():
+def test_voided_flows_are_excluded_without_requiring_manual_confirmation():
     snaps=[{'snapshot_date':date(2026,1,31),'value_krw':110}]
     row=report_periods(tracking(),snaps,[flow(date(2026,1,15),100,True)])[0]
     assert row['profit']==10 and row['return_pct']==pytest.approx(10)
     row=report_periods({**tracking(),'confirmed_through':None},snaps,[])[0]
-    assert row['profit']==10 and row['return_pct'] is None and row['warning']
+    assert row['profit']==10 and row['return_pct']==pytest.approx(10) and not row['warning']
+    assert row['flow_count']==0
 
 
 def test_nav_includes_actual_cash_and_pure_deposits_once_and_no_dividend_topup():
@@ -117,15 +118,43 @@ def test_daily_missing_days_are_not_fabricated_and_require_no_month_boundary():
     assert report_daily(tracking(), [{'snapshot_date': date(2025, 12, 31), 'value_krw': 10}], []) == []
 
 
-def test_daily_confirmation_hides_only_unconfirmed_return_and_keeps_raw_value():
+def test_new_daily_records_display_returns_without_daily_confirmation():
     snapshots = [{'snapshot_date': START, 'value_krw': 100},
                  {'snapshot_date': date(2026, 1, 2), 'value_krw': 110}]
     rows = report_daily({**tracking(), 'confirmed_through': START}, snapshots, [])
     assert rows[0]['return_pct'] == 0
-    assert rows[1]['return_pct'] is None and rows[1]['profit'] == 10 and rows[1]['value_krw'] == 110
-    assert '외부 입출금' in rows[1]['warning']
+    assert rows[1]['return_pct'] == pytest.approx(10) and rows[1]['profit'] == 10 and rows[1]['value_krw'] == 110
+    assert not rows[1]['warning'] and rows[1]['flow_count']==0
     rows = report_daily({**tracking(), 'confirmed_revision': 0}, snapshots, [])
-    assert all(r['return_pct'] is None for r in rows)
+    assert [r['return_pct'] for r in rows] == pytest.approx([0,10])
+
+
+def test_recorded_flow_add_cancel_and_restore_recompute_without_confirmation():
+    t={**tracking(),'confirmed_revision':-1,'confirmed_through':None}
+    end=date(2026,1,31)
+    snaps=[{'snapshot_date':end,'value_krw':200}]
+    for reporter in (report_daily,report_periods):
+        missing=reporter(t,snaps,[])[0]
+        assert missing['profit']==100 and missing['return_pct']==pytest.approx(100)
+        f=flow(end,100)
+        added=reporter(t,snaps,[f])[0]
+        assert added['profit']==0 and added['return_pct']==pytest.approx(0,abs=1e-7)
+        assert added['flow_count']==1 and not added['warning']
+        cancelled=reporter(t,snaps,[{**f,'voided':True}])[0]
+        assert cancelled['profit']==100 and cancelled['flow_count']==0
+        assert cancelled['return_pct']==pytest.approx(100)
+        assert reporter(t,snaps,[f])[0]==added
+
+
+def test_net_zero_recorded_flows_still_use_their_dates_and_count_as_flows():
+    snaps=[{'snapshot_date':END,'value_krw':110}]
+    flows=[flow(date(2026,3,1),100),flow(date(2026,10,1),-100)]
+    t={**tracking(),'confirmed_revision':-1,'confirmed_through':None}
+    daily=report_daily(t,snaps,flows)[0]
+    expected,warning=money_weighted_return(START,END,100,110,flows)
+    assert daily['net_flow']==0 and daily['flow_count']==2 and daily['profit']==10
+    assert daily['return_pct']==pytest.approx(expected) and not warning
+    assert daily['return_pct']!=pytest.approx(10)
 
 
 def test_daily_same_day_value_changes_do_not_claim_zero_return():

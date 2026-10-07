@@ -77,7 +77,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
         <option value="365">최근 기록일 기준 1년</option><option value="all">전체 기록</option>
       </select></label>}
     </div>
-    <p>{metricLabel} · {daily ? '점을 누르거나 키보드로 선택하면 해당 날짜의 값을 확인할 수 있습니다. 수익률·손익은 하루 동안의 성과가 아니라 시작 기준일부터의 누적 성과입니다. 표시 범위를 바꿔도 계산 기준일은 바뀌지 않습니다.' : '양수는 위쪽, 음수는 아래쪽으로 표시합니다. 막대를 누르거나 키보드로 선택하면 아래에서 상세 값을 확인할 수 있습니다.'}</p>
+    <p>{metricLabel}</p>
     {!series.length ? <p>표시할 기간 성과 기록이 없습니다. 시작 기준 등록 이후의 평가 기록을 확인해주세요.</p> : <>
       <div ref={chartRef} className="performance-chart-scroll" role="region" aria-label={`기간 성과 ${daily ? '연결선' : '막대'}그래프, 좁은 화면에서는 좌우로 이동`} tabIndex={0}>
         <div style={{ width }}>
@@ -93,11 +93,10 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
           {daily ? <>
             {selected && <line x1={selectedX} x2={selectedX} y1={top} y2={bottom} stroke="var(--accent-primary)" strokeDasharray="3 3" />}
             {segments.map(segment => <line key={segment.to.key} x1={dailyX(segment.from)} x2={dailyX(segment.to)}
-              y1={y(segment.from.value)} y2={y(segment.to.value)} stroke="var(--accent-primary)" strokeWidth="2.5"
-              strokeDasharray={segment.provisional ? '5 4' : undefined} />)}
+              y1={y(segment.from.value)} y2={y(segment.to.value)} stroke="var(--accent-primary)" strokeWidth="2.5" />)}
             {series.map((row, index) => {
               const x = dailyX(row), pointY = row.value === null ? top : y(row.value);
-              const label = `${row.label} ${metricLabel} ${performanceValue(row.value, metric)}${row.provisional ? ' (입출금 확인 전 잠정치)' : ''}`;
+              const label = `${row.label} ${metricLabel} ${performanceValue(row.value, metric)}`;
               return <g key={row.key} role="button" tabIndex={0} aria-label={label} aria-pressed={selected?.key === row.key}
                 className="performance-chart-point" onClick={() => setSelectedKey(row.key)} onFocus={() => setSelectedKey(row.key)}
                 onKeyDown={event => {
@@ -113,7 +112,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
                 <title>{`${label}${row.warning ? ` · ${row.warning}` : ''}`}</title>
                 <circle cx={x} cy={pointY} r="12" fill="transparent" />
                 {row.value === null ? <text x={x} y={pointY + 4} textAnchor="middle" fill="var(--text-secondary)" fontSize="12">×</text>
-                  : <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill={row.provisional ? 'var(--bg-surface)' : 'var(--accent-primary)'} stroke="var(--accent-primary)" strokeWidth="2" />}
+                  : <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill="var(--accent-primary)" stroke="var(--accent-primary)" strokeWidth="2" />}
               </g>;
             })}
             {ticks.map(row => <text key={row.key} x={dailyX(row)} y={bottom + 35}
@@ -122,7 +121,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
           </> : series.map((row, index) => {
             const x = left + slot * (index + 0.5);
             const color = row.value > 0 ? 'var(--color-profit)' : row.value < 0 ? 'var(--color-loss)' : 'var(--text-secondary)';
-            const label = `${row.label} ${performanceValue(row.value, metric)}${row.provisional ? ' (입출금 확인 전 잠정치)' : ''}${row.warning ? ` · ${row.warning}` : ''}`;
+            const label = `${row.label} ${performanceValue(row.value, metric)}${row.warning ? ` · ${row.warning}` : ''}`;
             return <g key={row.key} role="button" tabIndex={0} aria-label={label} aria-pressed={selected?.key === row.key}
               className="performance-chart-period" onClick={() => setSelectedKey(row.key)} onFocus={() => setSelectedKey(row.key)}
               onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedKey(row.key); } }}>
@@ -132,11 +131,10 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
               {row.value === null ? <text x={x} y={zero - 10} textAnchor="middle" fill="var(--text-secondary)" fontSize="12">계산 대기</text>
                 : row.value === 0 ? <line x1={x - 18} x2={x + 18} y1={zero} y2={zero} stroke={color} strokeWidth="3" />
                 : <rect x={x - Math.min(40, slot * 0.4) / 2} y={Math.min(y(row.value), zero)} width={Math.min(40, slot * 0.4)} height={Math.abs(y(row.value) - zero)}
-                  fill={color} fillOpacity={row.provisional ? 0.35 : 0.85} stroke={color} strokeDasharray={row.provisional ? '4 3' : undefined} rx="3" />}
+                  fill={color} fillOpacity={0.85} stroke={color} rx="3" />}
               {row.value !== null && <text x={x} y={row.value >= 0 ? y(row.value) - 9 : y(row.value) + 17} textAnchor="middle" fill={color} fontSize="11">{performanceValue(row.value, metric, true)}</text>}
               <text x={x} y={bottom + 40} textAnchor="middle" fill="var(--text-primary)" fontSize="12">{row.label}</text>
               <text x={x} y={bottom + 57} textAnchor="middle" fill="var(--text-secondary)" fontSize="10">{row.ongoing ? `${row.end.slice(5).replace('-', '/')}까지` : row.partial ? '시작 기준 이후' : ''}</text>
-              {row.provisional && <text x={x} y={bottom + 73} textAnchor="middle" fill="var(--text-secondary)" fontSize="10">잠정치</text>}
             </g>;
           })}
         </svg>
@@ -149,20 +147,25 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
           <button type="button" className="btn btn-secondary btn-sm" disabled={selectedIndex >= series.length - 1}
             onClick={() => setSelectedKey(series[selectedIndex + 1].key)}>다음 기록</button>
         </div>}
-        <strong>{selected.label} · {metricLabel} {performanceValue(selected.value, metric)}{selected.provisional && ' (입출금 확인 전 잠정치)'}</strong>
+        <strong>{selected.label} · {metricLabel} {performanceValue(selected.value, metric)}</strong>
+        {selected.flow_count>0 && <p>외부 입출금 {selected.flow_count}건 반영</p>}
+        <details><summary>선택한 기록 상세</summary>
         <p>{selected.start} ~ {selected.end}{selected.partial && ' · 시작 기준 등록 이후'}{selected.ongoing && ' · 최근 평가일까지'}</p>
-        {daily && <p>평가액 {performanceValue(selected.value_krw, 'value_krw')} · 누적 순입금 {performanceValue(selected.net_flow, 'profit')} · 누적 손익 {performanceValue(selected.profit, 'profit')}
-          {selected.warning?.includes('외부 입출금 기록 확인') && ' (입출금 확인 전 잠정 손익)'}</p>}
+        {daily && <p>평가액 {performanceValue(selected.value_krw, 'value_krw')} · 누적 순입금 {performanceValue(selected.net_flow, 'profit')} · 누적 손익 {performanceValue(selected.profit, 'profit')}</p>}
         {daily && selected.recorded_at && <p>마지막 기록 시각 {new Date(selected.recorded_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간)</p>}
         {daily && <p>평가 기준 {selected.record_kind === 'close' ? '정규장 종가' : selected.record_kind === 'baseline' ? '시작 기준 등록 시점' : '이전 조회 시점 기록'}</p>}
         {daily && selected.fx && <p>적용 환율 {Number(selected.fx.rate).toLocaleString('ko-KR')} 원/USD · 고시 {new Date(selected.fx.published_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})}</p>}
         {daily && selected.ledger_at && <p>장부 수집 시각 {new Date(selected.ledger_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국 시간)</p>}
         {daily && selected.closes?.length>0 && <details><summary>종가 날짜·출처 확인</summary>{selected.closes.map(c=><p key={c.id}>{c.ticker || '예금'} · {c.price_date} · {c.source}</p>)}</details>}
         {selected.warning && <p>{selected.warning}</p>}
+        </details>
       </div>}
+      <details><summary>그래프 보는 법</summary>
+      <p>{daily ? '점을 선택하면 해당 날짜의 값을 확인할 수 있습니다. 수익률·손익은 시작 기준일부터의 누적 성과입니다. 표시 범위를 바꿔도 계산 기준일은 바뀌지 않습니다.' : '양수는 위쪽, 음수는 아래쪽으로 표시합니다. 막대를 선택하면 해당 기간의 상세 값을 확인할 수 있습니다.'}</p>
       <p className="performance-chart-note">{daily ? '종가 기록은 연속된 거래일 사이에 선을 연결합니다. 주말·휴장일은 건너뛰고, 누락된 거래일과 계산 대기 구간은 연결하지 않습니다. 하루만 기록되면 점 하나가 표시됩니다. 평가액은 입출금으로도 변하므로 수익률과 다릅니다. 기존 조회 기록은 날짜별 상세의 평가 기준으로 구분합니다.' : '계산 대기는 0%·0원으로 표시하지 않습니다. 진행 중인 기간은 최근 평가일까지 표시하며, 정확한 금액과 계산 상태는 아래 표에서 확인할 수 있습니다.'}</p>
-      {daily && !series.some(row => row.value !== null) && <p>수익률을 표시하려면 외부 입출금 기록을 확인해주세요. 시작일 평가액이 변경된 경우 다음 날짜의 기록부터 수익률을 계산할 수 있습니다.</p>}
-      {series.some(row => row.provisional) && <p>{daily ? '점선과 속이 빈 점' : '점선 막대'}은 입출금 확인 전의 잠정 손익입니다. 입출금 기록을 확인하면 잠정치 표시를 해제합니다.</p>}
+      {daily && !series.some(row => row.value !== null) && <p>계산 대기 사유는 기록 상세에서 확인할 수 있습니다. 시작일 평가액이 변경된 경우 다음 날짜의 기록부터 수익률을 계산할 수 있습니다.</p>}
+      <p>외부 입출금 기록이 없으면 입출금 없음으로 계산합니다. 실제 입출금이 있을 때만 4번 탭에 기록하면 날짜·금액이 자동 반영됩니다.</p>
+      </details>
     </>}
   </section>;
 }

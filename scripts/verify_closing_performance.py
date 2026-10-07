@@ -63,6 +63,18 @@ with dm.get_connection() as conn, conn.cursor() as c:
 ctx = context()
 performance.capture(ctx,'default',100,{'test':True},start=True)
 performance.capture(ctx,'other',100,{'test':True},start=True)
+# Keep the synthetic clock independent of the day this script is executed.
+with dm.get_connection() as conn, conn.cursor() as c:
+    c.execute('UPDATE performance_tracking SET created_at=%s,baseline_date=%s', (NOW-timedelta(days=1),DAY-timedelta(days=1)))
+    c.execute('UPDATE performance_snapshots SET snapshot_date=%s', (DAY-timedelta(days=1),))
+    conn.commit()
+original_schedule = close_jobs.schedule
+def schedule_with_fixture_clock(ctx, pid, days, today):
+    original_schedule(ctx, pid, days, today)
+    with ctx.connect() as conn, conn.cursor() as c:
+        c.execute("UPDATE performance_close_jobs SET next_attempt_at=%s WHERE portfolio_id=%s AND state='pending'", (NOW,pid))
+        conn.commit()
+close_jobs.schedule = schedule_with_fixture_clock
 
 class Quotes:
     calls = []
@@ -81,8 +93,8 @@ q = Quotes()
 w = ClosePerformance(ctx=ctx,prices=q,now=lambda:NOW)
 assert not w.tick('default')
 state = performance.read(ctx,'default')
-assert state['close_jobs'][0]['state']=='retry' and state['snapshots'][0]['record_kind']=='baseline'
-assert state['snapshots'][0]['value_krw']==100
+assert state['close_jobs'][0]['state']=='retry' and state['snapshots'][-1]['record_kind']=='baseline'
+assert state['snapshots'][-1]['value_krw']==100
 with dm.get_connection() as conn, conn.cursor() as c:
     c.execute("SELECT inputs FROM performance_close_jobs WHERE portfolio_id='default'")
     inputs=c.fetchone()[0]
@@ -96,7 +108,7 @@ restart = ClosePerformance(ctx=ctx,prices=q,now=lambda:later,read_ledger=blocked
 assert restart.tick('default')
 assert q.calls.count('fx')==1 and q.calls.count('s')==1 and q.calls.count('vt')==2
 state = performance.read(ctx,'default')
-assert state['snapshots'][0]['value_krw']==142930 and state['snapshots'][0]['record_kind']=='close'
+assert state['snapshots'][-1]['value_krw']==142930 and state['snapshots'][-1]['record_kind']=='close'
 assert state['close_jobs'][0]['state']=='complete'
 assert not restart.tick('default')
 assert not performance.capture(ctx,'default',999,{},start=False)
@@ -107,24 +119,37 @@ client = TestClient(app)
 response = client.get('/api/performance/default')
 assert response.status_code==200, response.text
 serialized = response.json()
-assert serialized['daily_reports'][0]['record_kind']=='close'
-assert serialized['snapshots'][0]['fx']['rate']==1400
-assert serialized['daily_reports'][0]['closes'][0]['price_date']
+assert serialized['daily_reports'][-1]['record_kind']=='close'
+assert serialized['snapshots'][-1]['fx']['rate']==1400
+assert serialized['daily_reports'][-1]['closes'][0]['price_date']
+assert serialized['daily_reports'][-1]['return_pct'] is not None
+assert serialized['tracking']['confirmed_revision']==-1
+assert not serialized['daily_reports'][-1]['warning']
+
+# Flow changes alter profits/returns immediately, with no confirmation step.
+f = {'request_id':'QA-flow-0001','account_id':'a','event_date':DAY,'direction':'DEPOSIT',
+     'currency':'KRW','native_amount':100,'exchange_rate':1,'notes':'Synthetic external flow'}
+ident = performance.add_flow(ctx,'default',f)
+changed = performance.read(ctx,'default')['daily_reports'][-1]
+assert changed['profit']==142730 and changed['flow_count']==1 and changed['return_pct'] is not None
+performance.void_flow(ctx,'default',ident,True)
+reverted = performance.read(ctx,'default')['daily_reports'][-1]
+assert reverted['profit']==142830 and reverted['flow_count']==0 and reverted['return_pct'] is not None
 
 # Explicit correction reuses FX and prices, retains old record and invalidates
 # the previous external-flow confirmation before returning a changed NAV.
-performance.confirm(ctx,'default',0,DAY,142930)
+performance.confirm(ctx,'default',2,DAY,142930)
 correct = ClosePerformance(ctx=ctx,prices=q,now=lambda:later)
 assert correct.request('default')['saved']
 after = performance.read(ctx,'default')
-assert after['snapshots'][0]['value_krw']==143030
+assert after['snapshots'][-1]['value_krw']==143030
 assert after['tracking']['confirmed_through']<DAY
 assert q.calls.count('fx')==1 and q.calls.count('s')==1 and q.calls.count('vt')==2
 with dm.get_connection() as conn, conn.cursor() as c:
-    c.execute("SELECT payload FROM performance_snapshots WHERE portfolio_id='default'")
+    c.execute("SELECT payload FROM performance_snapshots WHERE portfolio_id='default' AND record_kind='close'")
     assert c.fetchone()[0]['performance_at_capture']['profit_krw']==142930
     c.execute("SELECT COUNT(*) FROM performance_snapshot_revisions WHERE portfolio_id='default'")
-    assert c.fetchone()[0]==2
+    assert c.fetchone()[0]==1
     c.execute("SELECT COUNT(*) FROM trade_history")
     assert c.fetchone()[0]==0
     c.execute("SELECT deposit_krw FROM accounts WHERE id='a'")
@@ -158,5 +183,5 @@ close_jobs.fail(ctx,new,NOW+timedelta(minutes=11),'QA lease release')
 past=DAY-timedelta(days=4)
 close_jobs.schedule(ctx,'default',[past],DAY)
 assert any(j['state']=='missed' for j in performance.read(ctx,'default')['close_jobs'])
-print('PASS additive schema, partial failure/restart, frozen ledger/FX/closes, complete NAV, read serialization, same-day audited correction, confirmation invalidation, concurrent leases, stale worker rejection, missing past day, unchanged accounts/trades')
+print('PASS additive schema, partial failure/restart, frozen ledger/FX/closes, complete NAV, read serialization, automatic flow/no-flow returns, reversible flow recalculation, same-day audited correction, concurrent leases, stale worker rejection, missing past day, unchanged accounts/trades')
 print('Synthetic local database:',name)

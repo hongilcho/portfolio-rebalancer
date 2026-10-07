@@ -202,8 +202,7 @@ if __name__ == '__main__':
                 cursor.execute("UPDATE performance_close_jobs SET next_attempt_at=%s WHERE portfolio_id='default' AND snapshot_date=%s",(now,day))
                 conn.commit()
             assert worker.tick('default')
-        latest = performance.read(context(),'default')['snapshots'][-1]
-        performance.confirm(context(),'default',0,latest['snapshot_date'],float(latest['value_krw']))
+        # No daily/manual confirmation: recorded flows alone drive returns.
     import uvicorn
     print(f"Synthetic QA backend: http://127.0.0.1:{args.port}; local DB:",name, flush=True)
     uvicorn.run(main.app, host='127.0.0.1', port=args.port)

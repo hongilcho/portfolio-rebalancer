@@ -100,11 +100,12 @@ def report_periods(tracking, snapshots, flows):
             included=[f for f in active if start < f['event_date'] <= end or (partial and f['event_date']==start)]
             net=sum(float(f['amount_krw']) for f in included)
             row['net_flow']=net
+            row['flow_count']=len(included)
             row['profit']=ev-sv-net
             rate,warning=money_weighted_return(start,end,sv,ev,included)
-            confirmed=(tracking['confirmed_revision']==tracking['revision'] and tracking['confirmed_through'] is not None and tracking['confirmed_through']>=end)
-            row['return_pct']=rate if confirmed else None
-            row['warning']=warning if confirmed else '해당 기간의 외부 입출금 기록 확인이 필요합니다.'
+            # Absent external flows default to zero; recorded edits apply immediately.
+            row['return_pct']=rate
+            row['warning']=warning
         result.append(row)
     return result
 
@@ -133,17 +134,14 @@ def report_daily(tracking, snapshots, flows):
             net += float(f['amount_krw'])
             flow_index += 1
         end_value = float(snapshot['value_krw'])
-        confirmed = (tracking['confirmed_revision'] == tracking['revision'] and
-                     tracking['confirmed_through'] is not None and tracking['confirmed_through'] >= end)
-        if not confirmed:
-            rate, warning = None, '해당 기간의 외부 입출금 기록 확인이 필요합니다.'
-        elif end == baseline and not included and end_value == start_value:
+        if end == baseline and not included and end_value == start_value:
             rate, warning = 0.0, ''
         else:
             rate, warning = money_weighted_return(baseline, end, start_value, end_value, included)
         result.append({'kind': '일', 'label': end.isoformat(), 'start': baseline, 'end': end,
                        'partial': True, 'start_value': start_value, 'end_value': end_value,
-                       'value_krw': end_value, 'net_flow': net, 'profit': end_value - start_value - net,
+                       'value_krw': end_value, 'net_flow': net, 'flow_count': len(included),
+                       'profit': end_value - start_value - net,
                        'return_pct': rate, 'warning': warning,
                        'recorded_at': snapshot.get('recorded_at'),
                        'record_kind': snapshot.get('record_kind', 'legacy_view'),

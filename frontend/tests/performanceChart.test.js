@@ -31,7 +31,7 @@ test('chart separates monthly years and annual reports without modifying server 
   assert.deepEqual(reports, original);
 });
 
-test('missing, unconfirmed, and nonfinite returns remain gaps while actual zero stays zero', () => {
+test('missing and nonfinite returns remain gaps while actual zero stays zero', () => {
   const series = performanceSeries([row('2026-01', { return_pct: null }), row('2026-02', { return_pct: 0 }),
     row('2026-03', { return_pct: NaN }), row('2026-04', { return_pct: Infinity }), row('2026-05', { return_pct: -1e-12 })], '월', 'return_pct', '2026');
   assert.deepEqual(series.map(r => r.value), [null, 0, null, null, 0]);
@@ -39,10 +39,10 @@ test('missing, unconfirmed, and nonfinite returns remain gaps while actual zero 
   assert.equal(performanceValue(series[4].value, 'return_pct'), '0.00%');
 });
 
-test('profits before flow confirmation are marked provisional; a return-specific warning does not invalidate profit', () => {
+test('profits use server results without interpreting legacy confirmation warnings', () => {
   const series = performanceSeries([row('2026-01', { return_pct: null, warning: '해당 기간의 외부 입출금 기록 확인이 필요합니다.' }),
     row('2026-02', { return_pct: null, warning: '입출금 부호가 여러 번 바뀜' }), row('2026-03', { profit: null, warning: '경계일 평가액 없음' })], '월', 'profit', '2026');
-  assert.deepEqual(series.map(r => r.provisional), [true, false, false]);
+  assert.ok(series.every(r => !('provisional' in r)));
   assert.deepEqual(series.map(r => r.value), [120000, 120000, null]);
 });
 
@@ -85,13 +85,13 @@ test('daily lines break at missing dates and null results, connect genuine zero 
   assert.deepEqual(dailyPerformanceSegments([series[0]]), []);
 });
 
-test('unconfirmed profit lines are provisional but valuation remains available without provisional markers', () => {
+test('profit lines and valuations have no confirmation markers, missing returns stay absent', () => {
   const rows = [dailyRow('2026-01-01'), dailyRow('2026-01-02', { return_pct: null, warning: '外' }),
     dailyRow('2026-01-03', { return_pct: null, warning: '해당 기간의 외부 입출금 기록 확인이 필요합니다.' })];
   const profits = dailyPerformanceSeries(rows, 'profit', 'all');
-  assert.deepEqual(profits.map(r => r.provisional), [false, false, true]);
-  assert.deepEqual(dailyPerformanceSegments(profits).map(s => s.provisional), [false, true]);
-  assert.ok(dailyPerformanceSeries(rows, 'value_krw').every(r => r.value === 101000 && !r.provisional));
+  assert.ok(profits.every(r => !('provisional' in r)));
+  assert.equal(dailyPerformanceSegments(profits).length,2);
+  assert.ok(dailyPerformanceSeries(rows, 'value_krw').every(r => r.value === 101000));
   assert.deepEqual(dailyPerformanceSeries(rows, 'return_pct').map(r => r.value), [2, null, null]);
 });
 

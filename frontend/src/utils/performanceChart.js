@@ -9,8 +9,7 @@ export function performanceSeries(reports, kind, metric, year) {
         : null;
       const periodEnd = kind === '연' ? `${row.label}-12-31`
         : new Date(Date.UTC(Number(row.label.slice(0, 4)), Number(row.label.slice(5, 7)), 0)).toISOString().slice(0, 10);
-      return { ...row, value, key: `${row.kind}/${row.label}`, ongoing: row.period_complete == null ? row.end < periodEnd : !row.period_complete,
-        provisional: value !== null && metric === 'profit' && (row.warning || '').includes('외부 입출금 기록 확인') };
+      return { ...row, value, key: `${row.kind}/${row.label}`, ongoing: row.period_complete == null ? row.end < periodEnd : !row.period_complete };
     });
 }
 
@@ -34,8 +33,7 @@ export function dailyPerformanceSeries(reports, metric, range = '90') {
       const raw = row[metric];
       const value = typeof raw === 'number' && Number.isFinite(raw)
         ? metric === 'return_pct' ? (Math.abs(raw) < 0.005 ? 0 : raw) : Math.round(raw) : null;
-      return { ...row, value, key: `일/${row.label}`, provisional: metric === 'profit' && value !== null &&
-        (row.warning || '').includes('외부 입출금 기록 확인') };
+      return { ...row, value, key: `일/${row.label}` };
     });
 }
 
@@ -48,7 +46,7 @@ export function dailyPerformanceSegments(series) {
         previous.label > row.previous_close_date && previous.label < row.label)
       : performanceDay(row.label) - performanceDay(previous.label) === 1;
     return previous.value !== null && row.value !== null && consecutive
-      ? [{ from: previous, to: row, provisional: previous.provisional || row.provisional }] : [];
+      ? [{ from: previous, to: row }] : [];
   });
 }
 
