@@ -164,6 +164,21 @@ def test_daily_same_day_value_changes_do_not_claim_zero_return():
     assert rows[0]['profit'] == 0 and rows[0]['return_pct'] == pytest.approx(0, abs=1e-7)
 
 
+def test_aligned_closing_baseline_starts_at_zero_and_later_returns_use_that_value():
+    base = date(2026, 10, 5)
+    t = {**tracking(base), 'baseline_value': 110}
+    snapshots = [{'snapshot_date': base, 'value_krw': 110, 'record_kind': 'baseline',
+                  'baseline_kind': 'closing_baseline'},
+                 {'snapshot_date': date(2026, 10, 6), 'value_krw': 121, 'record_kind': 'close'}]
+    daily = report_daily(t, snapshots, [])
+    assert [r['profit'] for r in daily] == [0, 11]
+    assert [r['return_pct'] for r in daily] == pytest.approx([0, 10])
+    assert daily[0]['baseline_kind'] == 'closing_baseline' and not daily[0]['warning']
+    periods = report_periods(t, snapshots, [])
+    assert all(r['start_value'] == 110 and r['profit'] == 11 for r in periods)
+    assert all(r['return_pct'] == pytest.approx(10) for r in periods)
+
+
 def test_daily_ambiguous_return_is_not_fabricated_but_profit_is_available():
     rows = report_daily(tracking(), [{'snapshot_date': END, 'value_krw': 100}],
                         [flow(date(2026, 3, 1), -300), flow(date(2026, 6, 1), 300)])

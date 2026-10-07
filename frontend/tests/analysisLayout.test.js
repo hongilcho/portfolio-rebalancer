@@ -76,6 +76,17 @@ try {
     assert.match(html,/외부 입출금 1건 반영/);
     assert.doesNotMatch(html,/입출금 확인 전|잠정치/);
   });
+  await test('verified closing baseline exposes dated sources and a preserved FX timestamp', () => {
+    const dailyReports=[{kind:'일',label:'2026-10-05',start:'2026-10-05',end:'2026-10-05',
+      return_pct:0,profit:0,value_krw:100,net_flow:0,record_kind:'baseline',baseline_kind:'closing_baseline',
+      fx:{rate:1400,collected_at:'2026-10-05T06:46:00Z'},
+      closes:[{id:'one',ticker:'VT',price_date:'2026-10-02',source:'검증된 종가'}]}];
+    const html=renderToStaticMarkup(React.createElement(Chart,{dailyReports,baselineDate:'2026-10-05'}));
+    assert.match(html,/종가 기준 시작 평가액/);
+    assert.match(html,/2026-10-02/);
+    assert.match(html,/원\/USD · 저장/);
+    assert.doesNotMatch(html,/Invalid Date|시작 기준 등록 시점/);
+  });
   await test('tab 4 panel owns external flow input, history and reversible cancellation', () => {
     const html = renderToStaticMarkup(React.createElement(Flows, { portfolioId: 'default', accounts: fixture.bundle.accounts, performance, onOpenAnalysis: noop }));
     assert.match(html, /aria-label="입출금 금액"/);

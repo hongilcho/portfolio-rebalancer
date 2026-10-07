@@ -145,6 +145,7 @@ def report_daily(tracking, snapshots, flows):
                        'return_pct': rate, 'warning': warning,
                        'recorded_at': snapshot.get('recorded_at'),
                        'record_kind': snapshot.get('record_kind', 'legacy_view'),
+                       'baseline_kind': snapshot.get('baseline_kind'),
                        'previous_close_date': snapshot.get('previous_close_date'),
                        'valuation_at': snapshot.get('valuation_at'),
                        'ledger_at': snapshot.get('ledger_at'), 'fx':snapshot.get('fx'),

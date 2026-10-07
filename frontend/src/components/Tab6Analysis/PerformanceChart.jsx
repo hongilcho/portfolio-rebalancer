@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { performanceSeries, performanceValue, performanceDomain, performanceDay,
+import { performanceSeries, performanceValue, performanceAxisValue, performanceDomain, performanceDay,
   dailyPerformanceSeries, dailyPerformanceSegments } from '../../utils/performanceChart';
 
 export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate }) {
@@ -99,7 +99,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         <div className="performance-chart-axis" aria-hidden="true"><svg viewBox="0 0 86 340">
           {[0, 0.25, 0.5, 0.75, 1].map(factor => <text key={factor} x="80"
             y={y(minimum + factor * (maximum - minimum)) + 4} textAnchor="end" fill="var(--text-secondary)" fontSize="11">
-            {performanceValue(minimum + factor * (maximum - minimum), metric, true)}</text>)}
+            {performanceAxisValue(minimum + factor * (maximum - minimum), metric, maximum - minimum)}</text>)}
         </svg></div>
         <svg viewBox={`0 0 ${width} 340`} style={{ minWidth: width }} role="group" aria-label={`${daily ? '일별 누적' : kind === '월' ? `${selectedYear}년 월별` : '연간'} ${metricLabel} 그래프`}>
           {[0, 0.25, 0.5, 0.75, 1].map(factor => <g key={factor}>
@@ -173,8 +173,10 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         <p>{selected.start} ~ {selected.end}{selected.partial && ' · 시작 기준 등록 이후'}{selected.ongoing && ' · 최근 평가일까지'}</p>
         {daily && <p>평가액 {performanceValue(selected.value_krw, 'value_krw')} · 누적 순입금 {performanceValue(selected.net_flow, 'profit')} · 누적 손익 {performanceValue(selected.profit, 'profit')}</p>}
         {daily && selected.recorded_at && <p>마지막 기록 시각 {new Date(selected.recorded_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간)</p>}
-        {daily && <p>평가 기준 {selected.record_kind === 'close' ? '정규장 종가' : selected.record_kind === 'baseline' ? '시작 기준 등록 시점' : '이전 조회 시점 기록'}</p>}
-        {daily && selected.fx && <p>적용 환율 {Number(selected.fx.rate).toLocaleString('ko-KR')} 원/USD · 고시 {new Date(selected.fx.published_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})}</p>}
+        {daily && <p>평가 기준 {selected.record_kind === 'close' ? '정규장 종가' : selected.record_kind === 'baseline' ? selected.baseline_kind === 'closing_baseline' ? '종가 기준 시작 평가액' : '시작 기준 등록 시점' : '이전 조회 시점 기록'}</p>}
+        {daily && selected.fx && <p>적용 환율 {Number(selected.fx.rate).toLocaleString('ko-KR')} 원/USD{selected.fx.published_at
+          ? ` · 고시 ${new Date(selected.fx.published_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})}`
+          : selected.fx.collected_at ? ` · 저장 ${new Date(selected.fx.collected_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})}` : ''}</p>}
         {daily && selected.ledger_at && <p>장부 수집 시각 {new Date(selected.ledger_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국 시간)</p>}
         {daily && selected.closes?.length>0 && <details><summary>종가 날짜·출처 확인</summary>{selected.closes.map(c=><p key={c.id}>{c.ticker || '예금'} · {c.price_date} · {c.source}</p>)}</details>}
         {selected.warning && <p>{selected.warning}</p>}

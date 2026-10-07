@@ -23,6 +23,15 @@ export function performanceValue(value, metric, compact = false) {
   return `${sign}${(absolute / unit[0]).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}${unit[1]}`;
 }
 
+export function performanceAxisValue(value, metric, span) {
+  if (metric !== 'value_krw') return performanceValue(value, metric, true);
+  // Choose a shared unit from the axis span so nearby ticks don't all
+  // round to "1억 원", or change units when crossing 100 million KRW.
+  const [unit, suffix] = span >= 100000000 ? [100000000, '억 원'] : span >= 10000 ? [10000, '만 원'] : [1, '원'];
+  const digits = unit === 1 ? 0 : Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(span / 4 / unit))));
+  return `${(value / unit).toLocaleString('ko-KR', {maximumFractionDigits: digits})} ${suffix}`;
+}
+
 export const performanceDay = label => Date.parse(`${label}T00:00:00Z`) / 86400000;
 
 export function dailyPerformanceSeries(reports, metric, range = '90') {
@@ -58,7 +67,10 @@ export function performanceDomain(series, metric) {
   const values = series.filter(row => row.value !== null).map(row => row.value);
   if (!values.length) return [0, 100000];
   const minimum = Math.min(...values), maximum = Math.max(...values);
-  const padding = Math.max((maximum - minimum) * 0.1, maximum * 0.01, 1);
+  // Zoom to the visible change, rather than imposing a 1% NAV margin.
+  // A constant series still needs a finite, readable axis.
+  const spread = maximum - minimum;
+  const padding = spread > 0 ? Math.max(spread * 0.1, 1) : Math.max(maximum * 0.0001, 1);
   return [Math.max(0, minimum - padding), maximum + padding];
 }
 

@@ -48,8 +48,9 @@ def read(ctx, pid):
                 revision,confirmed_revision,confirmed_through,close_started_on FROM performance_tracking WHERE portfolio_id=%s) t),
             'snapshots',COALESCE((SELECT json_agg(s ORDER BY snapshot_date) FROM
                 (SELECT portfolio_id,snapshot_date,value_krw,recorded_at,record_kind,valuation_at,previous_close_date,
-                    payload->>'ledger_at' AS ledger_at,payload->'fx' AS fx,
-                    (SELECT json_agg(p.value) FROM jsonb_each(CASE WHEN record_kind='close' THEN payload->'prices' ELSE '{}'::jsonb END) p) AS closes
+                    payload->>'ledger_at' AS ledger_at,payload->'fx' AS fx,payload->>'baseline_kind' AS baseline_kind,
+                    (SELECT json_agg(p.value) FROM jsonb_each(CASE WHEN record_kind IN ('close','baseline')
+                        AND jsonb_typeof(payload->'prices')='object' THEN payload->'prices' ELSE '{}'::jsonb END) p) AS closes
                     FROM performance_snapshots WHERE portfolio_id=%s) s),'[]'::json),
             'close_jobs',COALESCE((SELECT json_agg(j ORDER BY snapshot_date DESC) FROM
                 (SELECT snapshot_date,state,attempts,error,updated_at FROM performance_close_jobs WHERE portfolio_id=%s ORDER BY snapshot_date DESC LIMIT 10) j),'[]'::json),

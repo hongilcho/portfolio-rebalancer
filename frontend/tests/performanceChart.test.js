@@ -17,7 +17,7 @@ test('baseline connects to first close over holidays but not across a missing se
   rows[1]={...rows[1],label:'2026-10-07',previous_close_date:'2026-10-06'};
   assert.equal(dailyPerformanceSegments(dailyPerformanceSeries(rows,'profit','all')).length,0);
 });
-import { performanceSeries, performanceValue, performanceScale, performanceDomain,
+import { performanceSeries, performanceValue, performanceAxisValue, performanceScale, performanceDomain,
   dailyPerformanceSeries, dailyPerformanceSegments } from '../src/utils/performanceChart.js';
 
 const row = (label, patch = {}) => ({ kind: '월', label, start: `${label}-01`, end: `${label}-28`, partial: false,
@@ -103,4 +103,16 @@ test('valuation axis zooms around real values, has a finite span for a single po
   assert.deepEqual(performanceDomain([{ value: -6 }], 'return_pct'), [-10, 10]);
   assert.equal(performanceValue(100000, 'value_krw'), '100,000 원');
   assert.equal(performanceValue(100000, 'value_krw', true), '10만 원');
+});
+
+test('small valuation changes remain visible even in a large portfolio', () => {
+  const low = 103300000, high = 103345000;
+  const [min, max] = performanceDomain([{value: low}, {value: high}], 'value_krw');
+  assert.deepEqual([min, max], [low - 4500, high + 4500]);
+  assert.ok((high - low) / (max - min) > 0.8);
+  const ticks = [0,0.25,0.5,0.75,1].map(f => performanceAxisValue(min + f * (max - min), 'value_krw', max - min));
+  assert.equal(new Set(ticks).size, 5);
+  assert.ok(ticks.every(label => label.endsWith('만 원')));
+  const flat = performanceDomain([{value: high}, {value: high}], 'value_krw');
+  assert.ok(flat[0] < high && flat[1] > high && Number.isFinite(flat[1] - flat[0]));
 });
