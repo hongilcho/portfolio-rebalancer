@@ -1036,6 +1036,9 @@ body {
 .workflow-wide { grid-column: 1 / -1; }
 
 .performance-chart { margin: 24px 0; padding: 20px; border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.performance-chart-caption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.performance-chart-baseline { color: var(--text-secondary); font-size: 0.8rem; }
+.performance-chart-value { min-height: 1.7em; }
 .performance-chart-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
 .performance-chart-controls [role="group"] { display: flex; flex-wrap: wrap; gap: 6px; }
 .performance-chart-controls button[aria-pressed="true"] { background: var(--accent-primary); color: #fff; }
@@ -1045,10 +1048,10 @@ body {
 .performance-chart-scroll svg { display: block; width: 100%; height: auto; }
 .performance-chart-axis { position: sticky; left: 0; width: 86px; height: 0; z-index: 1; pointer-events: none; }
 .performance-chart-axis svg { position: absolute; width: 86px; height: 340px; background: var(--bg-surface); }
-.performance-chart-period { cursor: pointer; }
+.performance-chart-period { cursor: pointer; touch-action: manipulation; }
 .performance-chart-period:focus { outline: none; }
 .performance-chart-period:focus > rect:first-of-type { stroke: var(--accent-primary); stroke-width: 2; }
-.performance-chart-point { cursor: pointer; }
+.performance-chart-point { cursor: pointer; touch-action: manipulation; }
 .performance-chart-point:focus { outline: none; }
 .performance-chart-point:focus > circle:first-of-type { stroke: var(--accent-primary); stroke-width: 2; }
 .performance-chart-detail { padding: 12px 16px; background: var(--bg-surface); border-radius: var(--radius-sm); margin-top: 12px; }

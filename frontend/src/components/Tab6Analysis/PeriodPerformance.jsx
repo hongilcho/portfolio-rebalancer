@@ -16,7 +16,7 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
         <label style={{display:'block',margin:'16px 0 8px'}}><input type="checkbox" checked={startChecked} disabled={busy} onChange={e=>setStartChecked(e.target.checked)} />현재 장부의 잔고·예수금·시세를 확인했습니다.</label>
         <button className="btn btn-primary" disabled={busy || !startChecked} onClick={()=>run(async()=>{await api.startPerformance(portfolioId);setNotice('현재 평가액을 시작 기준으로 등록했습니다.');})}>기간 성과 시작 기준 등록</button>
       </div> : <div>
-        <PerformanceChart reports={data.reports} dailyReports={data.daily_reports || []} />
+        <PerformanceChart reports={data.reports} dailyReports={data.daily_reports || []} baselineDate={data.tracking.baseline_date} />
         <div className="table-container"><table className="custom-table" aria-label="기간 성과 표"><thead><tr><th>구분</th><th>기간</th><th>평가 시작/종료</th><th>순입금</th><th>기간 손익</th><th>금액가중 기간 수익률</th></tr></thead><tbody>
           {data.reports.map(r=><tr key={`${r.kind}/${r.label}`}><td>{r.kind}</td><td>{r.label}{r.partial && ' (기준 등록 이후)'}<br />{r.start} ~ {r.end}</td><td>{r.start_value==null ? '미기록' : formatKRW(r.start_value)} / {r.end_value==null ? '미기록' : formatKRW(r.end_value)}</td><td>{r.net_flow==null ? '—' : formatKRW(r.net_flow)}</td><td>{r.profit==null ? '—' : formatKRW(r.profit)}{r.warning && <p>{r.warning}</p>}</td><td>{r.return_pct==null ? '계산 대기' : `${(Math.abs(r.return_pct)<0.005 ? 0 : r.return_pct).toFixed(2)}%`}</td></tr>)}
         </tbody></table></div>

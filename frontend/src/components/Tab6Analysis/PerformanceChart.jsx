@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { performanceSeries, performanceValue, performanceDomain, performanceDay,
   dailyPerformanceSeries, dailyPerformanceSegments } from '../../utils/performanceChart';
 
-export default function PerformanceChart({ reports = [], dailyReports = [] }) {
+export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate }) {
   const [kind, setKind] = useState(dailyReports.length ? '일' : '월');
   const [metric, setMetric] = useState('return_pct');
   const [year, setYear] = useState('latest');
   const [range, setRange] = useState('90');
   const [selectedKey, setSelectedKey] = useState(null);
   const [containerWidth, setContainerWidth] = useState(560);
+  const [scrollLeft, setScrollLeft] = useState(0);
   const chartRef = useRef(null);
   const years = [...new Set(reports.filter(row => row.kind === '월').map(row => row.label.slice(0, 4)))].sort();
   const selectedYear = years.includes(year) ? year : years.at(-1);
@@ -35,17 +36,26 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
   const dailyX = row => daySpan ? left + (performanceDay(row.label) - firstDay) / daySpan * (right - left) : (left + right) / 2;
   const selectedIndex = series.findIndex(row => row.key === selected?.key);
   const selectedX = daily && selected ? dailyX(selected) : left + slot * (selectedIndex + 0.5);
+  const latestX = daily && hasSeries ? dailyX(series.at(-1)) : left + slot * (series.length - 0.5);
   useEffect(() => {
-    if (chartRef.current && selectedIndex >= 0) {
-      // Keep the latest/selected period visible on a phone without scrolling
-      // the whole page. Manual panning remains available between selections.
-      chartRef.current.scrollLeft = selectedX - chartRef.current.clientWidth / 2;
+    if (chartRef.current && hasSeries) {
+      // Show the latest record when the view changes, but never move the
+      // tapped point while a phone is dispatching its focus/click events.
+      chartRef.current.scrollLeft = latestX - chartRef.current.clientWidth / 2;
     }
-  }, [width, selectedX, selectedIndex]);
+  }, [width, containerWidth, latestX, hasSeries, kind, range]);
+  const navigateRecord = row => {
+    setSelectedKey(row.key);
+    if (chartRef.current) chartRef.current.scrollLeft = dailyX(row) - chartRef.current.clientWidth / 2;
+  };
   const chooseKind = value => { setKind(value); setSelectedKey(null); if (value !== '일' && metric === 'value_krw') setMetric('return_pct'); };
   const chooseMetric = value => setMetric(value);
   const metricLabel = metric === 'value_krw' ? '평가액' : metric === 'return_pct'
     ? daily ? '기준일부터 누적 금액가중 수익률' : '금액가중 기간 수익률' : daily ? '기준일부터 누적 손익' : '기간 손익';
+  const visibleLeft = Math.max(left, scrollLeft + 86);
+  const visibleRight = Math.min(right, scrollLeft + containerWidth - 8);
+  const tooltipWidth = Math.min(210, Math.max(140, visibleRight - visibleLeft));
+  const tooltipX = Math.max(visibleLeft, Math.min(visibleRight - tooltipWidth, selectedX - tooltipWidth / 2));
   const segments = daily ? dailyPerformanceSegments(series) : [];
   const ticks = [];
   if (daily && series.length) {
@@ -77,9 +87,14 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
         <option value="365">최근 기록일 기준 1년</option><option value="all">전체 기록</option>
       </select></label>}
     </div>
-    <p>{metricLabel}</p>
+    <p className="performance-chart-caption">{metricLabel}
+      {daily && baselineDate && <small className="performance-chart-baseline">기준일 <time dateTime={baselineDate}>{baselineDate}</time></small>}
+    </p>
     {!series.length ? <p>표시할 기간 성과 기록이 없습니다. 시작 기준 등록 이후의 평가 기록을 확인해주세요.</p> : <>
-      <div ref={chartRef} className="performance-chart-scroll" role="region" aria-label={`기간 성과 ${daily ? '연결선' : '막대'}그래프, 좁은 화면에서는 좌우로 이동`} tabIndex={0}>
+      {selected && <p className="performance-chart-value" aria-live="polite" aria-atomic="true">
+        <strong>{selected.label} · {performanceValue(selected.value, metric)}</strong>
+      </p>}
+      <div ref={chartRef} className="performance-chart-scroll" onScroll={event => setScrollLeft(event.currentTarget.scrollLeft)} role="region" aria-label={`기간 성과 ${daily ? '연결선' : '막대'}그래프, 좁은 화면에서는 좌우로 이동`} tabIndex={0}>
         <div style={{ width }}>
         <div className="performance-chart-axis" aria-hidden="true"><svg viewBox="0 0 86 340">
           {[0, 0.25, 0.5, 0.75, 1].map(factor => <text key={factor} x="80"
@@ -104,13 +119,13 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
                   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
                     event.preventDefault();
                     const target = series[Math.max(0, Math.min(series.length - 1, index + (event.key === 'ArrowLeft' ? -1 : 1)))];
-                    setSelectedKey(target.key);
+                    navigateRecord(target);
                     const siblings = event.currentTarget.parentElement.querySelectorAll('.performance-chart-point');
                     siblings[series.indexOf(target)]?.focus();
                   }
                 }}>
                 <title>{`${label}${row.warning ? ` · ${row.warning}` : ''}`}</title>
-                <circle cx={x} cy={pointY} r="12" fill="transparent" />
+                <circle cx={x} cy={pointY} r="22" fill="transparent" pointerEvents="all" />
                 {row.value === null ? <text x={x} y={pointY + 4} textAnchor="middle" fill="var(--text-secondary)" fontSize="12">×</text>
                   : <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill="var(--accent-primary)" stroke="var(--accent-primary)" strokeWidth="2" />}
               </g>;
@@ -118,6 +133,12 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
             {ticks.map(row => <text key={row.key} x={dailyX(row)} y={bottom + 35}
               textAnchor={row === series[0] ? 'start' : row === series.at(-1) ? 'end' : 'middle'}
               fill="var(--text-secondary)" fontSize="11">{row.label.slice(2).replaceAll('-', '/')}</text>)}
+            {selectedKey && selected && <g className="performance-chart-tooltip" pointerEvents="none"
+              transform={`translate(${tooltipX},${Math.max(8, (selected.value === null ? top : y(selected.value)) - 66)})`}>
+              <rect width={tooltipWidth} height="54" rx="8" fill="var(--bg-surface)" stroke="var(--accent-primary)" />
+              <text x={tooltipWidth / 2} y="20" textAnchor="middle" fill="var(--text-secondary)" fontSize="12">{selected.label}</text>
+              <text x={tooltipWidth / 2} y="40" textAnchor="middle" fill="var(--text-primary)" fontSize="14" fontWeight="700">{performanceValue(selected.value, metric)}</text>
+            </g>}
           </> : series.map((row, index) => {
             const x = left + slot * (index + 0.5);
             const color = row.value > 0 ? 'var(--color-profit)' : row.value < 0 ? 'var(--color-loss)' : 'var(--text-secondary)';
@@ -140,14 +161,13 @@ export default function PerformanceChart({ reports = [], dailyReports = [] }) {
         </svg>
         </div>
       </div>
-      {selected && <div className="performance-chart-detail" aria-live="polite">
+      {selected && <div className="performance-chart-detail">
         {daily && <div className="performance-chart-controls" role="group" aria-label="일별 기록 선택">
           <button type="button" className="btn btn-secondary btn-sm" disabled={selectedIndex <= 0}
-            onClick={() => setSelectedKey(series[selectedIndex - 1].key)}>이전 기록</button>
+            onClick={() => navigateRecord(series[selectedIndex - 1])}>이전 기록</button>
           <button type="button" className="btn btn-secondary btn-sm" disabled={selectedIndex >= series.length - 1}
-            onClick={() => setSelectedKey(series[selectedIndex + 1].key)}>다음 기록</button>
+            onClick={() => navigateRecord(series[selectedIndex + 1])}>다음 기록</button>
         </div>}
-        <strong>{selected.label} · {metricLabel} {performanceValue(selected.value, metric)}</strong>
         {selected.flow_count>0 && <p>외부 입출금 {selected.flow_count}건 반영</p>}
         <details><summary>선택한 기록 상세</summary>
         <p>{selected.start} ~ {selected.end}{selected.partial && ' · 시작 기준 등록 이후'}{selected.ongoing && ' · 최근 평가일까지'}</p>

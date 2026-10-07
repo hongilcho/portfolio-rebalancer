@@ -52,11 +52,14 @@ try {
   await test('daily chart defaults to cumulative line view, exposes valuation and range, and renders a single zero point', () => {
     const dailyReports = [{ kind: '일', label: '2026-10-05', start: '2026-10-05', end: '2026-10-05',
       return_pct: 0, profit: 0, value_krw: 100, net_flow: 0, warning: '', partial: true, recorded_at: '2026-10-05T01:00:00Z' }];
-    const html = renderToStaticMarkup(React.createElement(Chart, { reports: [], dailyReports }));
+    const html = renderToStaticMarkup(React.createElement(Chart, { reports: [], dailyReports, baselineDate: '2025-12-01' }));
     assert.match(html, /aria-pressed="true">일별 추이/);
     assert.match(html, /일별 누적/);
     assert.match(html, /평가액 \(원\)/);
     assert.match(html, /일별 그래프 표시 범위/);
+    // A range containing only a recent record still shows the actual baseline.
+    assert.match(html, /기준일 <time dateTime="2025-12-01">2025-12-01<\/time>/);
+    assert.ok(html.indexOf('class="performance-chart-value"') < html.indexOf('class="performance-chart-scroll"'));
     assert.match(html, /시작 기준일부터의 누적 성과/);
     assert.match(html, /class="performance-chart-point"/);
     assert.match(html, /2026-10-05 기준일부터 누적 금액가중 수익률 0.00%/);
