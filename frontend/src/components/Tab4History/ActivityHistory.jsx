@@ -5,8 +5,8 @@ import {formatKRW,formatUSD} from '../../utils/formatters';
 import {kstToday} from '../../utils/depositMaturities';
 import {recentMonths,recordAmount} from '../../utils/activityHistory';
 
-const kindNames={BUY:'매수',SELL:'매도',DEPOSIT:'입금',WITHDRAW:'출금',EXCHANGE_IN:'원화 → 달러',EXCHANGE_OUT:'달러 → 원화',OPENING:'달러 시작 기준',RECONCILE:'달러 원가 조정',KRW_ADJUST:'원화 잔고 조정',INTERNAL_TRANSFER:'원화 내부 이체'};
-export default function ActivityHistory({portfolioId,accounts,assets=[],active,revision=0,onChanged,onBusyChange}){
+const kindNames={PAST_WITHDRAWAL:'과거 출금 누락 정정',CASH:'예수금 정정',HOLDING:'보유 수량·원가 정정',BUY:'매수',SELL:'매도',DEPOSIT:'입금',WITHDRAW:'출금',EXCHANGE_IN:'원화 → 달러',EXCHANGE_OUT:'달러 → 원화',OPENING:'달러 시작 기준',RECONCILE:'달러 원가 조정',KRW_ADJUST:'원화 잔고 조정',INTERNAL_TRANSFER:'원화 내부 이체'};
+export default function ActivityHistory({portfolioId,accounts,assets=[],active,revision=0,onChanged,onBusyChange,onReviewCorrection}){
   const [filters,setFilters]=useState(()=>({start_date:recentMonths(kstToday()),end_date:kstToday(),account_id:'',category:'',asset_id:'',include_cancelled:false}));
   const [page,setPage]=useState(1),[data,setData]=useState(null),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[reload,setReload]=useState(0);
   const [selectedTrades,setSelectedTrades]=useState([]);
@@ -33,6 +33,7 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
       else if(item.category==='TRADE')await api.batchDeleteTrades([item.detail.trade_id]);
       else if(item.category==='CASH')await api.voidPerformanceFlow(portfolioId,item.detail.flow_id,!restore);
       else if(item.category==='USD')await api.undoUsdEvent(item.account_id,item.detail.usd_event_id);
+      else if(item.detail.correction_id)await api.undoLedgerCorrection(portfolioId,item.detail.correction_id);
       recorded=true;setMessage(restore?'입출금 성과 기록을 복원했습니다.':'기록을 취소했습니다.');setReload(n=>n+1);await onChanged();
     }catch(e){setError(recorded?'처리는 완료됐지만 화면 갱신에 실패했습니다. 다시 처리하지 말고 새로고침해주세요.':e.message);}
     finally{setSaving(false);}
@@ -51,7 +52,7 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
       <label>시작일<input className="input-text" aria-label="기록 조회 시작일" type="date" required value={filters.start_date} max={filters.end_date} onChange={e=>filter('start_date',e.target.value)}/></label>
       <label>종료일<input className="input-text" aria-label="기록 조회 종료일" type="date" required value={filters.end_date} min={filters.start_date} onChange={e=>filter('end_date',e.target.value)}/></label>
       <label>계좌<select className="input-select" aria-label="기록 조회 계좌" value={filters.account_id} onChange={e=>filter('account_id',e.target.value)}><option value="">전체 계좌</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.account_alias}</option>)}</select></label>
-      <label>기록 종류<select className="input-select" aria-label="기록 조회 종류" value={filters.category} onChange={e=>filter('category',e.target.value)}><option value="">전체 기록</option><option value="TRADE">매매</option><option value="CASH">외부 입출금·내부 이체</option><option value="USD">달러 원가·환전</option><option value="ADJUST">원화 잔고 조정</option></select></label>
+      <label>기록 종류<select className="input-select" aria-label="기록 조회 종류" value={filters.category} onChange={e=>filter('category',e.target.value)}><option value="">전체 기록</option><option value="TRADE">매매</option><option value="CASH">외부 입출금·내부 이체</option><option value="USD">달러 원가·환전</option><option value="ADJUST">장부 정정</option></select></label>
       <label className="history-check"><input type="checkbox" checked={filters.include_cancelled} onChange={e=>filter('include_cancelled',e.target.checked)}/>취소 기록 포함</label>
       <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setReload(n=>n+1)}><RotateCcw size={14}/>다시 조회</button>
     </fieldset>
@@ -61,10 +62,11 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
     {loading?<p className="history-muted" role="status">기록 조회 중…</p>:data && <>
       <p className="history-muted">선택한 기간 · {data.total}건</p>
       {data.items.length===0?<div className="history-empty">선택한 조건의 기록이 없습니다.</div>:<div className="history-record-list">{data.items.map(item=>{
-        const d=item.detail || {},canCancel=!item.cancelled && (item.batch_id || ['TRADE','USD','CASH'].includes(item.category));
+        const d=item.detail || {},canCancel=!item.cancelled && (item.batch_id || ['TRADE','USD','CASH'].includes(item.category) || item.detail?.correction_id);
         return <article key={item.id} className={`history-record ${item.cancelled?'is-cancelled':''}`}>
           <div className="history-record-summary"><time>{item.event_date}</time><div className="history-record-identity"><span className="history-kind">{kindNames[item.kind] || item.kind}</span><strong>{item.account_alias}</strong><span className="history-muted">{item.description}</span>{item.cancelled && <span className="history-kind">취소됨</span>}</div><strong className="history-record-amount">{recordAmount(item)}</strong></div>
           <details className="history-record-detail"><summary>상세 기록{item.batch_id?' · 알림 묶음':''}</summary><div className="history-record-detail-body">
+            {d.correction_id && <>{!item.cancelled && d.history_pending && <button className="btn btn-secondary btn-sm" disabled={saving} onClick={()=>onReviewCorrection?.(d.correction_id)}>남은 과거 평가 기록 확인</button>}<p>등록 시각 {new Date(d.created_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})}</p><p>원화 예수금 {formatKRW(Number(d.before_cash.deposit_krw))} → {formatKRW(Number(d.after_cash.deposit_krw))} · 달러 {formatUSD(Number(d.before_cash.deposit_usd))} → {formatUSD(Number(d.after_cash.deposit_usd))}</p>{d.proposal.kind==='HOLDING' && <p>수량 {(d.before_holdings.find(h=>h.asset_id===d.proposal.asset_id)?.quantity ?? 0)} → {d.proposal.quantity} · 확인한 단가 {d.proposal.avg_price_usd || d.proposal.avg_price} · 매입환율 {d.proposal.buy_fx_rate || '해당 없음'}</p>}{d.history_pending && <p>과거 평가 기록 미확정 · 입력 화면의 ‘장부 확인 및 정정’에서 남은 기록을 확인해주세요.</p>}</>}
             {d.quantity!=null && <p>수량 {d.quantity} · 단가 {item.currency==='USD'?formatUSD(Number(d.price)):formatKRW(Number(d.price))}{d.ticker?` · ${d.ticker}`:''}</p>}
             {(d.fx_rate || d.exchange_rate) && <p>적용환율 {Number(d.fx_rate || d.exchange_rate).toLocaleString('ko-KR',{maximumFractionDigits:8})}원</p>}
             {d.reported_available_krw!=null && <p>알림의 출금가능금액 {formatKRW(Number(d.reported_available_krw))} · 참고값</p>}{d.occurred_at && <p>실제 일시 {new Date(d.occurred_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})}</p>}

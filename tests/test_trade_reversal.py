@@ -72,6 +72,7 @@ class DatabaseAdapter:
                 fx_rate NUMERIC, cash_delta_krw REAL, cash_delta_usd REAL, trade_id TEXT UNIQUE,
                 trade_reference TEXT, asset_id TEXT, before_state TEXT, after_state TEXT, notes TEXT,
                 reversed_at TEXT);
+            CREATE TABLE ledger_adjustments(id TEXT UNIQUE,sequence INTEGER PRIMARY KEY AUTOINCREMENT,portfolio_id TEXT,account_id TEXT,request_id TEXT,event_date TEXT,kind TEXT,reason TEXT,request TEXT,before_state TEXT,after_state TEXT,history TEXT,reviews TEXT DEFAULT '[]',trade_id TEXT,usd_event_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,reversed_at TEXT,UNIQUE(portfolio_id,request_id));
             CREATE TABLE nh_notice_items(id TEXT,linked_trade_id TEXT,linked_usd_event_id TEXT,reversed_at TEXT);
         ''')
 

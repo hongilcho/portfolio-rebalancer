@@ -41,6 +41,10 @@ def execute_trade(
         acc_row = cursor.fetchone()
         if not acc_row:
             raise ValueError("존재하지 않는 계좌입니다.")
+        cursor.execute('''SELECT t.trade_date FROM ledger_adjustments l JOIN trade_history t ON t.id=l.trade_id
+            WHERE l.account_id=%s AND t.asset_id=%s AND l.reversed_at IS NULL''',(str(account_id),str(asset_id)))
+        if any(str(trade_date)<str(r['trade_date']) for r in cursor.fetchall()):
+            raise ValueError('보유 원가 정정 이전 날짜의 매매는 새로 입력할 수 없습니다. 정정 기준과 실제 거래 순서를 확인해주세요.')
         if import_source is not None or broker_order_no is not None:
             if import_source != 'NAMUH_KAKAO' or not re.fullmatch(r'[0-9]{1,10}', broker_order_no or ''):
                 raise ValueError('가져오기 출처 또는 주문번호를 확인해주세요.')
@@ -268,6 +272,13 @@ def delete_trades(db: RepositoryContext, trade_ids, transaction=None):
         selected = cursor.fetchall()
         if len(selected) != len(ids):
             raise ValueError("이미 삭제된 매매 기록이 있습니다.")
+        for trade in selected:
+            cursor.execute('SELECT trade_id,after_state FROM ledger_adjustments WHERE account_id=%s AND reversed_at IS NULL',(trade['account_id'],))
+            for correction in cursor.fetchall():
+                checkpoint=correction['after_state']
+                if isinstance(checkpoint,str):checkpoint=json.loads(checkpoint)
+                if correction['trade_id']==trade['id'] or trade['trade_sequence']<=checkpoint['trade_sequence']:
+                    raise ValueError('장부 정정 이전의 매매 또는 정정 기준 기록은 삭제할 수 없습니다. 정정부터 취소하거나 새 정정으로 처리해주세요.')
         if transaction is None:
             cursor.execute(f'SELECT id FROM nh_notice_items WHERE linked_trade_id IN ({placeholders}) AND reversed_at IS NULL', tuple(ids))
             if cursor.fetchone():

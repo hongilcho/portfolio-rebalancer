@@ -30,6 +30,8 @@ def list_events(account_id: str):
 
 @router.post('/{account_id}/events')
 def create_event(account_id: str, req: CashEvent):
+    if req.kind=='RECONCILE':
+        raise HTTPException(status_code=410,detail='원가·잔고 정정은 4번 탭의 장부 확인 및 정정에서 사유와 함께 처리해주세요.')
     success, message = record_usd_event(account_id, req.kind, req.occurred_at.isoformat(),
                                        req.usd_amount, req.krw_amount, req.rate, req.notes)
     if not success:

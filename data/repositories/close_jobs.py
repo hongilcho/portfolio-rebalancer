@@ -24,6 +24,7 @@ def schedule(ctx, pid, days, today):
     if not days:
         return
     with ctx.connect() as conn, conn.cursor() as c:
+        c.execute('SELECT portfolio_id FROM performance_tracking WHERE portfolio_id=%s FOR UPDATE',(pid,))
         for day in days:
             past = day < today
             c.execute('''INSERT INTO performance_close_jobs(portfolio_id,snapshot_date,state,error)
@@ -35,13 +36,22 @@ def schedule(ctx, pid, days, today):
 def claim(ctx, now, pid=None):
     token = ctx.new_id()
     with ctx.connect() as conn, conn.cursor(cursor_factory=RealDictCursor) as c:
-        c.execute('''SELECT * FROM performance_close_jobs WHERE
+        # Lock tracking before job rows, matching finish, retry and ledger correction.
+        # Probe without locks, then revalidate under locks; another worker may win.
+        c.execute('''SELECT portfolio_id FROM performance_close_jobs WHERE
             state IN ('pending','retry','running') AND next_attempt_at<=%s
             AND (lease_until IS NULL OR lease_until<=%s) AND (%s IS NULL OR portfolio_id=%s)
-            ORDER BY snapshot_date DESC,portfolio_id FOR UPDATE SKIP LOCKED LIMIT 1''', (now, now, pid, pid))
-        job = c.fetchone()
-        if not job:
-            return None
+            ORDER BY snapshot_date DESC,portfolio_id LIMIT 1''',(now,now,pid,pid))
+        candidate=c.fetchone()
+        if not candidate:return None
+        c.execute('SELECT portfolio_id FROM performance_tracking WHERE portfolio_id=%s FOR UPDATE SKIP LOCKED',(candidate['portfolio_id'],))
+        if not c.fetchone():return None
+        c.execute('''SELECT * FROM performance_close_jobs WHERE
+            state IN ('pending','retry','running') AND next_attempt_at<=%s
+            AND (lease_until IS NULL OR lease_until<=%s) AND portfolio_id=%s
+            ORDER BY snapshot_date DESC FOR UPDATE SKIP LOCKED LIMIT 1''',(now,now,candidate['portfolio_id']))
+        job=c.fetchone()
+        if not job:return None
         c.execute('''UPDATE performance_close_jobs SET state='running',attempts=attempts+1,
             lease_token=%s,lease_until=%s,updated_at=%s WHERE portfolio_id=%s AND snapshot_date=%s''',
             (token, now+timedelta(minutes=10), now, job['portfolio_id'], job['snapshot_date']))

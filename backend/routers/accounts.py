@@ -38,8 +38,8 @@ class UpdateAccountRequest(BaseModel):
     account_no: str
     account_alias: str
     account_type: str
-    deposit_krw: float = 0.0
-    deposit_usd: float = 0.0
+    deposit_krw: Optional[float] = None
+    deposit_usd: Optional[float] = None
     annual_limit: float = 0.0
     tax_limit: float = 0.0
     notes: Optional[str] = ""
@@ -60,6 +60,8 @@ def list_accounts(portfolio_id: Optional[str] = None):
 
 @router.post("/")
 def create_account(req: CreateAccountRequest):
+    if req.deposit_krw or req.deposit_usd:
+        raise HTTPException(status_code=400,detail="계좌는 예수금 0으로 등록하고 초기 잔고는 4번 탭에서 등록해주세요.")
     success, msg = add_account(
         account_no=req.account_no,
         account_alias=req.account_alias,

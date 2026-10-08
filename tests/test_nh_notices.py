@@ -23,7 +23,7 @@ class NoticeCursor(CursorAdapter):
     @staticmethod
     def decode(row):
         if row is None:return None
-        for key in ('payload','result','audit','baseline_payload','before_state','after_state'):
+        for key in ('payload','result','audit','baseline_payload','before_state','after_state','request','history','reviews'):
             if isinstance(row.get(key),str): row[key]=json.loads(row[key])
         if isinstance(row.get('baseline_date'),str): row['baseline_date']=date.fromisoformat(row['baseline_date'])
         return row
@@ -151,12 +151,12 @@ def test_undo_restores_cost_and_original_flow_preserves_audit_and_blocks_late_ch
     assert db.rows('usd_cash_events')[0]['reversed_at']
     assert nh_notices.undo(db.ctx,'p',result['batch_id'])['reversed']
 
-def test_cash_only_adjustment_leaves_usd_and_holdings_cost_untouched(db):
-    before=db.rows('usd_cash_state')
-    data=payload(db,[row('KRW_ADJUST',krw_amount=960004)])
-    nh_notices.commit(db.ctx,'p',data)
-    assert db.balances()==(960004,10)
-    assert db.rows('usd_cash_state')==before and not db.rows('trade_history')
+def test_legacy_cash_adjustment_is_blocked_without_audited_correction(db):
+    before=db.balances(),db.rows('usd_cash_state')
+    with pytest.raises(ValueError,match='4번 탭'):
+        nh_notices.commit(db.ctx,'p',payload(db,[row('KRW_ADJUST',krw_amount=960004)]))
+    assert (db.balances(),db.rows('usd_cash_state'))==before
+
 
 def test_new_deposit_buy_and_undo_preserve_manually_seeded_holdings(db):
     db.raw.execute("INSERT INTO holdings(id,account_id,asset_id,quantity,avg_price,avg_price_usd,buy_fx_rate,original_avg_price,original_avg_price_usd) VALUES('prior','acc','ast',3,9000,0,0,9000,0)");db.commit()

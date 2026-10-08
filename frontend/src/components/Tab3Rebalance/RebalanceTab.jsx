@@ -18,20 +18,19 @@
  */
 
 import React, { useState } from 'react';
-import { Play, ArrowRightLeft, DollarSign, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Play, ArrowRightLeft, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '../../utils/api';
 import { formatKRW, formatQuantity, formatPercent } from '../../utils/formatters';
 import KoreanNumberInput from '../common/KoreanNumberInput';
 import DriftBar from '../common/DriftBar';
 import SavedPlans from './SavedPlans';
 
-export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default' }) {
+export default function RebalanceTab({ currentPortfolioId = 'default' }) {
   const [scenario, setScenario] = useState('NEW_CASH');
   const [newCash, setNewCash] = useState(0);
   const [driftThreshold, setDriftThreshold] = useState(5.0);
   const [calculating, setCalculating] = useState(false);
   const [result, setResult] = useState(null);
-  const [applyingTransfer, setApplyingTransfer] = useState(false);
 
   const handleCalculate = async () => {
     setCalculating(true);
@@ -51,19 +50,6 @@ export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default'
     }
   };
 
-  const handleApplyTransfers = async () => {
-    if (!result?.transfer_plan || result.transfer_plan.length === 0) return;
-    setApplyingTransfer(true);
-    try {
-      const res = await api.applyTransfers(result.transfer_plan);
-      alert(res.message || '이체 지시서가 실제 계좌 예수금에 반영되었습니다.');
-      onRefresh();
-    } catch (err) {
-      alert(`이체 반영 실패: ${err.message}`);
-    } finally {
-      setApplyingTransfer(false);
-    }
-  };
 
   return (
     <div>
@@ -200,15 +186,7 @@ export default function RebalanceTab({ onRefresh, currentPortfolioId = 'default'
                       ))}
                     </div>
 
-                    <button 
-                      className="btn btn-primary"
-                      onClick={handleApplyTransfers}
-                      disabled={applyingTransfer}
-                      style={{ background: '#10B981', borderColor: '#10B981' }}
-                    >
-                      <DollarSign size={16} />
-                      {applyingTransfer ? '예수금 반영 중...' : '💰 위 이체 지시서를 실제 계좌 예수금에 바로 반영하기'}
-                    </button>
+                    <p>이체 지시서는 계획입니다. 실제 이체 후 4번 탭에서 입출금·계좌 이체를 기록해주세요.</p>
                   </div>
                 ) : (
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>

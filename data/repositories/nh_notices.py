@@ -26,6 +26,9 @@ def checkpoint(c, accounts):
         c.execute('SELECT COALESCE(MAX(sequence),0) AS n FROM nh_notice_items WHERE account_id=%s AND reversed_at IS NULL', (aid,))
         result[aid] = dict(cash=cash,state=state,holdings=holdings,trade_sequence=trade_sequence,
                            usd_sequence=usd_sequence,notice_sequence=c.fetchone()['n'])
+        c.execute('SELECT COALESCE(MAX(sequence),0) AS n FROM ledger_adjustments WHERE account_id=%s AND reversed_at IS NULL',(aid,))
+        correction_sequence=c.fetchone()['n']
+        if correction_sequence:result[aid]['correction_sequence']=correction_sequence
     return plain(result)
 
 
@@ -162,6 +165,8 @@ def commit(db,pid,payload):
             if existing['reversed_at']: raise ValueError('취소된 요청입니다. 새 알림 목록으로 다시 확인해주세요.')
             conn.rollback()
             return existing['result']
+        if any(r['kind']=='KRW_ADJUST' for r in rows):
+            raise ValueError('예수금 직접 덮어쓰기는 중단했습니다. 4번 탭의 장부 정정을 이용해주세요.')
         for aid in ids:
             expected = payload['expected_cash'].get(aid)
             c.execute('SELECT deposit_krw,deposit_usd FROM accounts WHERE id=%s', (aid,))

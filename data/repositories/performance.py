@@ -55,7 +55,8 @@ def read(ctx, pid):
             'close_jobs',COALESCE((SELECT json_agg(j ORDER BY snapshot_date DESC) FROM
                 (SELECT snapshot_date,state,attempts,error,updated_at FROM performance_close_jobs WHERE portfolio_id=%s ORDER BY snapshot_date DESC LIMIT 10) j),'[]'::json),
             'missed_close_count',(SELECT COUNT(*) FROM performance_close_jobs WHERE portfolio_id=%s AND state='missed'),
-            'flows',COALESCE((SELECT json_agg(f ORDER BY event_date DESC,recorded_at DESC) FROM performance_flows f WHERE portfolio_id=%s),'[]'::json))''', (pid,pid,pid,pid,pid))
+            'ledger_checks',COALESCE((SELECT json_agg(json_build_object('key',h->>'key','date',h->>'date','decision',h->>'decision')) FROM ledger_adjustments l CROSS JOIN LATERAL jsonb_array_elements(l.history) h WHERE l.portfolio_id=%s AND l.reversed_at IS NULL AND h->>'decision'='UNKNOWN'),'[]'::json),
+            'flows',COALESCE((SELECT json_agg(f ORDER BY event_date DESC,recorded_at DESC) FROM performance_flows f WHERE portfolio_id=%s),'[]'::json))''', (pid,pid,pid,pid,pid,pid))
         result=c.fetchone()[0]
     # SQL JSON dates are ISO strings; calculations keep real dates.
     from datetime import date
@@ -69,9 +70,11 @@ def read(ctx, pid):
             item['previous_close_date']=date.fromisoformat(item['previous_close_date'])
     for item in result['flows']:
         item['event_date']=date.fromisoformat(item['event_date'])
+    corrections=[{'history':result.pop('ledger_checks',[])}]
     result['reports']=report_periods(tracking,result['snapshots'],result['flows'])
     result['daily_reports']=report_daily(tracking,result['snapshots'],result['flows'])
-    return result
+    from logic.ledger_reconciliation import mask_uncertain
+    return mask_uncertain(result,corrections)
 
 
 def add_flow(ctx,pid,data):

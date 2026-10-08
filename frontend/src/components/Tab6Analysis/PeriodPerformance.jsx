@@ -32,6 +32,7 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
           <button type="button" className="btn btn-secondary" onClick={onOpenHistory}>4. 매매 및 입출금 기록으로 이동</button>
         </details>
       </div>}
+      {data?.ledger_unconfirmed && <p role="alert">장부 정정의 과거 기록 확인이 남아 있습니다. 해당 기간 손익·수익률은 미확정입니다. 4번 탭의 장부 확인 및 정정에서 확인해주세요.</p>}
       <details><summary>계산 방식·기록 범위 안내</summary>
         <p>외부 입출금 기록이 없으면 입출금 없음으로 계산합니다. 기록된 입출금은 날짜·금액을 반영해 수익률과 손익을 자동 계산하며 취소·복원도 즉시 반영합니다. 별도의 확인 버튼을 누를 필요는 없습니다.</p>
         <p>선택한 포트폴리오의 보유자산·예금·원화/달러 예수금 전체를 원화로 평가합니다. 가상자산과 다른 포트폴리오는 제외합니다.</p>

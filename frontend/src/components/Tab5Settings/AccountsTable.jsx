@@ -9,6 +9,7 @@ export default function AccountsTable({
   accounts,
   setEditAccTarget,
   handleDeleteAccount,
+  handleToggleExhaust,
 }) {
   return (
     <>
@@ -68,6 +69,7 @@ export default function AccountsTable({
                     <td>{formatKRW(a.deposit_krw)}</td>
                     <td>{formatUSD(a.deposit_usd)}</td>
                     <td>
+                      <label><input type="checkbox" aria-label={`${a.account_alias} 한도 소진 완료`} checked={Boolean(a.is_limit_exhausted)} onChange={e=>handleToggleExhaust(a.id,e.target.checked)}/>한도 소진</label><br/>
                       {a.annual_limit > 0 ? formatKRW(a.annual_limit) : '무제한'}
                       {a.is_limit_exhausted && (
                         <span className="badge" style={{ background: '#10B981', color: '#fff', marginLeft: '6px', fontSize: '0.7rem' }}>

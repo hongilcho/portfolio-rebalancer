@@ -106,25 +106,7 @@ export default function AccountEditor({
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <KoreanNumberInput
-                  label="원화 예수금"
-                  value={accForm.deposit_krw}
-                  onChange={(val) => setAccForm({ ...accForm, deposit_krw: val })}
-                  step={10000}
-                />
-                <div className="form-group">
-                  <label className="form-label">달러 예수금 ($)</label>
-                  <input
-                    type="number"
-                    step="10"
-                    min="0"
-                    className="input-number"
-                    value={accForm.deposit_usd}
-                    onChange={(e) => setAccForm({ ...accForm, deposit_usd: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-              </div>
+              <p>예수금·초기 잔고는 4번 탭의 장부 확인 및 정정에서 관리합니다.</p>
 
               <div className="form-group">
                 <label className="form-label">메모</label>

@@ -234,6 +234,12 @@ def reverse_latest(cursor, account_id, event_id):
     event = cursor.fetchone()
     if not event or event['id'] != event_id:
         raise ValueError('환전·매매 기록은 해당 계좌의 가장 최근 기록부터 취소해주세요.')
+    cursor.execute('SELECT usd_event_id,after_state FROM ledger_adjustments WHERE account_id=%s AND reversed_at IS NULL',(str(account_id),))
+    for correction in cursor.fetchall():
+        checkpoint=correction['after_state']
+        if isinstance(checkpoint,str):checkpoint=json.loads(checkpoint)
+        if correction['usd_event_id']==event_id or event['sequence']<=checkpoint['usd_sequence']:
+            raise ValueError('장부 정정 이전 환전·달러 기록은 직접 취소할 수 없습니다. 정정부터 취소하거나 새 정정으로 처리해주세요.')
     if not state or not account:
         raise ValueError('달러 원가 기록을 찾을 수 없습니다.')
     validate_state(state, account, event_time(str(event['event_date']) + 'T12:00:00+09:00'))

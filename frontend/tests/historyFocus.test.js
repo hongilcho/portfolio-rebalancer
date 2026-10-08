@@ -6,9 +6,10 @@ import {createServer} from 'vite';
 import {parseSync} from 'rolldown/experimental';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {normalizeCorrection,restoreCorrection} from '../src/utils/ledgerCorrection.js';
 import {recentMonths,recordAmount} from '../src/utils/activityHistory.js';
 const noop=()=>{};
-const modules=['HistoryTab','ActivityHistory','NamuhMessageImport','UsdLedgerPanel','TradeBatchForm'];
+const modules=['HistoryTab','ActivityHistory','NamuhMessageImport','UsdLedgerPanel','TradeBatchForm','LedgerCorrectionPanel'];
 const server=await createServer({root:fileURLToPath(new URL('../',import.meta.url)),logLevel:'error',cacheDir:'node_modules/.vite-test-focus',server:{middlewareMode:true,watch:null,hmr:false,ws:false},
 plugins:[{name:'focus-controls-fixture',enforce:'pre',transform(source,id,options){
  const name=path.basename(id,'.jsx');if(!options?.ssr || !modules.includes(name))return;
@@ -26,6 +27,7 @@ const props={accounts,assets,currentPortfolioId:'p',priceMap:{},usdKrw:1400,onSa
 const originals={storage:globalThis.localStorage,fetch:globalThis.fetch};globalThis.localStorage={getItem:()=>null,setItem:noop};globalThis.fetch=()=>{throw new Error('SSR must not perform record API writes');};
 try{
  const History=(await server.ssrLoadModule('/src/components/Tab4History/HistoryTab.jsx')).default;
+ const Correction=(await server.ssrLoadModule('/src/components/Tab4History/LedgerCorrectionPanel.jsx')).default;
  const Records=(await server.ssrLoadModule('/src/components/Tab4History/ActivityHistory.jsx')).default;
  const render=(Component,props,seeds={})=>{globalThis.__focusSeeds=seeds;return renderToStaticMarkup(React.createElement(Component,props));};
  test('input is the default and history is hidden, with one selected NH method',()=>{
@@ -56,6 +58,36 @@ try{
   const item={id:'TRADE:t',event_date:'2026-10-08',kind:'BUY',category:'TRADE',account_alias:'QA',currency:'KRW',amount:9320,description:'QA bond',detail:{trade_id:'t',asset_id:'bond',quantity:1,price:9320}};
   const html=render(Records,{portfolioId:'p',accounts,assets,active:true,onChanged:noop},{ActivityHistory:{filters:{start_date:'2026-10-01',end_date:'2026-10-08',category:'TRADE',account_id:'',asset_id:'bond'},selectedTrades:['t'],data:{items:[item],page:1,pages:1,total:1}}});
   assert.match(html,/기록 조회 종목/);assert.match(html,/선택한 매매 함께 취소/);assert.match(html,/여러 매매를 함께 취소할 목록에 선택/);assert.doesNotMatch(html,/이 알림 묶음 취소/);
+ });
+ test('correction remains collapsed by default, cannot preview before current account is read, and requires final confirmation',()=>{
+  const baseProps={portfolioId:'p',accounts,assets,onChanged:noop};
+  const initial=render(Correction,baseProps);assert.match(initial,/<details class="section-card history-help"><summary>장부 확인 및 정정/);
+  assert.match(initial,/<button[^>]*disabled=""[^>]*>변경 전후·성과 영향 미리보기/);assert.doesNotMatch(initial,/확인한 정정 반영/);
+  const form=normalizeCorrection({kind:'PAST_WITHDRAWAL',account_id:'a',event_date:'2026-09-30',reason:'QA omitted withdrawal',currency:'KRW',amount:1000000});
+  const before={cash:{deposit_krw:38239177,deposit_usd:10},holdings:[]};
+  const preview={proposal:form,before,delta:-1000000,token:'a'.repeat(64),history:[{key:'baseline',date:'2026-10-05',value:40000000,corrected_value:null,can_correct:false,recorded_amount:null,error:'QA no frozen evidence'}]};
+  const html=render(Correction,baseProps,{LedgerCorrectionPanel:{open:true,form,context:{state:before},preview,confirmed:false}});
+  assert.match(html,/변경 후 37239177/);assert.match(html,/<option value="ERROR" disabled=""/);
+  assert.match(html,/<button[^>]*disabled=""[^>]*>확인한 정정 반영/);
+  const ready=render(Correction,baseProps,{LedgerCorrectionPanel:{open:true,form,context:{state:before},preview,confirmed:true}});
+  assert.match(ready,/<button class="btn btn-primary">확인한 정정 반영/);
+ });
+ test('a pending correction locks ordinary trades, external cash and dollar input',()=>{
+  const html=render(History,props,{HistoryTab:{method:'manual',manualKind:'funds',childBusy:{correction:true},usdLedgers:[{account_id:'a',average_rate:1300,usd_balance:10,cost_krw:13000,actual_usd:10}]}});
+  assert.match(html,/<fieldset disabled="" class="workflow-form"/);
+  assert.match(html,/<button[^>]*class="btn btn-primary btn-block"[^>]*disabled=""/);
+  assert.match(html,/<input[^>]*aria-label="환전 달러 금액"[^>]*disabled=""/);
+ });
+ test('historic review works without a current account and does not repeat cash mutation',()=>{
+  const html=render(Correction,{portfolioId:'p',accounts,assets,onChanged:noop},{LedgerCorrectionPanel:{open:true,reviewId:'old',preview:{history:[{key:'baseline',date:'2026-10-05',value:40000000,corrected_value:39000000,can_correct:true}]},confirmed:true}});
+  assert.match(html,/과거 기록 확인 내용 저장/);assert.doesNotMatch(html,/누락된 출금액/);
+  assert.match(html,/<option value="ERROR">같은 오차 포함/);
+ });
+ test('pending correction preserves one exact request through reload and rejects corrupt local state',()=>{
+  const r={request_id:'QA-retry-123',token:'a'.repeat(64),proposal:{kind:'CASH',account_id:'a'},decisions:{baseline:'UNKNOWN'},confirmed:true};
+  assert.deepEqual(restoreCorrection(JSON.stringify(r)),r);assert.equal(restoreCorrection('{'),null);assert.equal(restoreCorrection(JSON.stringify({...r,confirmed:false})),null);
+  const html=render(Correction,{portfolioId:'p',accounts,assets,onChanged:noop},{LedgerCorrectionPanel:{open:true,pending:r,confirmed:true}});
+  assert.match(html,/<fieldset[^>]*disabled=""/);assert.match(html,/동일 요청의 저장 결과 다시 확인/);
  });
  test('default three-month period clamps month ends rather than overflowing',()=>{
   assert.equal(recentMonths('2026-05-31'),'2026-02-28');assert.equal(recentMonths('2024-05-31'),'2024-02-29');assert.equal(recentMonths('2026-01-15'),'2025-10-15');

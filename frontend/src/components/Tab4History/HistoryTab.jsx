@@ -16,6 +16,7 @@ import ActivityHistory from './ActivityHistory';
 import {ClipboardPaste,PenLine,Wallet,History} from 'lucide-react';
 import UsdLedgerPanel from './UsdLedgerPanel';
 import NamuhMessageImport from './NamuhMessageImport';
+import LedgerCorrectionPanel from './LedgerCorrectionPanel';
 import ExternalCashFlowPanel from './ExternalCashFlowPanel';
 import { readTradeDraft, writeTradeDraft, remainingTradeRows, draftStorage } from '../../utils/tradeDraft';
 
@@ -83,13 +84,15 @@ export default function HistoryTab({
   const [isPriceRefOpen, setIsPriceRefOpen] = useState(false);
 
   const [view,setView]=useState('input');
+  const [reviewCorrection,setReviewCorrection]=useState(null);
   const [method,setMethod]=useState('nh');
   const [manualKind,setManualKind]=useState('trades');
   const [recordRevision,setRecordRevision]=useState(0);
-  const [childBusy,setChildBusy]=useState({nh:false,usd:false,history:false});
+  const [childBusy,setChildBusy]=useState({nh:false,usd:false,history:false,correction:false});
   const nhBusy=useCallback(value=>setChildBusy(old=>({...old,nh:value})),[]);
   const usdBusy=useCallback(value=>setChildBusy(old=>({...old,usd:value})),[]);
   const historyBusy=useCallback(value=>setChildBusy(old=>({...old,history:value})),[]);
+  const correctionBusy=useCallback(value=>setChildBusy(old=>({...old,correction:value})),[]);
   const busy=savingBatch || performance?.busy || Object.values(childBusy).some(Boolean);
   // Load account holdings for sell validation
   useEffect(() => {
@@ -292,23 +295,25 @@ export default function HistoryTab({
               updateBuyRow={updateBuyRow} accounts={accounts} removeBuyRow={removeBuyRow} usdKrw={usdKrw} addBuyRow={addBuyRow}
               sellRows={sellRows} holdingsError={holdingsError} accountHoldingsMap={accountHoldingsMap} updateSellRow={updateSellRow}
               removeSellRow={removeSellRow} addSellRow={addSellRow} handleSaveBatchTrades={handleSaveBatchTrades}
-              savingBatch={savingBatch} usdLedgers={usdLedgers || []} focused/>
+              savingBatch={savingBatch} disabled={busy && !savingBatch} usdLedgers={usdLedgers || []} focused/>
             <PriceReference setIsPriceRefOpen={setIsPriceRefOpen} isPriceRefOpen={isPriceRefOpen}
               assets={assets} usdPriceMap={usdPriceMap} priceMap={priceMap} usdKrw={usdKrw}/>
           </div>
           <div hidden={manualKind!=='funds'}>{performance && <ExternalCashFlowPanel key={currentPortfolioId}
             portfolioId={currentPortfolioId} accounts={accounts} performance={performance} onOpenAnalysis={onOpenAnalysis}
-            focused onCashChanged={async()=>{await refreshLedgers();await loadTrades();await onSaved();}}/>}</div>
+            disabled={busy && !performance?.busy} focused onCashChanged={async()=>{await refreshLedgers();await loadTrades();await onSaved();}}/>}</div>
         </div>
         <div hidden={method!=='usd'}>
           {usdLedgers!==null?<UsdLedgerPanel key={currentPortfolioId} accounts={accounts} assets={assets} ledgers={usdLedgers}
-            portfolioId={currentPortfolioId} focused active={view==='input' && method==='usd'} onBusyChange={usdBusy} onChanged={changed}/>:<p>달러 원가 조회 중…</p>}
+            portfolioId={currentPortfolioId} disabled={busy && !childBusy.usd} focused active={view==='input' && method==='usd'} onBusyChange={usdBusy} onChanged={changed}/>:<p>달러 원가 조회 중…</p>}
           {ledgerError && <p role="alert">{ledgerError}</p>}
         </div>
+        <LedgerCorrectionPanel key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
+          reviewRequest={reviewCorrection?.portfolioId===currentPortfolioId?reviewCorrection:null} active={view==='input'} disabled={busy && !childBusy.correction} onBusyChange={correctionBusy} onChanged={changed}/>
       </div>
       <div id="history-record-panel" role="tabpanel" aria-labelledby="history-record-tab" hidden={view!=='records'}>
         <ActivityHistory key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
-          active={view==='records'} revision={recordRevision} onBusyChange={historyBusy} onChanged={changed}/>
+          onReviewCorrection={id=>{setReviewCorrection({id,portfolioId:currentPortfolioId});setView('input');}} active={view==='records'} revision={recordRevision} onBusyChange={historyBusy} onChanged={changed}/>
       </div>
     </div>
   );

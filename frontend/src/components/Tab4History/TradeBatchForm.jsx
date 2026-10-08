@@ -21,9 +21,11 @@ export default function TradeBatchForm({
   addSellRow,
   handleSaveBatchTrades,
   savingBatch,
+  disabled=false,
   usdLedgers = [],
   focused=false,
 }) {
+  const locked=savingBatch || disabled;
   const [direction,setDirection]=useState('BUY');
   const pendingBuys=buyRows.filter(r=>r.assetId || r.quantity>0);
   const pendingSells=sellRows.filter(r=>r.assetId || r.quantity>0);
@@ -40,7 +42,7 @@ export default function TradeBatchForm({
               className="input-text"
               style={{ width: '150px', padding: '6px 10px' }}
               value={tradeDate}
-              disabled={savingBatch || buyRows.some(r => r.importSource)}
+              disabled={locked || buyRows.some(r => r.importSource)}
               title={buyRows.some(r => r.importSource) ? '가져온 매수 행을 삭제하면 체결일을 변경할 수 있습니다.' : undefined}
               onChange={(e) => setTradeDate(e.target.value)}
             />
@@ -48,8 +50,8 @@ export default function TradeBatchForm({
         </div>
 
         {buyRows.some(r => r.importSource) && <p>가져온 거래는 선택한 체결일에 고정됩니다. 날짜를 바꾸려면 가져온 행을 먼저 삭제해주세요.</p>}
-        {focused && <div className="history-inline-choice"><button type="button" aria-pressed={direction==='BUY'} disabled={savingBatch} onClick={()=>setDirection('BUY')}>매수 입력</button><button type="button" aria-pressed={direction==='SELL'} disabled={savingBatch} onClick={()=>setDirection('SELL')}>매도 입력</button><span className="history-muted">매수·매도 대기 행은 함께 저장됩니다.</span></div>}
-        <div className={focused?'trade-forms-grid history-single-trade':'trade-forms-grid'} inert={savingBatch || undefined}>
+        {focused && <div className="history-inline-choice"><button type="button" aria-pressed={direction==='BUY'} disabled={locked} onClick={()=>setDirection('BUY')}>매수 입력</button><button type="button" aria-pressed={direction==='SELL'} disabled={locked} onClick={()=>setDirection('SELL')}>매도 입력</button><span className="history-muted">매수·매도 대기 행은 함께 저장됩니다.</span></div>}
+        <div className={focused?'trade-forms-grid history-single-trade':'trade-forms-grid'} inert={locked || undefined}>
           {/* 🔴 BUY Column */}
           <div hidden={focused && direction!=='BUY'} style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.2)' }}>
             <h4 style={{ color: 'var(--color-profit)', fontWeight: 700, marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -431,7 +433,7 @@ export default function TradeBatchForm({
           className="btn btn-primary btn-block"
           style={{ padding: '12px', fontSize: '1rem' }}
           onClick={handleSaveBatchTrades}
-          disabled={savingBatch || (focused && pendingBuys.length+pendingSells.length===0)}
+          disabled={locked || (focused && pendingBuys.length+pendingSells.length===0)}
         >
           <Save size={18} />
           {savingBatch ? '일괄 매매 저장 중...' : '💾 위 내역 전체 일괄 저장'}

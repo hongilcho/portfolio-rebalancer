@@ -1,12 +1,10 @@
 /** InvestmentAssetsSection: presentation only; state and API actions stay in the parent. */
 import React from 'react';
-import { Edit2 } from 'lucide-react';
 import { formatKRW, formatUSD, formatQuantity, formatPercent, getProfitColor } from '../../utils/formatters';
 import DriftBar from '../common/DriftBar';
 
 export default function InvestmentAssetsSection({
   includeDeposits,
-  setIsEditModalOpen,
   currencyMode,
   displayStockAssets,
   investmentAssets,
@@ -21,12 +19,7 @@ export default function InvestmentAssetsSection({
       <div className="section-card">
         <div className="section-title">
           <span>📈 투자 자산 현황 {includeDeposits ? '(주식/ETF/금/예금)' : '(주식/ETF/금 · 예금 제외)'}</span>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => setIsEditModalOpen(true)}
-          >
-            <Edit2 size={14} /> 보유 잔고/예수금 직접 수정
-          </button>
+
         </div>
 
         {/* 💻 DESKTOP TABLES (Screen > 768px) */}

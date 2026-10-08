@@ -71,11 +71,17 @@ def update_account(
     conn = db.connect()
     cursor = conn.cursor()
     try:
+        cursor.execute('SELECT deposit_krw,deposit_usd FROM accounts WHERE id=%s FOR UPDATE',(str(account_id),))
+        current=cursor.fetchone()
+        if not current:raise ValueError('계좌를 찾을 수 없습니다.')
+        for supplied,old in zip((deposit_krw,deposit_usd),([current['deposit_krw'],current['deposit_usd']] if isinstance(current,dict) else current)):
+            if supplied is not None and abs(float(supplied)-float(old or 0))>1e-6:
+                raise ValueError('예수금은 4번 탭의 장부 정정 또는 입출금 기록으로 변경해주세요.')
         cursor.execute('''
             UPDATE accounts
-            SET account_no = %s, account_alias = %s, account_type = %s, deposit_krw = %s, deposit_usd = %s, annual_limit = %s, tax_limit = %s, notes = %s, priority = %s, limit_preference = %s, current_year_deposit = %s
+            SET account_no = %s, account_alias = %s, account_type = %s, annual_limit = %s, tax_limit = %s, notes = %s, priority = %s, limit_preference = %s, current_year_deposit = %s
             WHERE id = %s
-        ''', (account_no.strip(), account_alias.strip(), account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, str(account_id)))
+        ''', (account_no.strip(), account_alias.strip(), account_type, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, str(account_id)))
         conn.commit()
         return True, "계좌 정보가 성공적으로 수정되었습니다."
     except Exception as e:

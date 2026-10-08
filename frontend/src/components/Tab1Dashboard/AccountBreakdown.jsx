@@ -1,17 +1,14 @@
 /** AccountBreakdown: presentation only; state and API actions stay in the parent. */
 import React from 'react';
-import { ShieldAlert, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatKRW, formatUSD, formatQuantity, formatPercent, getProfitColor } from '../../utils/formatters';
 
 export default function AccountBreakdown({
-  handleSyncNamuh,
-  syncingNamuh,
   includeDeposits,
   displayAccSummaries,
   expandedAccs,
   usd_krw,
   toggleAccordion,
-  handleToggleExhaust,
   currencyMode,
 }) {
   return (
@@ -20,15 +17,7 @@ export default function AccountBreakdown({
       <div className="section-card">
         <div className="section-title">
           <span>💳 계좌별 자산 현황 & 한도 모니터링</span>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={handleSyncNamuh}
-            disabled={syncingNamuh}
-            title="NH투자증권 나무 계좌 잔고 일괄 동기화"
-          >
-            <RefreshCw size={14} className={syncingNamuh ? 'animate-spin' : ''} />
-            {syncingNamuh ? '동기화 중...' : '나무 API 잔고 동기화'}
-          </button>
+
         </div>
 
         {!includeDeposits && (
@@ -188,13 +177,13 @@ export default function AccountBreakdown({
                         <input
                           type="checkbox"
                           checked={!!acc.is_limit_exhausted}
-                          onChange={(e) => handleToggleExhaust(acc.id, e.target.checked)}
+                          disabled aria-label="한도 소진 상태 · 5번 탭에서 변경"
                           style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                         />
                         <span>
                           {acc.is_limit_exhausted
                             ? '🔒 연간 납입한도 소진 완료 (리밸런싱 추가 입금 차단 중)'
-                            : '💡 한도 96% 이상 도달: [한도 소진 완료]로 처리하시겠습니까?'}
+                            : '💡 한도 96% 이상 도달 · 상태 변경은 5번 탭에서 처리'}
                         </span>
                       </label>
                       {acc.is_limit_exhausted && (

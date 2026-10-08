@@ -84,8 +84,6 @@ export default function SettingsTab({
         account_no: accForm.account_no.trim(),
         account_alias: accForm.account_alias.trim(),
         account_type: accForm.account_type,
-        deposit_krw: Number(accForm.deposit_krw),
-        deposit_usd: Number(accForm.deposit_usd),
         annual_limit: accForm.is_unlimited ? 0 : Number(accForm.annual_limit),
         tax_limit: accForm.is_unlimited ? 0 : Number(accForm.tax_limit),
         priority: Number(accForm.priority),
@@ -113,8 +111,6 @@ export default function SettingsTab({
         account_no: accForm.account_no.trim(),
         account_alias: accForm.account_alias.trim(),
         account_type: accForm.account_type,
-        deposit_krw: Number(accForm.deposit_krw),
-        deposit_usd: Number(accForm.deposit_usd),
         annual_limit: accForm.is_unlimited ? 0 : Number(accForm.annual_limit),
         tax_limit: accForm.is_unlimited ? 0 : Number(accForm.tax_limit),
         priority: Number(accForm.priority),
@@ -305,6 +301,7 @@ export default function SettingsTab({
         setIsAddAccOpen={setIsAddAccOpen}
         accounts={accounts}
         setEditAccTarget={setEditAccTarget}
+        handleToggleExhaust={async(id,value)=>{try{await api.toggleLimitExhausted(id,value);await onSaved();}catch(e){alert(e.message);}}}
         handleDeleteAccount={handleDeleteAccount}
       />
 

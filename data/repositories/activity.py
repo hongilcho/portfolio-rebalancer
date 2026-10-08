@@ -31,7 +31,7 @@ ACTIVITY = '''WITH activity AS (
      'balance',e.after_state->>'usd_balance','cost_krw',e.after_state->>'cost_krw','notes',e.notes)
  FROM usd_cash_events e JOIN accounts a ON a.id=e.account_id
  LEFT JOIN nh_notice_items n ON n.linked_usd_event_id=e.id AND n.reversed_at IS NULL
- WHERE a.portfolio_id=%(pid)s AND e.kind NOT IN ('BUY','SELL')
+ WHERE a.portfolio_id=%(pid)s AND e.kind NOT IN ('BUY','SELL') AND NOT EXISTS(SELECT 1 FROM ledger_adjustments l WHERE l.usd_event_id=e.id)
  UNION ALL
  SELECT 'NOTICE:'||n.id,CASE WHEN n.kind='KRW_ADJUST' THEN 'ADJUST' ELSE 'CASH' END,
    n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
@@ -44,6 +44,18 @@ ACTIVITY = '''WITH activity AS (
  LEFT JOIN accounts a ON a.id=n.account_id LEFT JOIN accounts src ON src.id=n.payload->>'source_account_id'
  LEFT JOIN accounts dest ON dest.id=n.payload->>'destination_account_id' LEFT JOIN accounts peer ON peer.id=n.payload->>'peer_account_id'
  WHERE n.portfolio_id=%(pid)s AND (n.kind='KRW_ADJUST' OR (n.kind IN ('DEPOSIT','WITHDRAW') AND n.performance_flow_id IS NULL))
+ UNION ALL
+ SELECT 'CORRECTION:'||l.id,'ADJUST',l.event_date::text,l.account_id,a.account_alias,l.kind,
+   CASE WHEN l.kind='HOLDING' THEN 'UNIT' ELSE l.request->'proposal'->>'currency' END,
+   CASE WHEN l.kind='HOLDING' THEN (l.request->'proposal'->>'quantity')::numeric
+        WHEN l.kind='PAST_WITHDRAWAL' THEN -(l.request->'proposal'->>'amount')::numeric
+        ELSE (l.request->'proposal'->>'balance')::numeric END,
+   '장부 정정',l.reversed_at IS NOT NULL,NULL,l.created_at,
+   jsonb_build_object('correction_id',l.id,'notes',l.reason,'created_at',l.created_at,
+     'before_cash',l.before_state->'cash','after_cash',l.after_state->'cash',
+     'proposal',l.request->'proposal','before_holdings',l.before_state->'holdings','after_holdings',l.after_state->'holdings',
+     'history_pending',EXISTS(SELECT 1 FROM jsonb_array_elements(l.history) h WHERE h->>'decision'='UNKNOWN'))
+ FROM ledger_adjustments l JOIN accounts a ON a.id=l.account_id WHERE l.portfolio_id=%(pid)s
  UNION ALL
  SELECT 'CANCELLED_BUY:'||n.id,'TRADE',n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
    'BUY','KRW',(n.payload->>'quantity')::numeric*(n.payload->>'price')::numeric,COALESCE(ast.name,'삭제된 종목'),

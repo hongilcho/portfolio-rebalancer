@@ -79,3 +79,15 @@ def initialize(cursor):
                 CHECK(kind IN ('DEPOSIT','WITHDRAW','EXCHANGE_IN','BUY','KRW_ADJUST'));
         END IF;
     END $$''')
+
+    cursor.execute('''CREATE TABLE IF NOT EXISTS ledger_adjustments (
+        id TEXT PRIMARY KEY,sequence BIGSERIAL UNIQUE,
+        portfolio_id TEXT NOT NULL REFERENCES portfolios(id),account_id TEXT NOT NULL REFERENCES accounts(id),
+        request_id TEXT NOT NULL,event_date DATE NOT NULL,kind TEXT NOT NULL,reason TEXT NOT NULL,
+        request JSONB NOT NULL,before_state JSONB NOT NULL,after_state JSONB NOT NULL,history JSONB NOT NULL,
+        reviews JSONB NOT NULL DEFAULT '[]'::jsonb,
+        trade_id TEXT REFERENCES trade_history(id) ON DELETE SET NULL,
+        usd_event_id TEXT REFERENCES usd_cash_events(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,reversed_at TIMESTAMPTZ,
+        UNIQUE(portfolio_id,request_id))''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_ledger_adjustments_scope ON ledger_adjustments(portfolio_id,event_date)')

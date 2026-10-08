@@ -47,6 +47,15 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  getLedgerCorrections: pid=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}`),
+  getLedgerAccount: (pid,aid)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/account/${encodeURIComponent(aid)}`),
+  previewLedgerCorrection: (pid,data)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/preview`,{method:'POST',body:JSON.stringify(data)}),
+  commitLedgerCorrection: (pid,data)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}`,{method:'POST',body:JSON.stringify(data)}),
+  reviewLedgerCorrection: (pid,id)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}/review`),
+  confirmLedgerHistory: (pid,id,data)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}/review`,{method:'POST',body:JSON.stringify(data)}),
+  undoLedgerCorrection: (pid,id)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}`,{method:'DELETE'}),
+  compareNamuh: data=>request('/api/sync/namuh/compare',{method:'POST',body:JSON.stringify(data)}),
+
   getActivity: (pid,params) => request(`/api/activity/${encodeURIComponent(pid)}?${new URLSearchParams(params)}`),
   getNhNoticeContext: (pid,day) => request(`/api/nh-notices/${encodeURIComponent(pid)}/context?day=${encodeURIComponent(day)}`),
   commitNhNotices: (pid,data) => request(`/api/nh-notices/${encodeURIComponent(pid)}/batch`, {method:'POST',body:JSON.stringify(data)}),

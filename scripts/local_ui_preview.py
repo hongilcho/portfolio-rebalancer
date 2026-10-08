@@ -12,6 +12,8 @@ import argparse
 import time
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--trust-local-port',type=int,choices=[55438],help='New isolated loopback QA cluster; no private connection file is read')
+parser.add_argument('--ledger-corrections',action='store_true',help='Synthetic historical cash errors for audited correction')
 parser.add_argument('--port', type=int, default=8547)
 parser.add_argument('--simulate-refresh', action='store_true')
 parser.add_argument('--usd-ledger', action='store_true', help='Add synthetic USD cash and VT/PDBC opening positions')
@@ -21,6 +23,7 @@ parser.add_argument('--closing', action='store_true', help='Add synthetic regula
 parser.add_argument('--nh-notices', action='store_true', help='Synthetic NH deposit/FX/ISA fixtures, including an existing contribution')
 parser.add_argument('--cash-transfers', action='store_true', help='Synthetic CMA and liquidity-pool transfer accounts')
 args = parser.parse_args()
+if args.ledger_corrections:args.cash_transfers=True
 if args.cash_transfers: args.nh_notices=True
 if args.nh_notices:
     args.usd_ledger = args.message_import = args.workflow = True
@@ -31,8 +34,8 @@ from psycopg2.extensions import make_dsn, parse_dsn
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-settings = json.loads((ROOT / "backups/local_validation/local_connection.json").read_text())
-if settings.get("host") != "127.0.0.1" or settings.get("port") != 55437:
+settings = dict(host="127.0.0.1",port=args.trust_local_port,dbname="postgres",user="ledger_qa") if args.trust_local_port else json.loads((ROOT / "backups/local_validation/local_connection.json").read_text())
+if settings.get("host") != "127.0.0.1" or settings.get("port") not in (55437,55438):
     raise RuntimeError("Only the dedicated loopback PostgreSQL is allowed")
 name = "portfolio_ui_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 admin = psycopg2.connect(**settings)
@@ -50,7 +53,7 @@ original_connect = psycopg2.connect
 def guarded_connect(dsn=None, *args, **kwargs):
     parsed = parse_dsn(dsn) if dsn else {}
     parsed.update(kwargs)
-    if parsed.get("host") != "127.0.0.1" or str(parsed.get("port")) != "55437":
+    if parsed.get("host") != "127.0.0.1" or str(parsed.get("port")) != str(settings["port"]):
         raise RuntimeError("UI preview cannot connect to a remote database")
     return original_connect(dsn, *args, **kwargs)
 psycopg2.connect = guarded_connect
@@ -201,6 +204,26 @@ if __name__ == '__main__':
             {q['id']:q['price_krw'] for q in quotes},1400),{'source':'QA synthetic baseline'},start=True)
         performance.add_flow(context(),'default',dict(request_id='QA-existing-deposit',account_id='qa_acc',
             event_date=today,direction='DEPOSIT',currency='KRW',native_amount=960000,exchange_rate=1,notes='이미 기록된 합성 입금'))
+    if args.ledger_corrections:
+        from psycopg2.extras import Json
+        from datetime import date
+        # Read-only broker comparison demonstration; no real broker HTTP calls.
+        from backend.routers import sync
+        def qa_broker(account_no):
+            if account_no=='123-45-679991':return {'deposit_krw':37239177},None
+            if account_no=='123-45-671231':return {'deposit_krw':4,'deposit_usd':10},None
+            return None,'QA account unsupported'
+        sync.nh_api_client.fetch_account_balance=qa_broker
+        sync.nh_api_client.fetch_full_account_balance=qa_broker
+        ledger=dm.get_rebalance_batch_data('default')
+        frozen={'ledger':ledger,'fx':{'rate':1400},'prices':{q['id']:{'price_krw':q['price_krw']} for q in quotes},'baseline_kind':'close','source':'QA synthetic record'}
+        nav=current_nav(ledger,{q['id']:q['price_krw'] for q in quotes},1400)
+        with dm.get_connection() as conn,conn.cursor() as c:
+            c.execute("DELETE FROM performance_snapshots WHERE portfolio_id='default'")
+            c.execute("UPDATE performance_tracking SET baseline_date='2026-10-05',close_started_on='2026-10-06',baseline_value=%s,baseline_payload=%s WHERE portfolio_id='default'",(nav,Json(frozen)))
+            for n in (5,6,7):
+                c.execute("INSERT INTO performance_snapshots(portfolio_id,snapshot_date,value_krw,payload,record_kind) VALUES('default',%s,%s,%s,%s)",(date(2026,10,n),nav,Json(frozen),'baseline' if n==5 else 'close'))
+            conn.commit()
     if args.closing:
         from backend.close_performance import ClosePerformance, context
         from data.repositories import performance, close_jobs

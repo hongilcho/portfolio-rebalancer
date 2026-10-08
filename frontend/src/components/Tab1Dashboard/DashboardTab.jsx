@@ -17,10 +17,8 @@
  * @param {Function} props.onRefresh - 데이터 새로고침 트리거 콜백
  */
 
-import React, { lazy, Suspense, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 
-import { DialogLoading } from '../common/ViewLoading';
-import { api } from '../../utils/api';
 import MarketStatus from '../common/MarketStatus';
 import { sortInvestmentAssets, assetClassBreakdown } from '../../utils/assetClasses';
 import DashboardSummaryCards from './DashboardSummaryCards';
@@ -29,18 +27,13 @@ import InvestmentAssetsSection from './InvestmentAssetsSection';
 import CashAssetsSection from './CashAssetsSection';
 import AccountBreakdown from './AccountBreakdown';
 
-const EditHoldingsModal = lazy(() => import('./EditHoldingsModal'));
 
 export default function DashboardTab({ 
   dashboardData, 
   assets, 
-  accounts, 
   currencyMode = 'KRW',
-  onRefresh,
 }) {
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [expandedAccs, setExpandedAccs] = useState({});
-  const [syncingNamuh, setSyncingNamuh] = useState(false);
   const [chartView, setChartView] = useState('both'); // 'both' | 'stocks' | 'accounts'
   const [includeDeposits, setIncludeDeposits] = useState(() => {
     try {
@@ -240,28 +233,6 @@ export default function DashboardTab({
     }));
   };
 
-  const handleSyncNamuh = async () => {
-    setSyncingNamuh(true);
-    try {
-      const res = await api.syncNamuh();
-      alert(res.message || 'NH투자증권 잔고 동기화 완료!');
-      onRefresh();
-    } catch (err) {
-      alert(`동기화 실패: ${err.message}`);
-    } finally {
-      setSyncingNamuh(false);
-    }
-  };
-
-  const handleToggleExhaust = async (accId, isExhausted) => {
-    try {
-      await api.toggleLimitExhausted(accId, isExhausted);
-      onRefresh();
-    } catch (err) {
-      alert(`한도 소진 상태 변경 실패: ${err.message}`);
-    }
-  };
-
   return (
     <div>
       <MarketStatus status={dashboardData?.market_status} />
@@ -371,7 +342,6 @@ export default function DashboardTab({
 
       <InvestmentAssetsSection
         includeDeposits={includeDeposits}
-        setIsEditModalOpen={setIsEditModalOpen}
         currencyMode={currencyMode}
         displayStockAssets={displayStockAssets}
         investmentAssets={investmentAssets}
@@ -385,32 +355,15 @@ export default function DashboardTab({
 
 
       <AccountBreakdown
-        handleSyncNamuh={handleSyncNamuh}
-        syncingNamuh={syncingNamuh}
         includeDeposits={includeDeposits}
         displayAccSummaries={displayAccSummaries}
         expandedAccs={expandedAccs}
         usd_krw={usd_krw}
         toggleAccordion={toggleAccordion}
-        handleToggleExhaust={handleToggleExhaust}
         currencyMode={currencyMode}
       />
 
-      {/* Edit Holdings Modal */}
-      {isEditModalOpen && (
-        <Suspense fallback={<DialogLoading onClose={() => setIsEditModalOpen(false)} />}>
-          <EditHoldingsModal
-            accounts={accounts}
-            assets={assets}
-            usdKrw={dashboardData?.usd_krw || 1350}
-            onClose={() => setIsEditModalOpen(false)}
-            onSaved={() => {
-              setIsEditModalOpen(false);
-              onRefresh();
-            }}
-          />
-        </Suspense>
-      )}
+
     </div>
   );
 }

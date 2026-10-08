@@ -73,6 +73,10 @@ def execute_batch_trades(req: BatchTradeRequest):
     results = []
     
     for index, item in enumerate(req.trades):
+        if item.trade_type not in ('BUY','SELL'):
+            results.append({'index':index,'success':False,'message':'초기 보유·원가 정정은 4번 탭의 장부 확인 및 정정을 이용해주세요.'})
+            errors.append(results[-1]['message'])
+            continue
         if item.quantity <= 0 or item.price <= 0:
             results.append({"index": index, "success": False, "message": "수량과 단가는 양수여야 합니다."})
             errors.append(results[-1]["message"])
