@@ -56,14 +56,16 @@ def save_state(cursor, account_id, usd, cost, day):
 
 def append_event(db, cursor, account_id, kind, moment, amount, krw_amount, fx,
                  delta_krw, delta_usd, before, after, notes='', trade_id=None, asset_id=None):
+    ident = db.new_id()
     cursor.execute('''
         INSERT INTO usd_cash_events
         (id, account_id, kind, occurred_at, event_date, usd_amount, krw_amount, fx_rate,
          cash_delta_krw, cash_delta_usd, before_state, after_state, notes, trade_id, trade_reference, asset_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    ''', (db.new_id(), str(account_id), kind, None if kind in ('BUY', 'SELL') else moment.isoformat(), str(moment.date()),
+    ''', (ident, str(account_id), kind, None if kind in ('BUY', 'SELL') else moment.isoformat(), str(moment.date()),
           amount, krw_amount, fx, float(delta_krw), float(delta_usd), encoded(before), encoded(after),
           notes, trade_id, trade_id, asset_id))
+    return ident
 
 
 def get_ledgers(db, portfolio_id=None):
@@ -262,6 +264,10 @@ def undo_event(db, account_id, event_id):
     conn = db.connect()
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT id FROM accounts WHERE id=%s FOR UPDATE', (str(account_id),))
+        cursor.execute('SELECT id FROM nh_notice_items WHERE linked_usd_event_id=%s AND reversed_at IS NULL', (event_id,))
+        if cursor.fetchone():
+            raise ValueError('NH 알림으로 반영한 환전은 알림 가져오기의 반영 이력에서 묶음 취소해주세요.')
         reverse_latest(cursor, account_id, event_id)
         conn.commit()
         return True, '기록을 취소하고 이전 원가를 복원했습니다.'

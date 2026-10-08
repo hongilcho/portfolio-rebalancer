@@ -72,6 +72,7 @@ class DatabaseAdapter:
                 fx_rate NUMERIC, cash_delta_krw REAL, cash_delta_usd REAL, trade_id TEXT UNIQUE,
                 trade_reference TEXT, asset_id TEXT, before_state TEXT, after_state TEXT, notes TEXT,
                 reversed_at TEXT);
+            CREATE TABLE nh_notice_items(id TEXT,linked_trade_id TEXT,linked_usd_event_id TEXT,reversed_at TEXT);
         ''')
 
     def cursor(self, **kwargs):

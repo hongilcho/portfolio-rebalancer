@@ -35,7 +35,9 @@ async function request(endpoint, options = {}) {
     const response = await fetch(url, config);
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || errorData.message || `API Error: ${response.status}`);
+      const error = new Error(errorData.detail || errorData.message || `API Error: ${response.status}`);
+      error.status = response.status;
+      throw error;
     }
     return await response.json();
   } catch (error) {
@@ -45,6 +47,9 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  getNhNoticeContext: (pid,day) => request(`/api/nh-notices/${encodeURIComponent(pid)}/context?day=${encodeURIComponent(day)}`),
+  commitNhNotices: (pid,data) => request(`/api/nh-notices/${encodeURIComponent(pid)}/batch`, {method:'POST',body:JSON.stringify(data)}),
+  undoNhNotices: (pid,id) => request(`/api/nh-notices/${encodeURIComponent(pid)}/batch/${encodeURIComponent(id)}`, {method:'DELETE'}),
   getUsdLedgers: (portfolioId) => request(`/api/forex/?portfolio_id=${encodeURIComponent(portfolioId)}`),
   getUsdEvents: (accountId) => request(`/api/forex/${encodeURIComponent(accountId)}/events`),
   recordUsdEvent: (accountId, event) => request(`/api/forex/${encodeURIComponent(accountId)}/events`, {

@@ -16,7 +16,6 @@ import TradeHistorySection from './TradeHistorySection';
 import UsdLedgerPanel from './UsdLedgerPanel';
 import NamuhMessageImport from './NamuhMessageImport';
 import ExternalCashFlowPanel from './ExternalCashFlowPanel';
-import { appendNamuhRows } from '../../utils/namuhMessage';
 import { readTradeDraft, writeTradeDraft, remainingTradeRows, draftStorage } from '../../utils/tradeDraft';
 
 export default function HistoryTab({
@@ -317,8 +316,13 @@ export default function HistoryTab({
 
   return (
     <div>
+      <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
+        tradeDate={tradeDate} buyRows={buyRows} disabled={savingBatch} ledgers={usdLedgers}
+        onChanged={async () => { await refreshLedgers(); await loadTrades(); await onSaved();
+          if (performance) await performance.run(performance.capture); }} />
       {performance && <ExternalCashFlowPanel key={currentPortfolioId} portfolioId={currentPortfolioId}
-        accounts={accounts} performance={performance} onOpenAnalysis={onOpenAnalysis} />}
+        accounts={accounts} performance={performance} onOpenAnalysis={onOpenAnalysis}
+        onCashChanged={async()=>{await refreshLedgers();await onSaved();}} />}
       {usdLedgers !== null && <UsdLedgerPanel key={currentPortfolioId} accounts={accounts} assets={assets} ledgers={usdLedgers} portfolioId={currentPortfolioId}
         onChanged={async () => { await refreshLedgers(); loadTrades(); onSaved(); }} />}
       {ledgerError && <p role="alert">달러 원가 조회 실패: {ledgerError}</p>}
@@ -331,9 +335,7 @@ export default function HistoryTab({
         usdKrw={usdKrw}
       />
 
-      <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
-        tradeDate={tradeDate} buyRows={buyRows} disabled={savingBatch}
-        onAppend={drafts => setBuyRows(appendNamuhRows(buyRows, drafts, tradeDate))} />
+
 
       <div className="section-card">
         <p>입력 행은 이 브라우저에 30일간 자동 임시 저장됩니다. 다른 기기에는 공유되지 않으며 장부 저장과는 별개입니다.</p>

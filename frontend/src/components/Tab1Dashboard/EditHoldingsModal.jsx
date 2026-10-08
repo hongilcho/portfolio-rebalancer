@@ -22,9 +22,24 @@ export default function EditHoldingsModal({
   const [holdingsInputs, setHoldingsInputs] = useState({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [ledgerStatus,setLedgerStatus]=useState({accountId:'',ready:false,tracked:false,error:''});
 
   const effectiveRate = Number(usdKrw) > 0 ? Number(usdKrw) : 1350;
   const selectedAcc = accounts.find((a) => String(a.id) === String(selectedAccId));
+
+  const ledgerReady=ledgerStatus.accountId===String(selectedAccId) && ledgerStatus.ready;
+  const tracked=ledgerReady && ledgerStatus.tracked;
+  useEffect(()=>{
+    let cancelled=false;
+    setLedgerStatus({accountId:String(selectedAccId),ready:false,tracked:false,error:''});
+    const account=accounts.find(a=>String(a.id)===String(selectedAccId));
+    if (!account) return;
+    api.getUsdLedgers(account.portfolio_id || 'default').then(res=>{
+      if(!cancelled)setLedgerStatus({accountId:String(selectedAccId),ready:true,
+        tracked:res.ledgers.some(l=>String(l.account_id)===String(selectedAccId)),error:''});
+    }).catch(error=>{if(!cancelled)setLedgerStatus({accountId:String(selectedAccId),ready:false,tracked:false,error:error.message});});
+    return()=>{cancelled=true;};
+  },[selectedAccId,accounts]);
 
   // Load account data when selected account changes
   useEffect(() => {
@@ -162,9 +177,18 @@ export default function EditHoldingsModal({
   };
 
   const handleSave = async () => {
-    if (!selectedAcc) return;
+    if (!selectedAcc || !ledgerReady) return;
     setSaving(true);
     try {
+      if (tracked) {
+        await api.commitNhNotices(selectedAcc.portfolio_id || 'default',{
+          request_id:crypto.randomUUID(),confirmed:true,
+          expected_cash:{[String(selectedAcc.id)]:{deposit_krw:Number(selectedAcc.deposit_krw || 0),deposit_usd:Number(selectedAcc.deposit_usd || 0)}},
+          rows:[{kind:'KRW_ADJUST',account_id:String(selectedAcc.id),event_date:new Date(Date.now()+9*3600000).toISOString().slice(0,10),krw_amount:Number(depositKrw)}],
+        });
+        alert('원화 예수금을 저장했습니다. 달러 잔고·취득원가·종목 원가는 유지했습니다.');
+        onSaved();onClose();return;
+      }
       const holdingsPayload = allowedAssets.map((ast) => {
         const current = holdingsInputs[String(ast.id)] || { quantity: 0, avg_price: 0, avg_price_usd: 0, buy_fx_rate: 0 };
         return {
@@ -221,6 +245,8 @@ export default function EditHoldingsModal({
           </select>
         </div>
 
+        {ledgerStatus.error && <p role="alert">달러 추적 상태 조회 실패: {ledgerStatus.error}</p>}
+        {tracked && <p>이 계좌는 원화 예수금만 저장합니다. 달러 잔고·보유 원가는 매매·환전 기록으로 관리하세요. 외부 입금은 4번 탭의 NH 알림 가져오기를 사용하면 입금 기록과 예수금을 함께 반영할 수 있습니다.</p>}
         {/* Deposits Input */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
           <KoreanNumberInput
@@ -240,6 +266,7 @@ export default function EditHoldingsModal({
                 className="input-number"
                 style={{ paddingLeft: '24px' }}
                 value={depositUsd}
+                disabled={tracked || !ledgerReady}
                 onChange={(e) => setDepositUsd(parseFloat(e.target.value) || 0)}
                 step={10}
                 min={0}
@@ -263,6 +290,7 @@ export default function EditHoldingsModal({
           </span>
         </div>
 
+        <fieldset disabled={tracked || !ledgerReady} style={{border:0,padding:0}}>
         {loading ? (
           <p style={{ color: 'var(--text-secondary)', padding: '20px 0' }}>잔고 로딩 중...</p>
         ) : allowedAssets.length === 0 ? (
@@ -450,14 +478,15 @@ export default function EditHoldingsModal({
             })}
           </div>
         )}
+        </fieldset>
 
         <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
           <button 
             className="btn btn-primary btn-block" 
             onClick={handleSave} 
-            disabled={saving}
+            disabled={saving || !ledgerReady}
           >
-            {saving ? '저장 중...' : '💾 예수금 및 보유 수량/평단가 저장'}
+            {saving ? '저장 중...' : tracked ? '💾 원화 예수금만 저장' : '💾 예수금 및 보유 수량/평단가 저장'}
           </button>
         </div>
       </div>

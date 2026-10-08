@@ -21,13 +21,14 @@ def execute_trade(
     exchange_rate=None,
     import_source=None,
     broker_order_no=None,
+    transaction=None,
 ):
     if not all(math.isfinite(v) and v > 0 for v in (quantity, price)):
         return False, "수량과 단가는 0보다 커야 합니다."
         
     if trade_type not in ('INIT', 'BUY', 'SELL') or currency not in (None, 'KRW', 'USD'):
         return False, "거래 유형 또는 통화를 확인해주세요."
-    conn = db.connect()
+    conn = transaction if transaction is not None else db.connect()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     new_trade_id = db.new_id()
     try:
@@ -75,7 +76,7 @@ def execute_trade(
                     raise ValueError('매도대금 수취기준환율을 입력해주세요.')
                 forex.execute_managed_trade(db, cursor, account_id, asset_id, new_trade_id,
                                             state, acc_row, trade_date, trade_type, quantity, price, exchange_rate)
-                conn.commit()
+                if transaction is None: conn.commit()
                 return True, '계좌 달러 평균환율로 매매 기록과 원가를 저장했습니다.'
             if currency == 'USD':
                 raise ValueError('달러 원가 추적 계좌에서는 미국 자산에만 달러 거래를 등록할 수 있습니다.')
@@ -199,16 +200,16 @@ def execute_trade(
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (new_h_id, str(account_id), str(asset_id), quantity, new_avg_price, new_avg_usd, new_buy_fx, new_avg_price, new_avg_usd))
             else:
-                conn.rollback()
+                if transaction is None: conn.rollback()
                 return False, "매도할 보유 잔고가 없습니다."
                 
-        conn.commit()
+        if transaction is None: conn.commit()
         return True, "매매 기록 및 잔고 업데이트가 완료되었습니다."
     except Exception as e:
-        conn.rollback()
+        if transaction is None: conn.rollback()
         return False, str(e)
     finally:
-        conn.close()
+        if transaction is None: conn.close()
 
 
 def get_trade_history(db: RepositoryContext, portfolio_id: str = None):
@@ -239,7 +240,7 @@ def get_trade_history(db: RepositoryContext, portfolio_id: str = None):
         conn.close()
 
 
-def delete_trades(db: RepositoryContext, trade_ids):
+def delete_trades(db: RepositoryContext, trade_ids, transaction=None):
     """Reverse recorded cash movements and replay holdings in one transaction.
 
     Legacy BUY/SELL rows without cash deltas require reconciliation first.
@@ -251,7 +252,7 @@ def delete_trades(db: RepositoryContext, trade_ids):
     if len(ids) != len(set(ids)):
         return False, "중복된 거래 ID가 있습니다."
     placeholders = ', '.join(['%s'] * len(ids))
-    conn = db.connect()
+    conn = transaction if transaction is not None else db.connect()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     try:
         cursor.execute(f"SELECT id, account_id FROM trade_history WHERE id IN ({placeholders})", tuple(ids))
@@ -267,6 +268,10 @@ def delete_trades(db: RepositoryContext, trade_ids):
         selected = cursor.fetchall()
         if len(selected) != len(ids):
             raise ValueError("이미 삭제된 매매 기록이 있습니다.")
+        if transaction is None:
+            cursor.execute(f'SELECT id FROM nh_notice_items WHERE linked_trade_id IN ({placeholders}) AND reversed_at IS NULL', tuple(ids))
+            if cursor.fetchone():
+                raise ValueError('NH 알림으로 반영한 매수는 알림 가져오기의 반영 이력에서 묶음 취소해주세요.')
         cursor.execute(f'SELECT * FROM usd_cash_events WHERE trade_id IN ({placeholders}) AND reversed_at IS NULL ORDER BY sequence DESC', tuple(ids))
         managed = cursor.fetchall()
         managed_ids = {event['trade_id'] for event in managed}
@@ -280,7 +285,7 @@ def delete_trades(db: RepositoryContext, trade_ids):
             forex.reverse_latest(cursor, event['account_id'], event['id'])
         selected = [trade for trade in selected if trade['id'] not in managed_ids]
         if not selected:
-            conn.commit()
+            if transaction is None: conn.commit()
             return True, '매매를 취소하고 달러·보유 원가를 복원했습니다.'
         ids = [trade['id'] for trade in selected]
         placeholders = ', '.join(['%s'] * len(ids))
@@ -329,13 +334,13 @@ def delete_trades(db: RepositoryContext, trade_ids):
                         buy_fx_rate = 0, original_avg_price = 0, original_avg_price_usd = 0
                     WHERE account_id = %s AND asset_id = %s
                 """, (account_id, asset_id))
-        conn.commit()
+        if transaction is None: conn.commit()
         return True, "매매 기록이 삭제되었으며 예수금·수량·매입원가가 복원되었습니다."
     except Exception as e:
-        conn.rollback()
+        if transaction is None: conn.rollback()
         return False, str(e)
     finally:
-        conn.close()
+        if transaction is None: conn.close()
 
 
 def apply_transfer_plan(db: RepositoryContext, transfer_plan: list) -> Tuple[bool, str]:

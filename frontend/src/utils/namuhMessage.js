@@ -20,7 +20,7 @@ export function parseNamuhMessages(raw) {
     if (!block.startsWith('[NH투자증권]') || !/매수주문체결알림/.test(block.replace(/\s/g, '')) || kind !== '매수전량체결')
       errors.push('현재는 NH투자증권 국내 매수 전량 체결 알림만 지원합니다. 부분 체결·매도 알림은 직접 입력해주세요.');
     const accountMask = field(block, '계좌번호').split(/\s/)[0].replace(/[^0-9*]/g, '');
-    if (!/^[0-9*]{11}$/.test(accountMask) || !/[0-9]/.test(accountMask)) errors.push('계좌번호를 확인할 수 없습니다.');
+    // Missing account information is corrected by an explicit account selection.
     const ticker = field(block, '종목코드').replace(/\s/g, '').toUpperCase();
     if (!/^[0-9A-Z]{6}$/.test(ticker)) errors.push('국내 종목코드 6자리를 확인해주세요.');
     const quantityText = field(block, '체결수량');
@@ -48,7 +48,7 @@ export function parseNamuhMessages(raw) {
 export function resolveNamuhDraft(parsed, accounts, assets, portfolioId) {
   const matches = scope(accounts, portfolioId).filter(account => {
     const number = String(account.account_no || '').replace(/\D/g, '');
-    return number.length === parsed.accountMask.length && [...parsed.accountMask].every((c, i) => c === '*' || c === number[i]);
+    return /^[0-9*]{11}$/.test(parsed.accountMask) && /[0-9]/.test(parsed.accountMask) && number.length === parsed.accountMask.length && [...parsed.accountMask].every((c, i) => c === '*' || c === number[i]);
   });
   const accountId = matches.length === 1 ? String(matches[0].id) : '';
   const candidates = scope(assets, portfolioId).filter(a => a.market === 'KR' && !a.is_deposit && String(a.ticker).toUpperCase() === parsed.ticker);

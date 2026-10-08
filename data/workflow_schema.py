@@ -52,3 +52,20 @@ def initialize(cursor):
         record_kind TEXT NOT NULL, recorded_at TIMESTAMPTZ NOT NULL,
         replaced_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_performance_revisions_scope ON performance_snapshot_revisions(portfolio_id,snapshot_date)')
+
+    cursor.execute('''CREATE TABLE IF NOT EXISTS nh_notice_batches (
+        id TEXT PRIMARY KEY, portfolio_id TEXT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+        request_id TEXT NOT NULL, payload JSONB NOT NULL, result JSONB NOT NULL, audit JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, reversed_at TIMESTAMPTZ,
+        UNIQUE(portfolio_id,request_id))''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS nh_notice_items (
+        id TEXT PRIMARY KEY, sequence BIGSERIAL UNIQUE, batch_id TEXT NOT NULL REFERENCES nh_notice_batches(id) ON DELETE CASCADE,
+        portfolio_id TEXT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE, account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+        event_date DATE NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('DEPOSIT','EXCHANGE_IN','BUY','KRW_ADJUST')),
+        fingerprint TEXT NOT NULL, payload JSONB NOT NULL, result JSONB NOT NULL,
+        performance_flow_id TEXT REFERENCES performance_flows(id) ON DELETE SET NULL,
+        linked_trade_id TEXT REFERENCES trade_history(id) ON DELETE SET NULL,
+        linked_usd_event_id TEXT REFERENCES usd_cash_events(id) ON DELETE SET NULL, reversed_at TIMESTAMPTZ)''')
+    cursor.execute('''CREATE UNIQUE INDEX IF NOT EXISTS idx_nh_notice_flow_cash
+        ON nh_notice_items(performance_flow_id) WHERE performance_flow_id IS NOT NULL AND reversed_at IS NULL''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_nh_notice_scope ON nh_notice_items(portfolio_id,event_date)')

@@ -18,7 +18,10 @@ parser.add_argument('--usd-ledger', action='store_true', help='Add synthetic USD
 parser.add_argument('--message-import', action='store_true', help='Add synthetic NH domestic full-buy message fixtures')
 parser.add_argument('--workflow', action='store_true', help='Add synthetic maturity/workflow fixtures')
 parser.add_argument('--closing', action='store_true', help='Add synthetic regular closing history; keep scheduler disabled')
+parser.add_argument('--nh-notices', action='store_true', help='Synthetic NH deposit/FX/ISA fixtures, including an existing contribution')
 args = parser.parse_args()
+if args.nh_notices:
+    args.usd_ledger = args.message_import = args.workflow = True
 
 import psycopg2
 from psycopg2 import sql
@@ -171,6 +174,22 @@ if args.simulate_refresh:
         return {'ok': True}
 
 if __name__ == '__main__':
+    if args.nh_notices:
+        from backend.close_performance import context
+        from data.repositories import performance
+        from backend.performance_valuation import current_nav
+        today = (datetime.now(timezone.utc)+timedelta(hours=9)).date()
+        with dm.get_connection() as conn, conn.cursor() as cursor:
+            cursor.execute("UPDATE portfolios SET name='NH 알림 합성 검증' WHERE id='default'")
+            cursor.execute("UPDATE accounts SET account_no='123-45-671231',account_alias='검증 VT 계좌',account_type='GENERAL',deposit_krw=4,deposit_usd=10 WHERE id='qa_acc'")
+            cursor.execute("INSERT INTO accounts(id,account_no,account_alias,account_type,portfolio_id,deposit_krw,deposit_usd) VALUES('qa_isa','123-45-671232','검증 ISA','ISA','default',190000,0)")
+            cursor.execute("UPDATE assets SET allowed_accounts='[\"qa_isa\"]' WHERE id='qa_nh_bond'")
+            conn.commit()
+        assert dm.record_usd_event('qa_acc','OPENING',str(today)+'T09:00:00+09:00',rate=1300)[0]
+        performance.capture(context(),'default',current_nav(dm.get_rebalance_batch_data('default'),
+            {q['id']:q['price_krw'] for q in quotes},1400),{'source':'QA synthetic baseline'},start=True)
+        performance.add_flow(context(),'default',dict(request_id='QA-existing-deposit',account_id='qa_acc',
+            event_date=today,direction='DEPOSIT',currency='KRW',native_amount=960000,exchange_rate=1,notes='이미 기록된 합성 입금'))
     if args.closing:
         from backend.close_performance import ClosePerformance, context
         from data.repositories import performance, close_jobs
