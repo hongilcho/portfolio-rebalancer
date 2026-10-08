@@ -101,3 +101,39 @@ def submit(payload):
 with ThreadPoolExecutor(max_workers=2) as pool:race=list(pool.map(submit,[left,right]))
 assert sum(isinstance(r,dict) for r in race)==1 and cash()==(7,727.31)
 print('PostgreSQL NH QA passed: atomic rollback, concurrent idempotency, stale previews, existing flow link, FX cost, API, scoped accounts, cash-only adjustment and audited undo. DB:',name)
+
+# The history read does not replay transactions or double-count linked flows.
+from data.repositories import activity
+from backend.routers.activity import router as activity_router
+app.include_router(activity_router)
+before=cash()
+start,end=date(2026,1,1),date(2026,1,2)
+first=activity.read_page(ctx,'p',start,end)
+assert first['total']==3 and len(first['items'])==3,first
+linked=next(r for r in first['items'] if r['id']=='FLOW:legacy')
+assert linked['batch_id'] and linked['detail']['cash_applied']
+assert len([r for r in first['items'] if r['id'].startswith('NOTICE:')])==0
+cancelled=activity.read_page(ctx,'p',start,end,include_cancelled=True)
+assert any(r['id'].startswith('CANCELLED_BUY:') for r in cancelled['items'])
+assert activity.read_page(ctx,'other',start,end)['total']==0
+assert activity.read_page(ctx,'p',start,end,account='foreign')['total']==0
+assert all(r['category']=='USD' for r in activity.read_page(ctx,'p',start,end,category='USD')['items'])
+assert activity.read_page(ctx,'p',date(2026,2,1),date(2026,2,2))['total']==0
+fails(lambda:activity.read_page(ctx,'p',end,start),'시작일')
+for i in range(26):
+    performance.add_flow(ctx,'p',dict(request_id='QA-page-'+str(i),account_id='isa',event_date=end,
+      direction='DEPOSIT',currency='KRW',native_amount=i+1,exchange_rate=1,notes='Synthetic pagination'))
+pages=[activity.read_page(ctx,'p',start,end,page=i) for i in (1,2)]
+assert pages[0]['total']==29 and pages[0]['pages']==2
+assert len(pages[0]['items'])==20 and len(pages[1]['items'])==9
+assert not ({r['id'] for r in pages[0]['items']} & {r['id'] for r in pages[1]['items']})
+assert activity.read_page(ctx,'p',start,end,page=999)['page']==2
+resp=client.get('/api/activity/p?start_date=2026-01-01&end_date=2026-01-02&page=2')
+assert resp.status_code==200 and len(resp.json()['items'])==9,resp.text
+assert client.get('/api/activity/p?start_date=2026-01-02&end_date=2026-01-01').status_code==400
+assert client.get('/api/activity/p?start_date=2026-01-01&end_date=2026-01-02&page_size=1000').status_code==422
+assert cash()==before
+print('Activity PostgreSQL QA passed: scoped read-only union, no linked-flow duplicates, reversals, date/account/category filters, stable page boundaries and API serialization.')
+
+assert activity.read_page(ctx,'p',start,end,category='TRADE',include_cancelled=True,asset='bond')['total']==1
+assert activity.read_page(ctx,'p',start,end,category='TRADE',include_cancelled=True,asset='foreign')['total']==0

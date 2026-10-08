@@ -47,6 +47,7 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  getActivity: (pid,params) => request(`/api/activity/${encodeURIComponent(pid)}?${new URLSearchParams(params)}`),
   getNhNoticeContext: (pid,day) => request(`/api/nh-notices/${encodeURIComponent(pid)}/context?day=${encodeURIComponent(day)}`),
   commitNhNotices: (pid,data) => request(`/api/nh-notices/${encodeURIComponent(pid)}/batch`, {method:'POST',body:JSON.stringify(data)}),
   undoNhNotices: (pid,id) => request(`/api/nh-notices/${encodeURIComponent(pid)}/batch/${encodeURIComponent(id)}`, {method:'DELETE'}),

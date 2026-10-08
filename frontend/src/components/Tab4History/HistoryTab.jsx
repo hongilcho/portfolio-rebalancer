@@ -12,7 +12,8 @@ import { api } from '../../utils/api';
 import { loadAccountHoldings } from '../../utils/accountHoldings';
 import PriceReference from './PriceReference';
 import TradeBatchForm from './TradeBatchForm';
-import TradeHistorySection from './TradeHistorySection';
+import ActivityHistory from './ActivityHistory';
+import {ClipboardPaste,PenLine,Wallet,History} from 'lucide-react';
 import UsdLedgerPanel from './UsdLedgerPanel';
 import NamuhMessageImport from './NamuhMessageImport';
 import ExternalCashFlowPanel from './ExternalCashFlowPanel';
@@ -60,7 +61,7 @@ export default function HistoryTab({
   }, [currentPortfolioId, accounts]);
   const refreshLedgers = async () => {
     const res = await api.getUsdLedgers(currentPortfolioId);
-    setUsdLedgers(res.ledgers);
+    setUsdLedgers(res.ledgers);setLedgerError('');
   };
 
   // Price map lookup for USD native prices
@@ -81,16 +82,15 @@ export default function HistoryTab({
   // Reference Prices Collapsible
   const [isPriceRefOpen, setIsPriceRefOpen] = useState(false);
 
-  // Trade History Table & Filters
-  const [trades, setTrades] = useState([]);
-  const [loadingTrades, setLoadingTrades] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [selectedAccFilter, setSelectedAccFilter] = useState('all');
-  const [selectedAssetFilter, setSelectedAssetFilter] = useState('all');
-  const [selectedTradeIds, setSelectedTradeIds] = useState([]);
-  const [deletingTrades, setDeletingTrades] = useState(false);
-
+  const [view,setView]=useState('input');
+  const [method,setMethod]=useState('nh');
+  const [manualKind,setManualKind]=useState('trades');
+  const [recordRevision,setRecordRevision]=useState(0);
+  const [childBusy,setChildBusy]=useState({nh:false,usd:false,history:false});
+  const nhBusy=useCallback(value=>setChildBusy(old=>({...old,nh:value})),[]);
+  const usdBusy=useCallback(value=>setChildBusy(old=>({...old,usd:value})),[]);
+  const historyBusy=useCallback(value=>setChildBusy(old=>({...old,history:value})),[]);
+  const busy=savingBatch || performance?.busy || Object.values(childBusy).some(Boolean);
   // Load account holdings for sell validation
   useEffect(() => {
     let cancelled = false;
@@ -105,31 +105,9 @@ export default function HistoryTab({
     return () => { cancelled = true; };
   }, [accounts, currentPortfolioId]);
 
-  // Load trade history
-  const loadTrades = useCallback(async () => {
-    setLoadingTrades(true);
-    try {
-      const params = {};
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
-      if (selectedAccFilter !== 'all') params.account_id = selectedAccFilter;
-      if (selectedAssetFilter !== 'all') params.asset_id = selectedAssetFilter;
-      if (currentPortfolioId && currentPortfolioId !== 'all') params.portfolio_id = currentPortfolioId;
-
-      const res = await api.getTrades(params);
-      setTrades(res.trades || []);
-      setSelectedTradeIds([]);
-    } catch (err) {
-      console.error('Failed to load trades:', err);
-    } finally {
-      setLoadingTrades(false);
-    }
-  }, [startDate, endDate, selectedAccFilter, selectedAssetFilter, currentPortfolioId]);
-
-  useEffect(() => {
-    loadTrades();
-  }, [loadTrades]);
-
+  const loadTrades=useCallback(async()=>{setRecordRevision(n=>n+1);},[]);
+  const changed=async()=>{await refreshLedgers();await loadTrades();await onSaved();
+    if(performance)await performance.run(performance.capture);};
   // Add/Remove Buy Row
   const addBuyRow = () => {
     setBuyRows((prev) => [
@@ -280,112 +258,58 @@ export default function HistoryTab({
     }
   };
 
-  // Toggle Trade Selection for Deletion
-  const toggleSelectTrade = (tradeId) => {
-    setSelectedTradeIds((prev) =>
-      prev.includes(tradeId) ? prev.filter((id) => id !== tradeId) : [...prev, tradeId]
-    );
-  };
-
-  const toggleSelectAllTrades = () => {
-    if (selectedTradeIds.length === trades.length) {
-      setSelectedTradeIds([]);
-    } else {
-      setSelectedTradeIds(trades.map((t) => t.id));
-    }
-  };
-
-  // Delete Selected Trades (with Rollback)
-  const handleDeleteSelectedTrades = async () => {
-    if (selectedTradeIds.length === 0) return;
-    if (!window.confirm(`선택한 ${selectedTradeIds.length}건의 매매 기록을 삭제하시겠습니까?\n예수금 변동을 되돌리고 보유 수량과 매입원가를 재계산합니다.`)) return;
-
-    setDeletingTrades(true);
-    try {
-      const res = await api.batchDeleteTrades(selectedTradeIds);
-      alert(res.message || '삭제 및 예수금·보유 잔고 복원이 완료되었습니다.');
-      loadTrades();
-      await refreshLedgers();
-      onSaved();
-    } catch (err) {
-      alert(`삭제 실패: ${err.message}`);
-    } finally {
-      setDeletingTrades(false);
-    }
-  };
-
   return (
-    <div>
-      <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
-        tradeDate={tradeDate} buyRows={buyRows} disabled={savingBatch} ledgers={usdLedgers}
-        onChanged={async () => { await refreshLedgers(); await loadTrades(); await onSaved();
-          if (performance) await performance.run(performance.capture); }} />
-      {performance && <ExternalCashFlowPanel key={currentPortfolioId} portfolioId={currentPortfolioId}
-        accounts={accounts} performance={performance} onOpenAnalysis={onOpenAnalysis}
-        onCashChanged={async()=>{await refreshLedgers();await onSaved();}} />}
-      {usdLedgers !== null && <UsdLedgerPanel key={currentPortfolioId} accounts={accounts} assets={assets} ledgers={usdLedgers} portfolioId={currentPortfolioId}
-        onChanged={async () => { await refreshLedgers(); loadTrades(); onSaved(); }} />}
-      {ledgerError && <p role="alert">달러 원가 조회 실패: {ledgerError}</p>}
-      <PriceReference
-        setIsPriceRefOpen={setIsPriceRefOpen}
-        isPriceRefOpen={isPriceRefOpen}
-        assets={assets}
-        usdPriceMap={usdPriceMap}
-        priceMap={priceMap}
-        usdKrw={usdKrw}
-      />
-
-
-
-      <div className="section-card">
-        <p>입력 행은 이 브라우저에 30일간 자동 임시 저장됩니다. 다른 기기에는 공유되지 않으며 장부 저장과는 별개입니다.</p>
-        {draftStorageError && <p role="alert">브라우저 임시 저장을 사용할 수 없습니다. 화면을 닫으면 입력 내용이 사라질 수 있습니다.</p>}
-        {(initialDraft || uncertainSubmission) && <label style={{ display: 'block', marginBottom: 12 }}><input type="checkbox" checked={draftReviewed} disabled={savingBatch} onChange={e => setDraftReviewed(e.target.checked)} />복원된 날짜·계좌·입력 내용과 기존 장부의 중복 여부를 확인했습니다.</label>}
-        {uncertainSubmission && <p role="alert">직전 저장의 완료 여부를 확인하지 못했습니다. 최근 매매 기록을 확인한 뒤 이미 저장된 행을 제거해주세요.</p>}
-        <button type="button" className="btn btn-secondary btn-sm" disabled={savingBatch} onClick={clearDraft}>임시 입력 모두 비우기</button>
+    <div className="history-workspace">
+      <div className="history-heading"><h2>매매 및 입출금 기록</h2><span className="history-muted">입력한 내용은 최종 반영 전까지 장부를 변경하지 않습니다.</span></div>
+      <div className="history-view-tabs" role="tablist" aria-label="4번 탭 작업">
+        <button id="history-input-tab" type="button" role="tab" aria-selected={view==='input'} aria-controls="history-input-panel" disabled={busy} onClick={()=>setView('input')}>기록 입력</button>
+        <button id="history-record-tab" type="button" role="tab" aria-selected={view==='records'} aria-controls="history-record-panel" disabled={busy} onClick={()=>setView('records')}><History size={16}/>기록 조회</button>
       </div>
-
-      <TradeBatchForm
-        tradeDate={tradeDate}
-        setTradeDate={setTradeDate}
-        buyRows={buyRows}
-        assets={assets}
-        updateBuyRow={updateBuyRow}
-        accounts={accounts}
-        removeBuyRow={removeBuyRow}
-        usdKrw={usdKrw}
-        addBuyRow={addBuyRow}
-        sellRows={sellRows}
-        holdingsError={holdingsError}
-        accountHoldingsMap={accountHoldingsMap}
-        updateSellRow={updateSellRow}
-        removeSellRow={removeSellRow}
-        addSellRow={addSellRow}
-        handleSaveBatchTrades={handleSaveBatchTrades}
-        savingBatch={savingBatch}
-        usdLedgers={usdLedgers || []}
-      />
-
-      <TradeHistorySection
-        startDate={startDate}
-        setStartDate={setStartDate}
-        endDate={endDate}
-        setEndDate={setEndDate}
-        selectedAccFilter={selectedAccFilter}
-        setSelectedAccFilter={setSelectedAccFilter}
-        accounts={accounts}
-        selectedAssetFilter={selectedAssetFilter}
-        setSelectedAssetFilter={setSelectedAssetFilter}
-        assets={assets}
-        loadingTrades={loadingTrades}
-        trades={trades}
-        selectedTradeIds={selectedTradeIds}
-        toggleSelectAllTrades={toggleSelectAllTrades}
-        toggleSelectTrade={toggleSelectTrade}
-        handleDeleteSelectedTrades={handleDeleteSelectedTrades}
-        deletingTrades={deletingTrades}
-      />
-
+      <div id="history-input-panel" role="tabpanel" aria-labelledby="history-input-tab" hidden={view!=='input'}>
+        <div className="history-methods" aria-label="입력 방법">
+          {[['nh','NH 알림 가져오기',ClipboardPaste],['manual','직접 입력',PenLine],['usd','달러 관리',Wallet]].map(([id,label,Icon])=><button key={id} className="btn btn-secondary" type="button" aria-pressed={method===id} disabled={busy} onClick={()=>setMethod(id)}><Icon size={16}/>{label}</button>)}
+        </div>
+        {ledgerError && method!=='usd' && <p role="alert">달러 원가 조회 실패: {ledgerError}</p>}
+        <div hidden={method!=='nh'}>
+          <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
+            tradeDate={tradeDate} buyRows={buyRows} disabled={busy && !childBusy.nh} ledgers={usdLedgers} focused
+            active={view==='input' && method==='nh'} onBusyChange={nhBusy} onChanged={changed}/>
+        </div>
+        <div hidden={method!=='manual'}>
+          <div className="history-inline-choice" aria-label="직접 입력 종류">
+            <button type="button" aria-pressed={manualKind==='trades'} disabled={busy} onClick={()=>setManualKind('trades')}>매수·매도</button>
+            <button type="button" aria-pressed={manualKind==='funds'} disabled={busy} onClick={()=>setManualKind('funds')}>외부 입출금</button>
+          </div>
+          <div hidden={manualKind!=='trades'}>
+            <div className="history-draft-strip">
+              <span className="history-muted">매매 입력은 이 기기에 30일간 임시 저장됩니다.</span>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={clearDraft}>임시 입력 비우기</button>
+              {draftStorageError && <p role="alert">임시 저장을 사용할 수 없습니다. 화면을 닫으면 입력이 사라질 수 있습니다.</p>}
+              {(initialDraft || uncertainSubmission) && <label className="history-check"><input type="checkbox" checked={draftReviewed} disabled={busy} onChange={e=>setDraftReviewed(e.target.checked)}/>복원된 날짜·계좌·입력 내용과 장부 중복 여부를 확인했습니다.</label>}
+              {uncertainSubmission && <p role="alert">직전 저장 결과가 불확실합니다. 기록 조회에서 이미 반영된 거래를 확인해주세요.</p>}
+            </div>
+            <TradeBatchForm tradeDate={tradeDate} setTradeDate={setTradeDate} buyRows={buyRows} assets={assets}
+              updateBuyRow={updateBuyRow} accounts={accounts} removeBuyRow={removeBuyRow} usdKrw={usdKrw} addBuyRow={addBuyRow}
+              sellRows={sellRows} holdingsError={holdingsError} accountHoldingsMap={accountHoldingsMap} updateSellRow={updateSellRow}
+              removeSellRow={removeSellRow} addSellRow={addSellRow} handleSaveBatchTrades={handleSaveBatchTrades}
+              savingBatch={savingBatch} usdLedgers={usdLedgers || []} focused/>
+            <PriceReference setIsPriceRefOpen={setIsPriceRefOpen} isPriceRefOpen={isPriceRefOpen}
+              assets={assets} usdPriceMap={usdPriceMap} priceMap={priceMap} usdKrw={usdKrw}/>
+          </div>
+          <div hidden={manualKind!=='funds'}>{performance && <ExternalCashFlowPanel key={currentPortfolioId}
+            portfolioId={currentPortfolioId} accounts={accounts} performance={performance} onOpenAnalysis={onOpenAnalysis}
+            focused onCashChanged={async()=>{await refreshLedgers();await loadTrades();await onSaved();}}/>}</div>
+        </div>
+        <div hidden={method!=='usd'}>
+          {usdLedgers!==null?<UsdLedgerPanel key={currentPortfolioId} accounts={accounts} assets={assets} ledgers={usdLedgers}
+            portfolioId={currentPortfolioId} focused active={view==='input' && method==='usd'} onBusyChange={usdBusy} onChanged={changed}/>:<p>달러 원가 조회 중…</p>}
+          {ledgerError && <p role="alert">{ledgerError}</p>}
+        </div>
+      </div>
+      <div id="history-record-panel" role="tabpanel" aria-labelledby="history-record-tab" hidden={view!=='records'}>
+        <ActivityHistory key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
+          active={view==='records'} revision={recordRevision} onBusyChange={historyBusy} onChanged={changed}/>
+      </div>
     </div>
   );
 }

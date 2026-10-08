@@ -5,9 +5,9 @@ import {parseNhNotifications,noticeFingerprint,resolveNhNotice,flowCandidates,ch
   noticeApiRow,previewNhNotices,readNoticeDraft,writeNoticeDraft,validNoticeDate} from '../../utils/nhNotices';
 
 const names={BUY:'매수 체결',DEPOSIT:'원화 입금',EXCHANGE_IN:'원화 → 달러 환전'};
-export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged}) {
+export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange}) {
   const [initial]=useState(()=>readNoticeDraft(portfolioId));
-  const [open,setOpen]=useState(Boolean(initial?.rows.length));
+  const [open,setOpen]=useState(focused || Boolean(initial?.rows.length));
   const [text,setText]=useState('');
   const [rows,setRows]=useState(initial?.rows || []);
   const [requestId,setRequestId]=useState(initial?.requestId || crypto.randomUUID());
@@ -20,20 +20,21 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
   const [contextError,setContextError]=useState('');
   const [storageError,setStorageError]=useState(false);
   const [reload,setReload]=useState(0);
+  useEffect(()=>{onBusyChange?.(saving);},[saving,onBusyChange]);
   const scopedAccounts=accounts.filter(a=>!a.portfolio_id || String(a.portfolio_id)===String(portfolioId));
   const dates=[...new Set([tradeDate,...rows.map(r=>r.eventDate)])].filter(validNoticeDate).sort();
   const dateKey=dates.join('/');
   useEffect(()=>{setStorageError(!writeNoticeDraft(portfolioId,{rows,requestId,pendingPayload}));},[portfolioId,rows,requestId,pendingPayload]);
   useEffect(()=>{
     let cancelled=false;
-    if (!open) return;
+    if (!open || !active) return;
     setContextError('');setLoading(true);setConfirmed(false);
     Promise.all(dateKey.split('/').map(day=>api.getNhNoticeContext(portfolioId,day).then(data=>[day,data])))
       .then(entries=>{if(!cancelled)setContexts(Object.fromEntries(entries));})
       .catch(error=>{if(!cancelled)setContextError(error.message);})
       .finally(()=>{if(!cancelled)setLoading(false);});
     return()=>{cancelled=true;};
-  },[portfolioId,open,dateKey,reload]);
+  },[portfolioId,open,active,dateKey,reload]);
   const edit=(index,key,value)=>{
     setRows(previous=>previous.map((row,i)=>i===index?{...row,[key]:value,
       ...(key==='accountId'||key==='eventDate'||key==='external'?{flowId:undefined}:{}),
@@ -85,19 +86,24 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
   };
   const move=(index,delta)=>{setRows(previous=>{const next=[...previous];[next[index],next[index+delta]]=[next[index+delta],next[index]];return next;});setConfirmed(false);};
   const batches=contexts[tradeDate]?.batches || [];
-  return <section className="section-card workflow-panel">
-    <button type="button" className="btn btn-secondary" aria-expanded={open} onClick={()=>setOpen(!open)}>NH 알림 가져오기 · 매수 / 입금 / 환전 {open?'접기':'열기'}</button>
+  return <section className={`section-card workflow-panel ${focused?'history-focused history-notices':''}`}>
+    {focused?<div className="history-section-heading"><h3>NH 알림 붙여넣기</h3><span className="history-muted">입력 → 확인 → 반영</span></div>:<button type="button" className="btn btn-secondary" aria-expanded={open} onClick={()=>setOpen(!open)}>NH 알림 가져오기 · 매수 / 입금 / 환전 {open?'접기':'열기'}</button>}
     {open && <div>
-      <p>여러 알림을 함께 붙이거나 반복해서 목록에 추가하세요. 계좌·날짜·처리 순서와 예상 잔고를 확인한 뒤 한 번에 장부에 반영합니다.</p>
+      <p className="history-muted">여러 알림을 붙여넣거나 반복해서 목록에 추가한 뒤 함께 반영하세요.</p>
       <fieldset disabled={disabled || saving || Boolean(pendingPayload)} style={{border:0,padding:0}}>
-        <label>NH 카카오톡 알림<textarea aria-label="NH 알림" className="input-text" rows={7} maxLength={30000} style={{width:'100%',boxSizing:'border-box'}} value={text} onChange={e=>setText(e.target.value)} /></label>
+        <label>NH 카카오톡 알림<textarea aria-label="NH 알림" className="input-text" rows={focused?4:7} maxLength={30000} style={{width:'100%',boxSizing:'border-box'}} value={text} onChange={e=>setText(e.target.value)} /></label>
         <button type="button" className="btn btn-secondary" onClick={add}>알림을 확인 목록에 추가</button>
+        {focused && rows.length>0 && <div className="history-section-heading history-review-heading"><h3>반영할 알림</h3><span className="history-kind">{rows.length}건 · 미반영</span></div>}
         {rows.map((row,i)=>{
           const context=contexts[row.eventDate],matches=flowCandidates(row,context),flow=chosenFlow(row,context);
-          return <div className="trade-row-card" key={row.id} style={{marginTop:12}}>
+          return <div className={focused?"history-notice-row":"trade-row-card"} key={row.id} style={{marginTop:12}}>
             <b>{i+1}. {names[row.kind]}{row.assetName?` · ${row.assetName}`:''}</b>
             <p>{row.kind==='BUY'?`${row.quantity}주 × ${formatKRW(row.price)} · 주문 ${row.brokerOrderNo || '확인 불가'}`:
               row.kind==='DEPOSIT'?formatKRW(row.krwAmount):`${formatKRW(row.krwAmount)} → ${formatUSD(row.usdAmount)} · 고시환율 ${row.quotedRate}`}</p>
+            {focused && <div className="history-row-context">{accounts.find(a=>String(a.id)===row.accountId)?.account_alias || '계좌 선택 필요'} · {row.eventDate} · 미반영</div>}
+            <details className={focused?'history-notice-details':''} open={!focused || checks[i].errors.length>0 || undefined}>
+            <summary>계좌·날짜·반영 방식 확인 / 수정</summary>
+            <div className="history-notice-fields">
             <label>계좌 <select aria-label={`알림 ${i+1} 계좌`} className="input-select" value={row.accountId} onChange={e=>edit(i,'accountId',e.target.value)}><option value="">계좌 선택</option>{scopedAccounts.map(a=><option key={a.id} value={a.id}>{a.account_alias} ({a.account_no})</option>)}</select></label>
             {row.accountWarning && <p>{row.accountWarning}</p>}
             <label>적용 날짜 <input aria-label={`알림 ${i+1} 날짜`} type="date" className="input-text" value={row.eventDate} onChange={e=>edit(i,'eventDate',e.target.value)} /></label>
@@ -109,20 +115,22 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
               {row.external && <label>예수금 반영 <select aria-label={`알림 ${i+1} 예수금 반영`} className="input-select" value={row.applyCash?'APPLY':'REFLECTED'} onChange={e=>edit(i,'applyCash',e.target.value==='APPLY')}><option value="APPLY">예수금에도 입금 반영</option><option value="REFLECTED">잔고에 이미 반영됨 · 입금 기록만</option></select></label>}
               {row.external && matches.length>0 && <label>성과 입금 기록 <select aria-label={`알림 ${i+1} 입금 연결`} className="input-select" value={flow===null?'NEW':flow} onChange={e=>edit(i,'flowId',e.target.value)}><option value="">연결할 기록 선택</option>{matches.map(f=><option key={f.id} value={f.id}>기존 {formatKRW(Number(f.amount_krw))} 입금에 연결{f.cash_handled?' · 이미 처리됨':''}</option>)}<option value="NEW">별도 입금 · 새 기록</option></select><small>기존 기록을 연결하면 성과 입금을 중복 생성하지 않습니다.</small></label>}
             </>}
+            </div></details>
             {checks[i].errors.map(error=><p role="alert" key={error}>{error}</p>)}
             {checks[i].duplicate && <label><input type="checkbox" checked={Boolean(row.duplicateConfirmed)} onChange={e=>edit(i,'duplicateConfirmed',e.target.checked)} />기존 기록과 별개의 거래임을 확인했습니다.</label>}
-            <button type="button" className="btn btn-secondary btn-sm" disabled={i===0} onClick={()=>move(i,-1)}>위로</button>{' '}
+            <div className="history-row-actions"><button type="button" className="btn btn-secondary btn-sm" disabled={i===0} onClick={()=>move(i,-1)}>위로</button>{' '}
             <button type="button" className="btn btn-secondary btn-sm" disabled={i===rows.length-1} onClick={()=>move(i,1)}>아래로</button>{' '}
-            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>{setRows(previous=>previous.filter(r=>r.id!==row.id));setConfirmed(false);}}>목록에서 제외</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>{setRows(previous=>previous.filter(r=>r.id!==row.id));setConfirmed(false);}}>목록에서 제외</button></div>
           </div>;
         })}
       </fieldset>
       {rows.length>0 && <>
-        <h4>반영 후 예상 잔고</h4>
+        <div className="history-balance-preview"><h4>반영 후 예상 잔고</h4>
         {Object.entries(preview.balances).map(([id,cash])=><p key={id}>{accounts.find(a=>String(a.id)===id)?.account_alias} · 원화 {formatKRW(cash.deposit_krw)} · 달러 {formatUSD(cash.deposit_usd)}{preview.costs[id]?.balance>0 && ` · 달러 평균 취득환율 ${(preview.costs[id].cost/preview.costs[id].balance).toFixed(4)}`}</p>)}
+        </div>
         {preview.errors.map(error=><p role="alert" key={error}>{error}</p>)}
-        <label><input type="checkbox" disabled={saving || disabled} checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} />계좌·날짜·순서·금액과 예상 잔고를 확인했습니다.</label>
-        <button type="button" className="btn btn-primary" disabled={saving || disabled || !confirmed || (!pendingPayload && !ready)} onClick={save}>{saving?'반영 중…':pendingPayload?'동일 요청의 저장 결과 다시 확인':`확인한 알림 ${rows.length}건 장부에 일괄 반영`}</button>
+        <div className="history-confirm-footer"><label className="history-check"><input type="checkbox" disabled={saving || disabled} checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} />계좌·날짜·순서·금액과 예상 잔고를 확인했습니다.</label>
+        <button type="button" className="btn btn-primary" disabled={saving || disabled || !confirmed || (!pendingPayload && !ready)} onClick={save}>{saving?'반영 중…':pendingPayload?'동일 요청의 저장 결과 다시 확인':`확인한 알림 ${rows.length}건 장부에 일괄 반영`}</button></div>
         {!pendingPayload && !ready && <p>위의 확인 항목을 해결하고 최종 확인을 체크하면 반영할 수 있습니다.</p>}
       </>}
       {loading && <p>기존 기록·계좌 잔고 확인 중…</p>}
@@ -130,7 +138,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
       {pendingPayload && <p role="alert">저장 결과가 확정될 때까지 목록을 수정하지 않습니다. 같은 요청으로 다시 확인하면 중복 반영하지 않습니다.</p>}
       {storageError && <p role="alert">임시 저장을 사용할 수 없습니다. 저장 결과 확인 전에는 이 화면을 닫지 마세요.</p>}
       {message && <p role="status">{message}</p>}
-      <details><summary>알림 반영 이력·묶음 취소</summary>{batches.map(batch=><p key={batch.id}>{new Date(batch.created_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})} · {batch.result.items?.length || 0}건 {batch.reversed_at?'(취소됨)':<button type="button" className="btn btn-secondary btn-sm" disabled={saving} onClick={()=>undo(batch.id)}>이 묶음 취소</button>}</p>)}</details>
+      {!focused && <details><summary>알림 반영 이력·묶음 취소</summary>{batches.map(batch=><p key={batch.id}>{new Date(batch.created_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})} · {batch.result.items?.length || 0}건 {batch.reversed_at?'(취소됨)':<button type="button" className="btn btn-secondary btn-sm" disabled={saving} onClick={()=>undo(batch.id)}>이 묶음 취소</button>}</p>)}</details>}
       <details><summary>지원 범위·기록 안내</summary><p>국내 매수 전량 체결, 원화 입금, USD 외화매수 알림을 지원합니다. 출금·부분 체결·달러 매도 환전은 직접 입력해주세요. 연도가 없는 알림은 화면의 체결 날짜 연도로 해석하므로 과거 알림은 적용 날짜를 확인하세요. 등록 전 목록은 이 기기에 30일간 임시 저장됩니다. 환전 원가는 실제 원화 지출액으로 계산하고 고시환율도 보존합니다. 한 묶음에서 오류가 나면 전부 반영하지 않습니다.</p></details>
     </div>}
   </section>;

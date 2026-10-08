@@ -1,5 +1,5 @@
 /** TradeBatchForm: presentation only; state and API actions stay in the parent. */
-import React from 'react';
+import React,{useState} from 'react';
 import { Plus, Save } from 'lucide-react';
 import { formatKRW, formatUSD } from '../../utils/formatters';
 
@@ -22,13 +22,17 @@ export default function TradeBatchForm({
   handleSaveBatchTrades,
   savingBatch,
   usdLedgers = [],
+  focused=false,
 }) {
+  const [direction,setDirection]=useState('BUY');
+  const pendingBuys=buyRows.filter(r=>r.assetId || r.quantity>0);
+  const pendingSells=sellRows.filter(r=>r.assetId || r.quantity>0);
   return (
     <>
       {/* 2. Batch Trade Input Form */}
-      <div className="section-card">
+      <div className={`section-card ${focused?'history-focused':''}`}>
         <div className="section-title">
-          <span>📝 실제 매매 기록 (일괄 입력)</span>
+          <span>{focused?'매매 직접 입력':'📝 실제 매매 기록 (일괄 입력)'}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>체결 일자:</span>
             <input
@@ -44,9 +48,10 @@ export default function TradeBatchForm({
         </div>
 
         {buyRows.some(r => r.importSource) && <p>가져온 거래는 선택한 체결일에 고정됩니다. 날짜를 바꾸려면 가져온 행을 먼저 삭제해주세요.</p>}
-        <div className="trade-forms-grid" inert={savingBatch || undefined}>
+        {focused && <div className="history-inline-choice"><button type="button" aria-pressed={direction==='BUY'} disabled={savingBatch} onClick={()=>setDirection('BUY')}>매수 입력</button><button type="button" aria-pressed={direction==='SELL'} disabled={savingBatch} onClick={()=>setDirection('SELL')}>매도 입력</button><span className="history-muted">매수·매도 대기 행은 함께 저장됩니다.</span></div>}
+        <div className={focused?'trade-forms-grid history-single-trade':'trade-forms-grid'} inert={savingBatch || undefined}>
           {/* 🔴 BUY Column */}
-          <div style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.2)' }}>
+          <div hidden={focused && direction!=='BUY'} style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.2)' }}>
             <h4 style={{ color: 'var(--color-profit)', fontWeight: 700, marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>🔴 매수 (Buy) 입력</span>
               <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>{buyRows.length}건</span>
@@ -225,7 +230,7 @@ export default function TradeBatchForm({
           </div>
 
           {/* 🔵 SELL Column */}
-          <div style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(96, 165, 250, 0.2)' }}>
+          <div hidden={focused && direction!=='SELL'} style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(96, 165, 250, 0.2)' }}>
             <h4 style={{ color: 'var(--color-loss)', fontWeight: 700, marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>🔵 매도 (Sell) 입력</span>
               <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>{sellRows.length}건</span>
@@ -415,12 +420,18 @@ export default function TradeBatchForm({
           </div>
         </div>
 
+        {focused && <details className="history-trade-preview"><summary>전체 반영 내역 확인 · 매수 {pendingBuys.length}건 / 매도 {pendingSells.length}건</summary>
+          {[...pendingBuys.map(r=>({...r,direction:'매수'})),...pendingSells.map(r=>({...r,direction:'매도'}))].map(r=>{
+            const asset=assets.find(a=>String(a.id)===String(r.assetId));
+            return <p key={r.direction+r.id}>{r.direction} · {accounts.find(a=>String(a.id)===String(r.accountId))?.account_alias || '계좌 확인 필요'} · {asset?.name || '종목 확인 필요'} · {r.quantity}주 × {asset?.market==='US'?formatUSD(r.price):formatKRW(r.price)}</p>;
+          })}
+        </details>}
         {/* Batch Save Button */}
         <button
           className="btn btn-primary btn-block"
           style={{ padding: '12px', fontSize: '1rem' }}
           onClick={handleSaveBatchTrades}
-          disabled={savingBatch}
+          disabled={savingBatch || (focused && pendingBuys.length+pendingSells.length===0)}
         >
           <Save size={18} />
           {savingBatch ? '일괄 매매 저장 중...' : '💾 위 내역 전체 일괄 저장'}

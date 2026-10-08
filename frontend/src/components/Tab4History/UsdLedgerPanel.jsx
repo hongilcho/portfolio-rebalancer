@@ -9,8 +9,8 @@ const names = { OPENING: '시작 기준 등록', EXCHANGE_IN: '원화 → 달러
 const localNow = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 16);
 const rateText = rate => Number(rate || 0).toLocaleString('ko-KR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
-export default function UsdLedgerPanel({ accounts, assets, ledgers, onChanged, portfolioId }) {
-  const [open, setOpen] = useState(false);
+export default function UsdLedgerPanel({ accounts, assets, ledgers, onChanged, portfolioId, focused=false,active=true,onBusyChange }) {
+  const [open, setOpen] = useState(focused);
   const [accountId, setAccountId] = useState(String(accounts.find(a => Number(a.deposit_usd) > 0)?.id || accounts[0]?.id || ''));
   const [kind, setKind] = useState('EXCHANGE_IN');
   const [occurredAt, setOccurredAt] = useState(localNow);
@@ -23,6 +23,7 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, onChanged, p
   const [eventsLoading, setEventsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  useEffect(()=>{onBusyChange?.(saving);},[saving,onBusyChange]);
   const { accounts: scopedAccounts, account } = resolveUsdAccount(accounts, accountId, portfolioId);
   const activeAccountId = String(account?.id || '');
   const ledger = ledgers.find(s => String(s.account_id) === activeAccountId);
@@ -41,14 +42,14 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, onChanged, p
     let cancelled = false;
     setEvents([]);
     setEventsError('');
-    if (!open || !activeAccountId) { setEventsLoading(false); return; }
+    if (!open || !activeAccountId || focused || !active) { setEventsLoading(false); return; }
     setEventsLoading(true);
     api.getUsdEvents(activeAccountId).then(res => {
       if (!cancelled) setEvents(res.events);
     }).catch(error => { if (!cancelled) setEventsError(error.message); })
       .finally(() => { if (!cancelled) setEventsLoading(false); });
     return () => { cancelled = true; };
-  }, [open, activeAccountId, ledgers]);
+  }, [open, activeAccountId, ledgers,focused,active]);
 
   const submit = async e => {
     e.preventDefault();
@@ -77,10 +78,10 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, onChanged, p
     finally { setSaving(false); }
   };
 
-  return <section className="section-card">
-    <button type="button" className="btn btn-secondary" aria-expanded={open} onClick={() => setOpen(!open)}>
+  return <section className={`section-card ${focused?'history-focused':''}`}>
+    {focused?<div className="history-section-heading"><h3>달러 원가·환전 관리</h3><span className="history-muted">현재 잔고와 원가 기준</span></div>:<button type="button" className="btn btn-secondary" aria-expanded={open} onClick={() => setOpen(!open)}>
       💵 달러 원가·환전 관리 {open ? '접기' : '열기'}
-    </button>
+    </button>}
     {open && <div style={{ marginTop: 16 }}>
       <p style={{ color: 'var(--text-secondary)' }}>계좌별 시작 잔액과 기준환율을 등록하면 이후 달러 매수에 평균 취득환율을 자동 적용합니다. 기존 보유분의 원가는 유지합니다.</p>
       <label>계좌 <select className="input-select" value={activeAccountId} disabled={saving} onChange={e => { setAccountId(e.target.value); setUsd(''); setKrw(''); setRate(''); setNotes(''); setMessage(''); }}>
@@ -105,11 +106,11 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, onChanged, p
         {exchange && Number(usd) > 0 && <p>이번 환전환율: {(Number(krw) / Number(usd)).toFixed(4)}원/달러. 별도 비용이 있다면 실제 원화 총액에 포함해주세요.</p>}
         {effectiveKind === 'RECONCILE' && <p>현재 계좌 달러 전체의 확인한 평균 취득환율을 등록합니다. 현금 잔액과 종목 원가는 바꾸지 않습니다.</p>}
         {effectiveKind === 'DEPOSIT' && <p>실제 입금 달러 금액이 확인된 경우에만 등록하세요. 배당 추정값은 현금에 자동 반영하지 않습니다. 이미 잔고에 반영된 입금은 중복 등록하지 말고 잔고 대사를 이용하세요.</p>}
-        <p style={{ color: 'var(--text-secondary)' }}>같은 날짜는 등록 순서대로 계산합니다. 과거 기록을 고치려면 이후 기록부터 취소하세요. 계좌 간 달러 이동은 출금·입금 양쪽을 기록하고 원가 기준환율을 유지하세요.</p>
+        <details className="history-help"><summary>입력 방법·달러 이체 안내</summary><p style={{ color: 'var(--text-secondary)' }}>같은 날짜는 등록 순서대로 계산합니다. 과거 기록을 고치려면 이후 기록부터 취소하세요. 계좌 간 달러 이동은 출금·입금 양쪽을 기록하고 원가 기준환율을 유지하세요.</p></details>
         <button className="btn btn-primary" type="submit" disabled={saving || !activeAccountId || (ledger?.needs_reconciliation && kind !== 'RECONCILE')}>{saving ? '저장 중…' : names[effectiveKind]}</button>
       </form>
       {message && <p role="status">{message}</p>}
-      {eventsError && <p role="alert">기록 조회 실패: {eventsError}</p>}
+      {!focused && <>{eventsError && <p role="alert">기록 조회 실패: {eventsError}</p>}
       {eventsLoading ? <p>기록 조회 중…</p> : <>
         <button className="btn btn-secondary" type="button" disabled={saving || !latest || ledger?.needs_reconciliation} onClick={undo}>가장 최근 기록 취소</button>
         <div className="table-container" style={{ marginTop: 12 }}><table className="custom-table"><thead><tr><th>일시</th><th>종류·종목</th><th>달러</th><th>원화 기준금액</th><th>적용환율</th><th>처리 후 달러·평균환율</th><th>메모</th></tr></thead><tbody>
@@ -118,7 +119,7 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, onChanged, p
             <td>{formatUSD(event.usd_amount)}</td><td>{formatKRW(event.krw_amount)}</td><td>{rateText(event.fx_rate)}</td><td>{formatUSD(event.after_state.usd_balance)} · {rateText(Number(event.after_state.usd_balance) > 0 ? Number(event.after_state.cost_krw) / Number(event.after_state.usd_balance) : 0)}</td><td>{event.notes}</td>
           </tr>)}
         </tbody></table></div>
-      </>}
+      </>}</>}
     </div>}
   </section>;
 }

@@ -1,0 +1,3 @@
+import {formatKRW,formatUSD} from './formatters.js';
+export function recentMonths(day,months=3){const d=new Date(day+'T00:00:00Z');const wantedDay=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()-months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(wantedDay,last));return d.toISOString().slice(0,10);}
+export function recordAmount(item){const d=item.detail || {};if(item.kind==='EXCHANGE_IN')return `${formatKRW(Number(d.krw_amount))} → ${formatUSD(Number(item.amount))}`;if(item.kind==='EXCHANGE_OUT')return `${formatUSD(Number(item.amount))} → ${formatKRW(Number(d.krw_amount))}`;return item.currency==='USD'?formatUSD(Number(item.amount)):formatKRW(Number(item.amount));}
