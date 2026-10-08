@@ -10,15 +10,17 @@ const dayOf = (year,month,day) => `${year}-${String(month).padStart(2,'0')}-${St
 export function parseNhNotifications(text,anchor) {
   return normalized(text).split(/(?=\[NH투자증권\])/).map(s=>s.replace(/^\s*[-─]{3,}\s*$/gm,'').trim()).filter(Boolean).map(raw=>{
     const common={raw,eventDate:anchor,occurredAt:null,external:true,applyCash:true,duplicateConfirmed:false,accountId:'',assetId:'',accountMask:'',errors:[]};
-    if (/^\[NH투자증권\]\s*입금안내/.test(raw)) {
+    if (/^\[NH투자증권\]\s*(입금|출금)안내/.test(raw)) {
+      const kind=/^\[NH투자증권\]\s*출금안내/.test(raw)?'WITHDRAW':'DEPOSIT';
       const stamp=raw.match(/\[(\d{1,2})\/(\d{1,2})\s+(\d{2}):(\d{2})\]/);
       const eventDate=stamp?dayOf(anchor.slice(0,4),stamp[1],stamp[2]):anchor;
       const krwAmount=amount(raw.match(/^\s*금액\s+([\d,.]+)\s*원\s*$/m)?.[1]);
       const accountMask=(raw.match(/^\s*계좌번호\s*:?[ \t]*([0-9*-]+)\s*$/m)?.[1] || '').replaceAll('-','');
       const errors=[];
-      if (!Number.isFinite(krwAmount) || krwAmount<=0) errors.push('입금 원화 금액을 확인해주세요.');
-      if (!stamp || !validNoticeDate(eventDate) || Number(stamp[3])>23 || Number(stamp[4])>59) errors.push('입금 날짜·시각을 읽지 못했습니다. 직접 입력으로 확인해주세요.');
-      return {...common,kind:'DEPOSIT',krwAmount,accountMask,eventDate,messageMonthDay:eventDate.slice(5),
+      if (!Number.isFinite(krwAmount) || krwAmount<=0) errors.push('입출금 원화 금액을 확인해주세요.');
+      if (!stamp || !validNoticeDate(eventDate) || Number(stamp[3])>23 || Number(stamp[4])>59) errors.push('입출금 날짜·시각을 읽지 못했습니다. 직접 입력으로 확인해주세요.');
+      return {...common,kind,krwAmount,accountMask,eventDate,messageMonthDay:eventDate.slice(5),
+        reportedAvailableKrw:kind==='WITHDRAW'?amount(field(raw,'출금가능금액').replace(/\s*원$/,'')):null,
         occurredAt:stamp?`${eventDate}T${stamp[3]}:${stamp[4]}:00+09:00`:null,errors};
     }
     if (/^\[NH투자증권\]\s*환전내역 안내/.test(raw)) {
@@ -52,14 +54,20 @@ export function resolveNhNotice(parsed,accounts,assets,pid,previous=[]) {
   return resolved;
 }
 
-export function flowCandidates(row,context) {
-  return (context?.flows || []).filter(f=>!f.voided && String(f.account_id)===row.accountId && f.currency==='KRW'
-    && Number(f.amount_krw)===row.krwAmount);
+export const isCashNotice=row=>['DEPOSIT','WITHDRAW'].includes(row.kind);
+export const peerAccount=row=>row.kind==='DEPOSIT'?row.sourceAccountId:row.destinationAccountId;
+export const cashSign=row=>row.kind==='WITHDRAW'?-1:1;
+export function flowCandidates(row,context,counterparty=false) {
+  const aid=counterparty?peerAccount(row):row.accountId;
+  const signed=row.krwAmount*cashSign(row)*(counterparty?-1:1);
+  return ((counterparty?context?.transfer_flows:context?.flows) || []).filter(f=>!f.voided && String(f.account_id)===aid && f.currency==='KRW'
+    && Number(f.amount_krw)===signed && (!f.event_date || f.event_date===row.eventDate));
 }
-export function chosenFlow(row,context) {
-  if (!row.external) return null;
-  if (row.flowId!==undefined) return row.flowId==='NEW'?null:row.flowId;
-  const matches=flowCandidates(row,context);
+export function chosenFlow(row,context,counterparty=false) {
+  if (!row.external && !row.crossPortfolio) return null;
+  const explicit=counterparty?row.counterpartyFlowId:row.flowId;
+  if (explicit!==undefined) return explicit==='NEW'?null:explicit;
+  const matches=flowCandidates(row,context,counterparty);
   return matches.length===1?matches[0].id:matches.length?'':null;
 }
 
@@ -76,12 +84,23 @@ export function validateNhNotice(row,context,accounts,assets,pid,pending,earlier
     errors.push(...check.errors);
     duplicate=check.manualDuplicate;
     if (earlier.some(r=>r.kind==='BUY' && r.accountId===row.accountId && r.eventDate===row.eventDate && r.brokerOrderNo===row.brokerOrderNo)) errors.push('목록에 같은 주문번호가 있습니다.');
-  } else if (row.kind==='DEPOSIT') {
-    if (!row.external && (!scoped.some(a=>String(a.id)===row.sourceAccountId) || row.sourceAccountId===row.accountId || !row.applyCash)) errors.push('내부 이체의 출금 계좌를 선택해주세요.');
-    const matches=flowCandidates(row,context),flow=chosenFlow(row,context);
-    if (flow==='') errors.push('연결할 기존 입금 기록을 선택해주세요.');
-    if (flow && matches.find(f=>f.id===flow)?.cash_handled) errors.push('이 입금은 이미 예수금 반영 여부를 처리했습니다.');
-    if (!flow && matches.length && row.external) duplicate=true;
+  } else if (isCashNotice(row)) {
+    const all=context?.transfer_accounts || accounts;
+    const peer=all.find(a=>String(a.id)===peerAccount(row));
+    if (!row.external && (!peer || peerAccount(row)===row.accountId || Boolean(row.crossPortfolio)!==Boolean(peer?.portfolio_id && String(peer.portfolio_id)!==String(pid)))) errors.push('이체 구분에 맞는 상대 계좌를 선택해주세요.');
+    for (const counterparty of row.crossPortfolio?[false,true]:[false]) {
+      const matches=flowCandidates(row,context,counterparty),flow=chosenFlow(row,context,counterparty);
+      if (flow==='') errors.push('연결할 기존 입출금 기록을 선택해주세요.');
+      if (flow && matches.find(f=>f.id===flow)?.cash_handled) errors.push('이 입출금은 이미 예수금 반영 여부를 처리했습니다.');
+      if (!flow && matches.length && (row.external || row.crossPortfolio)) duplicate=true;
+    }
+    const touched=[row.accountId,...(!row.external?[peerAccount(row)]:[])];
+    if (row.applyCash && touched.some(aid=>{
+      const account=all.find(a=>String(a.id)===aid);
+      const t=context?.trackings?.[account?.portfolio_id || pid];
+      return t && row.eventDate<t.baseline_date;
+    })) errors.push('성과 기준일 이전 거래는 잔고에 이미 반영됨 · 기록만 저장으로 등록해주세요.');
+    if (row.crossPortfolio && (context?.notices || []).some(n=>n.payload?.transfer && n.payload.peer_account_id===peerAccount(row) && Number(n.payload.krw_amount)===row.krwAmount)) duplicate=true;
   } else if (row.kind==='EXCHANGE_IN') {
     duplicate=(context?.exchanges || []).some(e=>String(e.account_id)===row.accountId && Number(e.usd_amount)===row.usdAmount && Number(e.krw_amount)===row.krwAmount);
   }
@@ -94,18 +113,19 @@ export function validateNhNotice(row,context,accounts,assets,pid,pending,earlier
 export function noticeApiRow(row,context) {
   const occurrence=row.occurredAt ? row.eventDate+row.occurredAt.slice(10):null;
   return {kind:row.kind,account_id:row.accountId,event_date:row.eventDate,occurred_at:occurrence,
-    source_account_id:row.sourceAccountId || null,external:row.external,apply_cash:row.applyCash,
-    existing_flow_id:row.kind==='DEPOSIT'?chosenFlow(row,context):null,duplicate_confirmed:Boolean(row.duplicateConfirmed),
+    source_account_id:row.sourceAccountId || null,destination_account_id:row.destinationAccountId || null,cross_portfolio:Boolean(row.crossPortfolio),counterparty_flow_id:row.crossPortfolio?chosenFlow(row,context,true):null,external:row.external,apply_cash:row.applyCash,
+    existing_flow_id:isCashNotice(row)?chosenFlow(row,context):null,duplicate_confirmed:Boolean(row.duplicateConfirmed),
     fingerprint:row.fingerprint,asset_id:row.assetId || '',quantity:row.quantity || 0,price:row.price || 0,
-    broker_order_no:row.brokerOrderNo || '',krw_amount:row.krwAmount || 0,usd_amount:row.usdAmount || 0,quoted_rate:row.quotedRate || 0};
+    reported_available_krw:Number.isFinite(row.reportedAvailableKrw)?row.reportedAvailableKrw:null,broker_order_no:row.brokerOrderNo || '',krw_amount:row.krwAmount || 0,usd_amount:row.usdAmount || 0,quoted_rate:row.quotedRate || 0};
 }
 
 export function previewNhNotices(rows,contexts,ledgers=[]) {
   const expected={},balances={},costs={},errors=[];
   for (const row of rows) {
-    for (const aid of [row.accountId,...(!row.external && row.sourceAccountId?[row.sourceAccountId]:[])].filter(Boolean)) {
+    for (const aid of [row.accountId,...(!row.external && peerAccount(row)?[peerAccount(row)]:[])].filter(Boolean)) {
       if (balances[aid]) continue;
-      const acc=contexts[row.eventDate]?.accounts.find(a=>String(a.id)===aid);
+      const ctx=contexts[row.eventDate];
+      const acc=[...(ctx?.accounts || []),...(ctx?.transfer_accounts || [])].find(a=>String(a.id)===aid);
       if (!acc) {errors.push('계좌 잔고 조회를 기다려주세요.');continue;}
       expected[aid]={deposit_krw:Number(acc.deposit_krw),deposit_usd:Number(acc.deposit_usd)};
       balances[aid]={...expected[aid]};
@@ -116,9 +136,9 @@ export function previewNhNotices(rows,contexts,ledgers=[]) {
     if (!cash) continue;
     if (row.errors?.length) continue;
     if (row.kind==='BUY') cash.deposit_krw-=row.quantity*row.price;
-    if (row.kind==='DEPOSIT' && row.applyCash) {
-      cash.deposit_krw+=row.krwAmount;
-      if (!row.external && balances[row.sourceAccountId]) balances[row.sourceAccountId].deposit_krw-=row.krwAmount;
+    if (isCashNotice(row) && row.applyCash) {
+      cash.deposit_krw+=cashSign(row)*row.krwAmount;
+      if (!row.external && balances[peerAccount(row)]) balances[peerAccount(row)].deposit_krw-=cashSign(row)*row.krwAmount;
     }
     if (row.kind==='EXCHANGE_IN') {
       const cost=costs[row.accountId];
@@ -128,7 +148,7 @@ export function previewNhNotices(rows,contexts,ledgers=[]) {
       else {cost.balance+=row.usdAmount;cost.cost+=row.krwAmount;cost.lastDate=row.eventDate;}
       cash.deposit_krw-=row.krwAmount;cash.deposit_usd+=row.usdAmount;
     }
-    if (Object.values(balances).some(b=>b.deposit_krw < -0.000001)) errors.push('처리 순서상 원화가 부족합니다. 입금 알림을 먼저 배치하거나 원화 잔고를 확인해주세요.');
+    if ([row.accountId,...(!row.external?[peerAccount(row)]:[])].some(aid=>balances[aid]?.deposit_krw < -0.000001) && !(isCashNotice(row) && !row.applyCash)) errors.push('처리 순서상 원화가 부족합니다. 입금 알림을 먼저 배치하거나 원화 잔고를 확인해주세요.');
   }
   return {expected,balances,costs,errors:[...new Set(errors)]};
 }
@@ -137,7 +157,7 @@ const key=pid=>`nh-notice-draft/v1/${pid}`;
 export function readNoticeDraft(pid,storage) {
   try {
     const data=JSON.parse((storage || globalThis.localStorage).getItem(key(pid)));
-    if (data && Date.now()-data.savedAt < 30*86400000 && data.rows?.length<=50 && data.rows.every(r=>r && ['BUY','DEPOSIT','EXCHANGE_IN'].includes(r.kind) && typeof r.id==='string' && validNoticeDate(r.eventDate) && typeof r.accountId==='string' && Array.isArray(r.errors))) return data;
+    if (data && Date.now()-data.savedAt < 30*86400000 && data.rows?.length<=50 && data.rows.every(r=>r && ['BUY','DEPOSIT','WITHDRAW','EXCHANGE_IN'].includes(r.kind) && typeof r.id==='string' && validNoticeDate(r.eventDate) && typeof r.accountId==='string' && Array.isArray(r.errors))) return data;
   } catch { /* optional local drafts */ }
   return null;
 }

@@ -29,53 +29,90 @@ def checkpoint(c, accounts):
     return plain(result)
 
 
-def lock_scope(c, pid, ids):
-    c.execute('SELECT id FROM portfolios WHERE id=%s FOR UPDATE', (pid,))
-    if not c.fetchone(): raise ValueError('포트폴리오를 찾을 수 없습니다.')
-    c.execute('SELECT * FROM performance_tracking WHERE portfolio_id=%s FOR UPDATE', (pid,))
-    track = c.fetchone()
+def lock_scope(c, pid, ids, peers=()):
+    owners = {}
+    for aid in ids:
+        c.execute('SELECT portfolio_id FROM accounts WHERE id=%s', (aid,))
+        account = c.fetchone()
+        if not account or (aid not in peers and account['portfolio_id'] != pid):
+            raise ValueError('현재 포트폴리오의 계좌를 선택해주세요.')
+        owners[aid] = account['portfolio_id']
+    tracks = {}
+    # Both portfolios use the same lock order, including opposite-direction transfers.
+    for owner in sorted(set(owners.values()) | {pid}):
+        c.execute('SELECT id FROM portfolios WHERE id=%s FOR UPDATE', (owner,))
+        if not c.fetchone(): raise ValueError('포트폴리오를 찾을 수 없습니다.')
+        c.execute('SELECT * FROM performance_tracking WHERE portfolio_id=%s FOR UPDATE', (owner,))
+        tracks[owner] = c.fetchone()
     for aid in sorted(ids):
-        c.execute('SELECT id FROM accounts WHERE id=%s AND portfolio_id=%s FOR UPDATE', (aid,pid))
-        if not c.fetchone(): raise ValueError('현재 포트폴리오의 계좌를 선택해주세요.')
-    return track
+        c.execute('SELECT id FROM accounts WHERE id=%s AND portfolio_id=%s FOR UPDATE', (aid,owners[aid]))
+        if not c.fetchone(): raise ValueError('계좌 소속이 변경되었습니다. 다시 확인해주세요.')
+    return tracks, owners
 
 
-def deposit(db,c,pid,row,track):
-    amount = positive(row['krw_amount'])
+def cash_flow(db, c, pid, aid, day, signed, track, existing, duplicate, notes):
+    # Historical bookkeeping remains visible, but must not alter post-baseline returns.
+    if not track or day < track['baseline_date']:
+        if existing: raise ValueError('성과 기준일 이전 기록에는 성과 입출금을 연결할 수 없습니다.')
+        return dict(flow_id=None,created_flow=False,flow_portfolio_id=pid)
+    c.execute('''SELECT id FROM performance_flows WHERE portfolio_id=%s AND account_id=%s
+        AND event_date=%s AND currency='KRW' AND amount_krw=%s AND NOT voided''', (pid,aid,day,signed))
+    matches = [r['id'] for r in c.fetchall()]
+    if existing:
+        if existing not in matches: raise ValueError('연결할 기존 입출금 기록의 계좌·날짜·금액을 확인해주세요.')
+        c.execute('SELECT id FROM nh_notice_items WHERE performance_flow_id=%s AND reversed_at IS NULL', (existing,))
+        if c.fetchone(): raise ValueError('이 입출금 기록은 이미 예수금 반영 여부를 처리했습니다.')
+        return dict(flow_id=existing,created_flow=False,flow_portfolio_id=pid)
+    if matches and not duplicate:
+        raise ValueError('같은 입출금 기록이 있습니다. 기존 기록을 연결하거나 별도 거래임을 확인해주세요.')
+    ident = db.new_id()
+    c.execute('''INSERT INTO performance_flows(id,portfolio_id,account_id,request_id,event_date,
+        amount_krw,currency,native_amount,exchange_rate,notes)
+        VALUES(%s,%s,%s,%s,%s,%s,'KRW',%s,1,%s)''', (ident,pid,aid,db.new_id(),day,signed,abs(signed),notes))
+    c.execute('UPDATE performance_tracking SET revision=revision+1 WHERE portfolio_id=%s', (pid,))
+    return dict(flow_id=ident,created_flow=True,flow_portfolio_id=pid)
+
+
+def cash_notice(db, c, pid, row, tracks, owners):
+    aid = row['account_id']
     day = date.fromisoformat(row['event_date'])
-    flow_id, created = row.get('existing_flow_id'), False
-    if row['external']:
-        if not track or day < track['baseline_date']:
-            raise ValueError('6번 탭에서 시작 기준을 등록하고 기준일 이후의 입금을 기록해주세요.')
-        c.execute('''SELECT id FROM performance_flows WHERE portfolio_id=%s AND account_id=%s
-            AND event_date=%s AND currency='KRW' AND amount_krw=%s AND NOT voided''', (pid,row['account_id'],day,amount))
-        matches = [r['id'] for r in c.fetchall()]
-        if flow_id:
-            if flow_id not in matches: raise ValueError('연결할 기존 입금 기록의 계좌·날짜·금액을 확인해주세요.')
-            c.execute('SELECT id FROM nh_notice_items WHERE performance_flow_id=%s AND reversed_at IS NULL', (flow_id,))
-            if c.fetchone(): raise ValueError('이 입금 기록은 이미 예수금 반영 여부를 처리했습니다.')
-        else:
-            if matches and not row['duplicate_confirmed']:
-                raise ValueError('같은 입금 기록이 있습니다. 기존 기록을 연결하거나 별도 입금임을 확인해주세요.')
-            flow_id, created = db.new_id(), True
-            c.execute('''INSERT INTO performance_flows(id,portfolio_id,account_id,request_id,event_date,
-                amount_krw,currency,native_amount,exchange_rate,notes)
-                VALUES(%s,%s,%s,%s,%s,%s,'KRW',%s,1,%s)''',
-                (flow_id,pid,row['account_id'],db.new_id(),day,amount,amount,row.get('notes') or 'NH 입금 알림 확인'))
-            c.execute('UPDATE performance_tracking SET revision=revision+1 WHERE portfolio_id=%s', (pid,))
-    elif flow_id:
-        raise ValueError('내부 이체에는 외부 입금 기록을 연결할 수 없습니다.')
-    delta = amount if row['apply_cash'] else number(0)
-    source = row.get('source_account_id')
-    if not row['external']:
-        if not source or source == row['account_id'] or not row['apply_cash']:
-            raise ValueError('내부 이체의 출금 계좌를 선택해주세요.')
-        c.execute('SELECT deposit_krw FROM accounts WHERE id=%s', (source,))
-        if number(c.fetchone()['deposit_krw'] or 0) < amount: raise ValueError('내부 이체의 출금 계좌 원화가 부족합니다.')
-        c.execute('UPDATE accounts SET deposit_krw=deposit_krw-%s WHERE id=%s', (amount,source))
-    if delta:
-        c.execute('UPDATE accounts SET deposit_krw=deposit_krw+%s WHERE id=%s', (delta,row['account_id']))
-    return dict(flow_id=flow_id,created_flow=created,delta_krw=str(delta),delta_usd='0')
+    amount = positive(row['krw_amount'])
+    signed = amount if row['kind']=='DEPOSIT' else -amount
+    peer = row.get('source_account_id') if row['kind']=='DEPOSIT' else row.get('destination_account_id')
+    transfer = not row['external']
+    if transfer:
+        if not peer or peer==aid: raise ValueError('이체 상대 계좌를 선택해주세요.')
+        cross = owners[peer]!=pid
+        if cross and not row['duplicate_confirmed']:
+            c.execute('''SELECT id FROM nh_notice_items WHERE portfolio_id=%s AND account_id=%s AND event_date=%s
+                AND payload->>'peer_account_id'=%s AND CAST(payload->>'krw_amount' AS NUMERIC)=%s AND reversed_at IS NULL''',
+                (pid,aid,day,peer,amount))
+            if c.fetchone(): raise ValueError('같은 계좌 간 이체가 이미 반영되어 있습니다. 입금·출금 알림을 각각 등록하지 마세요.')
+        if cross != bool(row.get('cross_portfolio')): raise ValueError('이체 구분과 상대 계좌의 포트폴리오를 확인해주세요.')
+    else:
+        if peer or row.get('cross_portfolio') or row.get('counterparty_flow_id'):
+            raise ValueError('외부 입출금에는 이체 상대 계좌를 지정할 수 없습니다.')
+        cross = False
+    entries = [(aid,pid,signed,row.get('existing_flow_id'))]
+    if transfer: entries.append((peer,owners[peer],-signed,row.get('counterparty_flow_id')))
+    if transfer and not cross and any(e[3] for e in entries):
+        raise ValueError('내부 이체에는 외부 입출금 기록을 연결할 수 없습니다.')
+    result_entries = []
+    for account,owner,delta,existing in entries:
+        track = tracks[owner]
+        if row['apply_cash'] and track and day < track['baseline_date']:
+            raise ValueError('성과 기준일 이전 거래는 잔고에 이미 반영됨 · 기록만 저장으로 등록해주세요.')
+        flow = cash_flow(db,c,owner,account,day,delta,track,existing,row['duplicate_confirmed'],
+            row.get('notes') or ('포트폴리오 간 원화 이체' if cross else 'NH 입출금 알림 확인')) if (not transfer or cross) else dict(flow_id=None,created_flow=False)
+        applied = delta if row['apply_cash'] else number(0)
+        if applied:
+            c.execute('SELECT deposit_krw FROM accounts WHERE id=%s', (account,))
+            if number(c.fetchone()['deposit_krw'] or 0)+applied < 0:
+                raise ValueError('출금 계좌의 원화 예수금이 부족합니다. 이미 반영된 거래인지 확인해주세요.')
+            c.execute('UPDATE accounts SET deposit_krw=deposit_krw+%s WHERE id=%s', (applied,account))
+        result_entries.append(dict(account_id=account,portfolio_id=owner,kind='DEPOSIT' if delta>0 else 'WITHDRAW',
+                                   result=dict(**flow,delta_krw=str(applied),delta_usd='0')))
+    return result_entries if cross else result_entries[:1]
 
 
 def exchange(db,c,row):
@@ -107,12 +144,21 @@ def commit(db,pid,payload):
     try:
         c = conn.cursor(cursor_factory=RealDictCursor)
         rows = payload['rows']
-        ids = sorted({r['account_id'] for r in rows} | {r['source_account_id'] for r in rows if r.get('source_account_id')})
-        track = lock_scope(c,pid,ids)
+        peers = {r.get('source_account_id') if r['kind']=='DEPOSIT' else r.get('destination_account_id') for r in rows if r['kind'] in ('DEPOSIT','WITHDRAW') and not r['external']} - {None,''}
+        primary = {r['account_id'] for r in rows}
+        ids = sorted(primary | peers)
+        for aid in primary:
+            c.execute('SELECT id FROM accounts WHERE id=%s AND portfolio_id=%s', (aid,pid))
+            if not c.fetchone(): raise ValueError('현재 포트폴리오의 계좌를 선택해주세요.')
+        tracks,owners = lock_scope(c,pid,ids,peers)
         c.execute('SELECT * FROM nh_notice_batches WHERE portfolio_id=%s AND request_id=%s', (pid,payload['request_id']))
         existing = c.fetchone()
         if existing:
-            if existing['payload'] != payload: raise ValueError('같은 저장 요청의 내용이 바뀌었습니다. 기존 저장 결과를 먼저 확인해주세요.')
+            prior=plain(existing['payload'])
+            for old_row in prior['rows']:
+                for key,value in dict(destination_account_id=None,cross_portfolio=False,counterparty_flow_id=None,reported_available_krw=None).items():
+                    old_row.setdefault(key,value)
+            if prior != payload: raise ValueError('같은 저장 요청의 내용이 바뀌었습니다. 기존 저장 결과를 먼저 확인해주세요.')
             if existing['reversed_at']: raise ValueError('취소된 요청입니다. 새 알림 목록으로 다시 확인해주세요.')
             conn.rollback()
             return existing['result']
@@ -136,8 +182,10 @@ def commit(db,pid,payload):
                 c.execute('SELECT id FROM nh_notice_items WHERE portfolio_id=%s AND account_id=%s AND event_date=%s AND fingerprint=%s AND reversed_at IS NULL',
                           (pid,row['account_id'],day,row['fingerprint']))
                 if c.fetchone() and not row['duplicate_confirmed']: raise ValueError('이미 반영한 알림입니다. 별도 거래인지 확인해주세요.')
-            if row['kind']=='DEPOSIT':
-                result=deposit(db,c,pid,row,track)
+            cash_entries = None
+            if row['kind'] in ('DEPOSIT','WITHDRAW'):
+                cash_entries=cash_notice(db,c,pid,row,tracks,owners)
+                result=cash_entries[0]['result']
             elif row['kind']=='EXCHANGE_IN':
                 c.execute("SELECT id FROM usd_cash_events WHERE account_id=%s AND event_date=%s AND kind='EXCHANGE_IN' AND usd_amount=%s AND krw_amount=%s AND reversed_at IS NULL",
                           (row['account_id'],day,row['usd_amount'],row['krw_amount']))
@@ -156,13 +204,22 @@ def commit(db,pid,payload):
                 old=number(c.fetchone()['deposit_krw'] or 0)
                 c.execute('UPDATE accounts SET deposit_krw=%s WHERE id=%s', (value,row['account_id']))
                 result=dict(delta_krw=str(value-old),delta_usd='0')
-            item_id=db.new_id()
-            c.execute('''INSERT INTO nh_notice_items(id,batch_id,portfolio_id,account_id,event_date,kind,fingerprint,payload,result,performance_flow_id,linked_trade_id,linked_usd_event_id)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
-                (item_id,batch_id,pid,row['account_id'],day,row['kind'],row['fingerprint'],Json(row),Json(result),result.get('flow_id'),result.get('trade_id'),result.get('usd_event_id')))
-            results.append(dict(id=item_id,kind=row['kind'],account_id=row['account_id'],**result))
+            entries=cash_entries or [dict(account_id=row['account_id'],portfolio_id=pid,kind=row['kind'],result=result)]
+            for entry in entries:
+                item_id=db.new_id()
+                stored_row=dict(row,account_id=entry['account_id'],kind=entry['kind'])
+                if len(entries)>1:
+                    other=next(e for e in entries if e['account_id']!=entry['account_id'])
+                    stored_row.update(transfer=True,peer_account_id=other['account_id'],
+                        source_account_id=other['account_id'] if entry['kind']=='DEPOSIT' else None,
+                        destination_account_id=other['account_id'] if entry['kind']=='WITHDRAW' else None)
+                entry_result=entry['result']
+                c.execute('''INSERT INTO nh_notice_items(id,batch_id,portfolio_id,account_id,event_date,kind,fingerprint,payload,result,performance_flow_id,linked_trade_id,linked_usd_event_id)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
+                    (item_id,batch_id,entry['portfolio_id'],entry['account_id'],day,entry['kind'],row['fingerprint'],Json(stored_row),Json(entry_result),entry_result.get('flow_id'),entry_result.get('trade_id'),entry_result.get('usd_event_id')))
+                results.append(dict(id=item_id,kind=entry['kind'],account_id=entry['account_id'],**entry_result))
         after=checkpoint(c,ids)
-        result=plain(dict(batch_id=batch_id,items=results,balances={aid:after[aid]['cash'] for aid in ids}))
+        result=plain(dict(batch_id=batch_id,notice_count=len(rows),affected_portfolios=sorted(tracks),performance_portfolios=sorted(p for p,t in tracks.items() if t),items=results,balances={aid:after[aid]['cash'] for aid in ids}))
         c.execute('UPDATE nh_notice_batches SET result=%s,audit=%s WHERE id=%s', (Json(result),Json(dict(before=before,after=after)),batch_id))
         conn.commit()
         db.invalidate()
@@ -178,11 +235,12 @@ def undo(db,pid,batch_id):
     conn=db.connect()
     try:
         c=conn.cursor(cursor_factory=RealDictCursor)
-        c.execute('SELECT * FROM nh_notice_batches WHERE id=%s AND portfolio_id=%s', (batch_id,pid))
+        c.execute('''SELECT * FROM nh_notice_batches b WHERE id=%s AND (portfolio_id=%s OR EXISTS(
+            SELECT 1 FROM nh_notice_items n WHERE n.batch_id=b.id AND n.portfolio_id=%s))''', (batch_id,pid,pid))
         batch=c.fetchone()
         if not batch: raise ValueError('반영 이력을 찾을 수 없습니다.')
         ids=sorted(batch['audit']['after'])
-        lock_scope(c,pid,ids)
+        tracks,_ = lock_scope(c,batch['portfolio_id'],ids,ids)
         c.execute('SELECT reversed_at FROM nh_notice_batches WHERE id=%s FOR UPDATE', (batch_id,))
         if c.fetchone()['reversed_at']:
             conn.rollback()
@@ -200,7 +258,7 @@ def undo(db,pid,batch_id):
                 forex.reverse_latest(c,item['account_id'],result['usd_event_id'])
             if result.get('created_flow'):
                 c.execute('UPDATE performance_flows SET voided=TRUE WHERE id=%s', (result['flow_id'],))
-                c.execute('UPDATE performance_tracking SET revision=revision+1 WHERE portfolio_id=%s', (pid,))
+                c.execute('UPDATE performance_tracking SET revision=revision+1 WHERE portfolio_id=%s', (result.get('flow_portfolio_id',pid),))
         for aid,old in batch['audit']['before'].items():
             c.execute('UPDATE accounts SET deposit_krw=%s,deposit_usd=%s WHERE id=%s', (old['cash']['deposit_krw'],old['cash']['deposit_usd'],aid))
             # Restore exact pre-import holdings, including legacy manually seeded costs.
@@ -216,7 +274,7 @@ def undo(db,pid,batch_id):
         c.execute('UPDATE nh_notice_items SET reversed_at=CURRENT_TIMESTAMP WHERE batch_id=%s', (batch_id,))
         c.execute('UPDATE nh_notice_batches SET reversed_at=CURRENT_TIMESTAMP WHERE id=%s', (batch_id,))
         conn.commit();db.invalidate()
-        return {'reversed':True}
+        return {'reversed':True,'affected_portfolios':sorted({r['portfolio_id'] for r in items}),'performance_portfolios':sorted(p for p,t in tracks.items() if t)}
     except Exception:
         conn.rollback();raise
     finally:
@@ -227,11 +285,17 @@ def read_context(db,pid,day):
     conn=db.connect()
     try:
         c=conn.cursor(cursor_factory=RealDictCursor)
+        c.execute('SELECT portfolio_id,baseline_date FROM performance_tracking')
+        trackings={r['portfolio_id']:r for r in c.fetchall()}
+        c.execute('''SELECT a.id,a.portfolio_id,a.account_alias,a.deposit_krw,a.deposit_usd,p.name AS portfolio_name
+            FROM accounts a JOIN portfolios p ON p.id=a.portfolio_id''')
+        transfer_accounts=c.fetchall()
         c.execute('SELECT id,deposit_krw,deposit_usd FROM accounts WHERE portfolio_id=%s', (pid,))
         accounts=c.fetchall()
         c.execute('''SELECT f.*,EXISTS(SELECT 1 FROM nh_notice_items n WHERE n.performance_flow_id=f.id AND n.reversed_at IS NULL) AS cash_handled
-            FROM performance_flows f WHERE portfolio_id=%s AND event_date=%s''', (pid,day))
-        flows=c.fetchall()
+            FROM performance_flows f WHERE event_date=%s''', (day,))
+        all_flows=c.fetchall()
+        flows=[f for f in all_flows if f['portfolio_id']==pid]
         c.execute('SELECT account_id,fingerprint,payload FROM nh_notice_items WHERE portfolio_id=%s AND event_date=%s AND reversed_at IS NULL', (pid,day))
         notices=c.fetchall()
         c.execute('''SELECT t.* FROM trade_history t JOIN accounts a ON a.id=t.account_id
@@ -239,7 +303,8 @@ def read_context(db,pid,day):
         saved_trades=c.fetchall()
         c.execute("SELECT e.account_id,e.usd_amount,e.krw_amount FROM usd_cash_events e JOIN accounts a ON a.id=e.account_id WHERE a.portfolio_id=%s AND e.event_date=%s AND e.kind='EXCHANGE_IN' AND e.reversed_at IS NULL",(pid,day))
         exchanges=c.fetchall()
-        c.execute('SELECT id,created_at,reversed_at,result FROM nh_notice_batches WHERE portfolio_id=%s ORDER BY created_at DESC LIMIT 10', (pid,))
-        return dict(accounts=accounts,flows=flows,notices=notices,trades=saved_trades,exchanges=exchanges,batches=c.fetchall())
+        c.execute('''SELECT id,created_at,reversed_at,result FROM nh_notice_batches b WHERE portfolio_id=%s OR EXISTS(
+            SELECT 1 FROM nh_notice_items n WHERE n.batch_id=b.id AND n.portfolio_id=%s) ORDER BY created_at DESC LIMIT 10''', (pid,pid))
+        return dict(accounts=accounts,transfer_accounts=transfer_accounts,trackings=trackings,transfer_flows=all_flows,flows=flows,notices=notices,trades=saved_trades,exchanges=exchanges,batches=c.fetchall())
     finally:
         conn.close()

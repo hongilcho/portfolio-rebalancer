@@ -17,11 +17,12 @@ ACTIVITY = '''WITH activity AS (
  UNION ALL
  SELECT 'FLOW:'||f.id,'CASH',f.event_date::text,f.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
    CASE WHEN f.amount_krw>0 THEN 'DEPOSIT' ELSE 'WITHDRAW' END,f.currency,f.native_amount,
-   '외부 투자자금',f.voided,n.batch_id,f.recorded_at,
+   CASE WHEN n.payload->>'transfer'='true' THEN '포트폴리오 간 이체' ELSE '외부 투자자금' END,f.voided,n.batch_id,f.recorded_at,
    jsonb_build_object('flow_id',f.id,'exchange_rate',f.exchange_rate,'amount_krw',f.amount_krw,'notes',f.notes,
-     'cash_linked',n.id IS NOT NULL,'cash_applied',n.payload->>'apply_cash'='true','can_restore',NOT EXISTS(SELECT 1 FROM nh_notice_items x WHERE x.performance_flow_id=f.id AND (x.reversed_at IS NULL OR x.result->>'created_flow'='true')))
+     'occurred_at',n.payload->>'occurred_at','reported_available_krw',n.payload->>'reported_available_krw','peer_account',peer.account_alias,'cash_linked',n.id IS NOT NULL,'cash_applied',n.payload->>'apply_cash'='true','can_restore',NOT EXISTS(SELECT 1 FROM nh_notice_items x WHERE x.performance_flow_id=f.id AND (x.reversed_at IS NULL OR x.result->>'created_flow'='true')))
  FROM performance_flows f LEFT JOIN accounts a ON a.id=f.account_id
  LEFT JOIN nh_notice_items n ON n.performance_flow_id=f.id AND n.reversed_at IS NULL
+ LEFT JOIN accounts peer ON peer.id=n.payload->>'peer_account_id'
  WHERE f.portfolio_id=%(pid)s
  UNION ALL
  SELECT 'USD:'||e.id,'USD',e.event_date::text,e.account_id,a.account_alias,e.kind,'USD',e.usd_amount,
@@ -34,14 +35,15 @@ ACTIVITY = '''WITH activity AS (
  UNION ALL
  SELECT 'NOTICE:'||n.id,CASE WHEN n.kind='KRW_ADJUST' THEN 'ADJUST' ELSE 'CASH' END,
    n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
-   CASE WHEN n.kind='KRW_ADJUST' THEN 'KRW_ADJUST' ELSE 'INTERNAL_TRANSFER' END,'KRW',
-   (n.payload->>'krw_amount')::numeric,'원화 잔고',n.reversed_at IS NOT NULL,
+   CASE WHEN n.kind='KRW_ADJUST' THEN 'KRW_ADJUST' WHEN n.payload->>'external'='false' AND COALESCE(n.payload->>'transfer','false')='false' THEN 'INTERNAL_TRANSFER' ELSE n.kind END,'KRW',
+   (n.payload->>'krw_amount')::numeric,CASE WHEN n.payload->>'transfer'='true' THEN '포트폴리오 간 이체' ELSE '원화 입출금·잔고' END,n.reversed_at IS NOT NULL,
    CASE WHEN n.reversed_at IS NULL THEN n.batch_id END,b.created_at,
-   jsonb_build_object('source_account',src.account_alias,'notes',n.payload->>'notes',
-     'delta_krw',n.result->>'delta_krw','previous_batch_id',n.batch_id)
+   jsonb_build_object('source_account',src.account_alias,'destination_account',dest.account_alias,'peer_account',peer.account_alias,'cash_applied',n.payload->>'apply_cash'='true','notes',n.payload->>'notes',
+     'occurred_at',n.payload->>'occurred_at','reported_available_krw',n.payload->>'reported_available_krw','delta_krw',n.result->>'delta_krw','previous_batch_id',n.batch_id)
  FROM nh_notice_items n JOIN nh_notice_batches b ON b.id=n.batch_id
  LEFT JOIN accounts a ON a.id=n.account_id LEFT JOIN accounts src ON src.id=n.payload->>'source_account_id'
- WHERE n.portfolio_id=%(pid)s AND (n.kind='KRW_ADJUST' OR (n.kind='DEPOSIT' AND n.payload->>'external'='false'))
+ LEFT JOIN accounts dest ON dest.id=n.payload->>'destination_account_id' LEFT JOIN accounts peer ON peer.id=n.payload->>'peer_account_id'
+ WHERE n.portfolio_id=%(pid)s AND (n.kind='KRW_ADJUST' OR (n.kind IN ('DEPOSIT','WITHDRAW') AND n.performance_flow_id IS NULL))
  UNION ALL
  SELECT 'CANCELLED_BUY:'||n.id,'TRADE',n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
    'BUY','KRW',(n.payload->>'quantity')::numeric*(n.payload->>'price')::numeric,COALESCE(ast.name,'삭제된 종목'),

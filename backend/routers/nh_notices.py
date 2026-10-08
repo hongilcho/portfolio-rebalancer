@@ -15,11 +15,14 @@ class Cash(BaseModel):
 
 
 class Row(BaseModel):
-    kind: Literal['BUY','DEPOSIT','EXCHANGE_IN','KRW_ADJUST']
+    kind: Literal['BUY','DEPOSIT','WITHDRAW','EXCHANGE_IN','KRW_ADJUST']
     account_id: str = Field(min_length=1,max_length=100)
     event_date: date
     occurred_at: datetime | None = None
     source_account_id: str | None = None
+    destination_account_id: str | None = None
+    cross_portfolio: bool = False
+    counterparty_flow_id: str | None = None
     external: bool = True
     apply_cash: bool = True
     existing_flow_id: str | None = None
@@ -32,6 +35,7 @@ class Row(BaseModel):
     notes: str = Field(default='',max_length=2000)
     krw_amount: float = Field(default=0,ge=0,le=1e15,allow_inf_nan=False)
     usd_amount: float = Field(default=0,ge=0,le=1e12,allow_inf_nan=False)
+    reported_available_krw: float | None = Field(default=None,ge=0,allow_inf_nan=False)
     quoted_rate: float = Field(default=0,ge=0,le=1e6,allow_inf_nan=False)
 
 

@@ -43,8 +43,9 @@ class NoticeDatabase(DatabaseAdapter):
 def db():
     database=NoticeDatabase()
     database.raw.executescript('''
-      CREATE TABLE portfolios(id TEXT PRIMARY KEY);
-      INSERT INTO portfolios VALUES('p');
+      CREATE TABLE portfolios(id TEXT PRIMARY KEY,name TEXT DEFAULT 'Test');
+      INSERT INTO portfolios(id) VALUES('p');
+      ALTER TABLE accounts ADD COLUMN account_alias TEXT DEFAULT 'Test';
       ALTER TABLE accounts ADD COLUMN portfolio_id TEXT DEFAULT 'p';
       ALTER TABLE assets ADD COLUMN portfolio_id TEXT DEFAULT 'p';
       ALTER TABLE assets ADD COLUMN is_deposit INTEGER DEFAULT 0;
@@ -193,3 +194,127 @@ def test_individual_fx_cancel_cannot_split_confirmed_batch(db):
     assert db.balances()==pytest.approx((7,727.31))
     nh_notices.undo(db.ctx,'p',result['batch_id'])
     assert db.balances()==(4,10)
+
+def add_counterparty(db, *, track=True):
+    db.raw.execute("INSERT INTO portfolios(id) VALUES('pool')")
+    db.raw.execute("INSERT INTO accounts(id,portfolio_id,deposit_krw,deposit_usd) VALUES('peer','pool',100,0)")
+    if track: db.raw.execute("INSERT INTO performance_tracking(portfolio_id,baseline_date) VALUES('pool','2026-01-01')")
+    db.raw.execute("UPDATE accounts SET deposit_krw=1000004 WHERE id='acc'")
+    db.commit()
+
+
+def transfer_payload(db, *, kind='WITHDRAW', apply=True, request='transfer-1'):
+    kw={'destination_account_id':'peer'} if kind=='WITHDRAW' else {'source_account_id':'peer'}
+    data=payload(db,[row(kind,external=False,cross_portfolio=True,apply_cash=apply,krw_amount=1000000,**kw)],request)
+    data['expected_cash']['peer']={'deposit_krw':db.raw.execute("SELECT deposit_krw FROM accounts WHERE id='peer'").fetchone()[0],'deposit_usd':0}
+    return data
+
+
+def test_withdrawal_subtracts_cash_and_records_signed_flow_and_undo(db):
+    data=payload(db,[row('WITHDRAW',krw_amount=3)])
+    result=nh_notices.commit(db.ctx,'p',data)
+    assert db.balances()==(1,10)
+    f=next(f for f in db.rows('performance_flows') if f['id']!='legacy')
+    assert f['amount_krw']==-3 and f['native_amount']==3
+    nh_notices.undo(db.ctx,'p',result['batch_id'])
+    assert db.balances()==(4,10)
+    assert next(f for f in db.rows('performance_flows') if f['id']!='legacy')['voided']
+
+
+def test_insufficient_withdrawal_rolls_back_new_flow_and_all_items(db):
+    with pytest.raises(ValueError,match='부족'):nh_notices.commit(db.ctx,'p',payload(db,[row('WITHDRAW',krw_amount=5)]))
+    assert db.balances()==(4,10) and len(db.rows('performance_flows'))==1 and not db.rows('nh_notice_items')
+
+
+def test_historical_withdrawal_is_auditable_without_changing_cash_or_current_performance(db):
+    old=row('WITHDRAW',krw_amount=1000000,apply_cash=False).model_copy(update={'event_date':date(2025,9,30)})
+    result=nh_notices.commit(db.ctx,'p',payload(db,[old]))
+    assert db.balances()==(4,10) and len(db.rows('performance_flows'))==1
+    assert db.rows('nh_notice_items')[0]['kind']=='WITHDRAW'
+    assert result['items'][0]['flow_id'] is None
+    nh_notices.undo(db.ctx,'p',result['batch_id'])
+    old=old.model_copy(update={'apply_cash':True})
+    with pytest.raises(ValueError,match='기준일 이전'):nh_notices.commit(db.ctx,'p',payload(db,[old],'history-2'))
+
+
+def test_cross_portfolio_withdrawal_updates_both_cash_and_offsetting_flows_atomically(db):
+    add_counterparty(db)
+    data=transfer_payload(db);result=nh_notices.commit(db.ctx,'p',data)
+    cash={r['id']:r['deposit_krw'] for r in db.rows('accounts')}
+    assert cash=={'acc':4,'peer':1000100}
+    flows=[f for f in db.rows('performance_flows') if f['id']!='legacy']
+    assert {f['portfolio_id']:f['amount_krw'] for f in flows}=={'p':-1000000,'pool':1000000}
+    assert sum(f['amount_krw'] for f in flows)==0
+    assert result['notice_count']==1 and len(result['items'])==2
+    assert nh_notices.commit(db.ctx,'p',data)==result
+    context=nh_notices.read_context(db.ctx,'pool',date(2026,1,2))
+    assert context['flows'][0]['cash_handled'] and context['batches'][0]['id']==result['batch_id']
+    with pytest.raises(ValueError,match='묶음 취소'):performance.void_flow(db.ctx,'pool',context['flows'][0]['id'],True)
+    nh_notices.undo(db.ctx,'pool',result['batch_id'])
+    assert {r['id']:r['deposit_krw'] for r in db.rows('accounts')}=={'acc':1000004,'peer':100}
+    assert all(f['voided'] for f in db.rows('performance_flows') if f['id']!='legacy')
+
+
+def test_cross_portfolio_deposit_notification_uses_its_source_account(db):
+    add_counterparty(db)
+    db.raw.execute("UPDATE accounts SET deposit_krw=1000100 WHERE id='peer'");db.commit()
+    result=nh_notices.commit(db.ctx,'p',transfer_payload(db,kind='DEPOSIT'))
+    assert {r['id']:r['deposit_krw'] for r in db.rows('accounts')}=={'acc':2000004,'peer':100}
+    assert {f['portfolio_id']:f['amount_krw'] for f in db.rows('performance_flows') if f['id']!='legacy'}=={'p':1000000,'pool':-1000000}
+    nh_notices.undo(db.ctx,'pool',result['batch_id'])
+
+
+def test_counterparty_failure_rolls_back_primary_cash_and_flow(db):
+    add_counterparty(db)
+    db.raw.execute("INSERT INTO performance_flows(id,portfolio_id,account_id,request_id,event_date,amount_krw,currency,native_amount,exchange_rate) VALUES('peer-existing','pool','peer','peer-existing','2026-01-02',1000000,'KRW',1000000,1)");db.commit()
+    with pytest.raises(ValueError,match='같은 입출금'):nh_notices.commit(db.ctx,'p',transfer_payload(db))
+    assert {r['id']:r['deposit_krw'] for r in db.rows('accounts')}=={'acc':1000004,'peer':100}
+    assert len(db.rows('performance_flows'))==2 and not db.rows('nh_notice_items')
+
+
+def test_record_only_cross_portfolio_and_untracked_counterparty(db):
+    add_counterparty(db,track=False)
+    result=nh_notices.commit(db.ctx,'p',transfer_payload(db,apply=False))
+    assert {r['id']:r['deposit_krw'] for r in db.rows('accounts')}=={'acc':1000004,'peer':100}
+    assert len(db.rows('performance_flows'))==2 and len(db.rows('nh_notice_items'))==2
+    assert result['performance_portfolios']==['p']
+
+
+def test_wrong_transfer_scope_and_missing_peer_expected_cash_cannot_write(db):
+    add_counterparty(db)
+    data=transfer_payload(db);data['rows'][0]['cross_portfolio']=False
+    with pytest.raises(ValueError,match='구분'):nh_notices.commit(db.ctx,'p',data)
+    data=transfer_payload(db);data['expected_cash'].pop('peer')
+    with pytest.raises(ValueError,match='변경'):nh_notices.commit(db.ctx,'p',data)
+    assert len(db.rows('performance_flows'))==1 and not db.rows('nh_notice_items')
+
+
+def test_opposite_notification_cannot_repeat_a_registered_transfer(db):
+    add_counterparty(db)
+    nh_notices.commit(db.ctx,'p',transfer_payload(db))
+    other=Batch(request_id='opposite-1',confirmed=True,rows=[Row(kind='DEPOSIT',account_id='peer',source_account_id='acc',external=False,cross_portfolio=True,event_date='2026-01-02',krw_amount=1000000,fingerprint='c'*64)],expected_cash={'acc':{'deposit_krw':4,'deposit_usd':10},'peer':{'deposit_krw':1000100,'deposit_usd':0}}).model_dump(mode='json')
+    with pytest.raises(ValueError,match='이미 반영'):nh_notices.commit(db.ctx,'pool',other)
+    assert len(db.rows('nh_notice_batches'))==1
+
+
+def test_later_counterparty_change_blocks_transfer_undo(db):
+    add_counterparty(db);result=nh_notices.commit(db.ctx,'p',transfer_payload(db))
+    db.raw.execute("UPDATE accounts SET deposit_krw=0 WHERE id='peer'");db.commit()
+    with pytest.raises(ValueError,match='후속 거래'):nh_notices.undo(db.ctx,'p',result['batch_id'])
+    assert all(not f['voided'] for f in db.rows('performance_flows'))
+
+def test_retry_of_a_pre_upgrade_pending_request_remains_idempotent(db):
+    data=scenario(db);result=nh_notices.commit(db.ctx,'p',data)
+    old=deepcopy(data)
+    for r in old['rows']:
+        for key in ('cross_portfolio','destination_account_id','counterparty_flow_id','reported_available_krw'):r.pop(key,None)
+    db.raw.execute('UPDATE nh_notice_batches SET payload=?',(json.dumps(old),));db.commit()
+    assert nh_notices.commit(db.ctx,'p',data)==result
+    assert len(db.rows('nh_notice_batches'))==1
+
+
+def test_unrelated_portfolio_cannot_undo_a_transfer(db):
+    add_counterparty(db);result=nh_notices.commit(db.ctx,'p',transfer_payload(db))
+    db.raw.execute("INSERT INTO portfolios(id) VALUES('unrelated')");db.commit()
+    with pytest.raises(ValueError,match='이력'):nh_notices.undo(db.ctx,'unrelated',result['batch_id'])
+    assert {r['id']:r['deposit_krw'] for r in db.rows('accounts')}=={'acc':4,'peer':1000100}

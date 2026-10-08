@@ -19,7 +19,9 @@ parser.add_argument('--message-import', action='store_true', help='Add synthetic
 parser.add_argument('--workflow', action='store_true', help='Add synthetic maturity/workflow fixtures')
 parser.add_argument('--closing', action='store_true', help='Add synthetic regular closing history; keep scheduler disabled')
 parser.add_argument('--nh-notices', action='store_true', help='Synthetic NH deposit/FX/ISA fixtures, including an existing contribution')
+parser.add_argument('--cash-transfers', action='store_true', help='Synthetic CMA and liquidity-pool transfer accounts')
 args = parser.parse_args()
+if args.cash_transfers: args.nh_notices=True
 if args.nh_notices:
     args.usd_ledger = args.message_import = args.workflow = True
 
@@ -185,6 +187,15 @@ if __name__ == '__main__':
             cursor.execute("INSERT INTO accounts(id,account_no,account_alias,account_type,portfolio_id,deposit_krw,deposit_usd) VALUES('qa_isa','123-45-671232','검증 ISA','ISA','default',190000,0)")
             cursor.execute("UPDATE assets SET allowed_accounts='[\"qa_isa\"]' WHERE id='qa_nh_bond'")
             conn.commit()
+        if args.cash_transfers:
+            with dm.get_connection() as conn,conn.cursor() as cursor:
+                cursor.execute("UPDATE portfolios SET name='미래 성장포트 · 검증용' WHERE id='default'")
+                cursor.execute("INSERT INTO portfolios(id,name) VALUES('qa_pool','유동성 Pool · 검증용')")
+                cursor.execute('''INSERT INTO accounts(id,account_no,account_alias,account_type,portfolio_id,deposit_krw)
+                    VALUES('qa_cma','123-45-679991','검증 CMA','GENERAL','default',38239177),
+                    ('qa_pool_cash','123-45-679992','검증 유동성 계좌','GENERAL','qa_pool',1000000)''')
+                conn.commit()
+            performance.capture(context(),'qa_pool',1000000,{},start=True)
         assert dm.record_usd_event('qa_acc','OPENING',str(today)+'T09:00:00+09:00',rate=1300)[0]
         performance.capture(context(),'default',current_nav(dm.get_rebalance_batch_data('default'),
             {q['id']:q['price_krw'] for q in quotes},1400),{'source':'QA synthetic baseline'},start=True)

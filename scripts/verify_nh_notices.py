@@ -137,3 +137,62 @@ print('Activity PostgreSQL QA passed: scoped read-only union, no linked-flow dup
 
 assert activity.read_page(ctx,'p',start,end,category='TRADE',include_cancelled=True,asset='bond')['total']==1
 assert activity.read_page(ctx,'p',start,end,category='TRADE',include_cancelled=True,asset='foreign')['total']==0
+
+# Upgrade an old populated CHECK in the disposable database, then initialize twice.
+from data import workflow_schema
+with dm.get_connection() as conn,conn.cursor() as c:
+    c.execute('ALTER TABLE nh_notice_items DROP CONSTRAINT nh_notice_items_kind_check')
+    c.execute("ALTER TABLE nh_notice_items ADD CONSTRAINT nh_notice_items_kind_check CHECK(kind IN ('DEPOSIT','EXCHANGE_IN','BUY','KRW_ADJUST'))")
+    workflow_schema.initialize(c);workflow_schema.initialize(c)
+    c.execute("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='nh_notice_items'::regclass AND conname='nh_notice_items_kind_check'")
+    assert 'WITHDRAW' in c.fetchone()[0]
+    c.execute("INSERT INTO portfolios(id,name) VALUES('growth','Synthetic growth'),('pool','Synthetic pool')")
+    c.execute("""INSERT INTO accounts(id,account_no,account_alias,account_type,portfolio_id,deposit_krw)
+        VALUES('cma','QA-X1','Growth CMA','GENERAL','growth',1000004),('liquid','QA-X2','Liquid cash','GENERAL','pool',100)""")
+    c.execute("""INSERT INTO performance_tracking(portfolio_id,baseline_date,baseline_value,baseline_payload,close_started_on)
+        VALUES('growth','2026-10-05',1000004,'{}','2026-10-05'),('pool','2026-10-05',100,'{}','2026-10-05')""")
+    conn.commit()
+
+def cross_batch(request,amount=1000000):
+    return Batch(request_id=request,confirmed=True,rows=[Row(kind='WITHDRAW',account_id='cma',destination_account_id='liquid',external=False,cross_portfolio=True,event_date='2026-10-08',krw_amount=amount,fingerprint='d'*64)],expected_cash={'cma':dict(zip(('deposit_krw','deposit_usd'),cash('cma'))),'liquid':dict(zip(('deposit_krw','deposit_usd'),cash('liquid')))}).model_dump(mode='json')
+
+cross=cross_batch('QA-cross-0001')
+resp=client.post('/api/nh-notices/growth/batch',json=cross);assert resp.status_code==200,resp.text
+saved=resp.json();assert saved['notice_count']==1 and len(saved['items'])==2
+assert cash('cma')==(4,0) and cash('liquid')==(1000100,0)
+assert nh_notices.commit(ctx,'growth',cross)==saved
+with dm.get_connection() as conn,conn.cursor() as c:
+    c.execute("SELECT portfolio_id,amount_krw FROM performance_flows WHERE account_id IN ('cma','liquid') ORDER BY portfolio_id")
+    assert c.fetchall()==[('growth',-1000000),('pool',1000000)]
+# Each side has one record, the other account's alias, and a shared cancellation batch.
+for pid,aid,peer in [('growth','cma','Liquid cash'),('pool','liquid','Growth CMA')]:
+    page=activity.read_page(ctx,pid,date(2026,9,1),date(2026,10,8))
+    assert page['total']==1 and page['items'][0]['account_id']==aid
+    assert page['items'][0]['description']=='포트폴리오 간 이체'
+    assert page['items'][0]['detail']['peer_account']==peer
+    assert page['items'][0]['batch_id']==saved['batch_id']
+    info=nh_notices.read_context(ctx,pid,date(2026,10,8));assert info['flows'][0]['cash_handled']
+    fails(lambda:performance.void_flow(ctx,pid,info['flows'][0]['id'],True),'묶음 취소')
+# Repeating the opposite message is rejected, even with another raw fingerprint.
+opposite=Batch(request_id='QA-cross-opposite',confirmed=True,rows=[Row(kind='DEPOSIT',account_id='liquid',source_account_id='cma',external=False,cross_portfolio=True,event_date='2026-10-08',krw_amount=1000000,fingerprint='e'*64)],expected_cash={'cma':{'deposit_krw':4,'deposit_usd':0},'liquid':{'deposit_krw':1000100,'deposit_usd':0}}).model_dump(mode='json')
+fails(lambda:nh_notices.commit(ctx,'pool',opposite),'이미 반영')
+resp=client.delete('/api/nh-notices/pool/batch/'+saved['batch_id']);assert resp.status_code==200,resp.text
+assert cash('cma')==(1000004,0) and cash('liquid')==(100,0)
+for pid in ('growth','pool'):
+    assert activity.read_page(ctx,pid,date(2026,9,1),date(2026,10,8))['total']==0
+    assert activity.read_page(ctx,pid,date(2026,9,1),date(2026,10,8),include_cancelled=True)['items'][0]['cancelled']
+# Already reflected September withdrawals are history only; never overwrite current cash.
+history=Batch(request_id='QA-withdraw-history',confirmed=True,rows=[Row(kind='WITHDRAW',account_id='cma',event_date='2026-09-30',occurred_at='2026-09-30T13:16:00+09:00',krw_amount=1000000,apply_cash=False,fingerprint='f'*64)],expected_cash={'cma':{'deposit_krw':1000004,'deposit_usd':0}}).model_dump(mode='json')
+nh_notices.commit(ctx,'growth',history)
+assert cash('cma')==(1000004,0)
+page=activity.read_page(ctx,'growth',date(2026,9,1),date(2026,10,8))
+assert page['total']==1 and page['items'][0]['kind']=='WITHDRAW' and not page['items'][0]['detail']['cash_applied']
+# Both portfolios are locked in a consistent order; stale concurrent previews cannot both debit.
+l=cross_batch('QA-cross-race-left',10);r=cross_batch('QA-cross-race-right',10)
+def cross_submit(data):
+    try:return nh_notices.commit(ctx,'growth',data)
+    except ValueError as e:return str(e)
+with ThreadPoolExecutor(max_workers=2) as pool:cross_race=list(pool.map(cross_submit,[l,r]))
+assert sum(isinstance(r,dict) for r in cross_race)==1
+assert cash('cma')==(999994,0) and cash('liquid')==(110,0)
+print('Withdrawal/transfer PostgreSQL QA passed: old-schema upgrade, signed paired flows, read-only history, cross-portfolio API/undo, opposite-message duplicate protection, and concurrent cash checks.')

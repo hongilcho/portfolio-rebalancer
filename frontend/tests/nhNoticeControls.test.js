@@ -58,6 +58,22 @@ try{
     assert.match(html,/USD · 원화 7 원 · 달러 \$727\.31/);
     assert.match(html,/<button type="button" class="btn btn-primary">확인한 알림 2건 장부에 일괄 반영/);
   });
+  test('withdrawal controls show available balance only as a reference and old history preserves cash',()=>{
+    const old={id:'qa-old-withdrawal',kind:'WITHDRAW',accountId:'usd',eventDate:'2026-09-30',krwAmount:1000000,reportedAvailableKrw:38239177,external:true,applyCash:false,errors:[],fingerprint:'d'.repeat(64)};
+    const ctx={...context,flows:[],trackings:{p:{baseline_date:'2026-10-05'}}};
+    const html=render(Import,props,{...state,rows:[old],contexts:{'2026-09-30':ctx}});
+    assert.match(html,/원화 출금/);assert.match(html,/출금가능금액 38,239,177 원/);
+    assert.match(html,/잔고를 덮어쓰지 않습니다/);assert.match(html,/성과 기준일 이전 기록/);
+    assert.match(html,/<button type="button" class="btn btn-primary">확인한 알림 1건 장부에 일괄 반영/);
+  });
+  test('cross portfolio transfer has a counterparty choice and previews both accounts before saving',()=>{
+    const transfer={id:'qa-transfer',kind:'WITHDRAW',accountId:'usd',destinationAccountId:'peer',eventDate:day,krwAmount:3,external:false,crossPortfolio:true,applyCash:true,errors:[],fingerprint:'e'.repeat(64)};
+    const ctx={...context,flows:[],transfer_accounts:[{id:'peer',portfolio_id:'pool',portfolio_name:'Liquidity',account_alias:'CMA pool',deposit_krw:100,deposit_usd:0}]};
+    const html=render(Import,props,{...state,rows:[transfer],contexts:{[day]:ctx}});
+    assert.match(html,/<option value="CROSS" selected="">포트폴리오 간 이체/);assert.match(html,/Liquidity · CMA pool/);
+    assert.match(html,/CMA pool · 원화 103 원/);assert.match(html,/USD · 원화 1 원/);
+    assert.match(html,/<button type="button" class="btn btn-primary">확인한 알림 1건 장부에 일괄 반영/);
+  });
   test('an uncertain saved request freezes draft editing while offering identical-result retry',()=>{
     const html=render(Import,props,{...state,pendingPayload:{request_id:'QA-retry'}});
     assert.match(html,/<fieldset disabled=""/);assert.match(html,/동일 요청의 저장 결과 다시 확인/);

@@ -97,3 +97,42 @@ test('pending exact request survives refresh, is scoped, expires, and empty save
   assert.equal(readNoticeDraft('other',storage),null);
   writeNoticeDraft('p',{rows:[]},storage);assert.equal(readNoticeDraft('p',storage),null);
 });
+
+test('withdrawal parses the transaction amount separately from available withdrawal balance',()=>{
+  const withdrawal=`[NH투자증권] 출금안내
+금액 1,000,000원
+[09/30 13:16]
+계좌번호 123-45-67***1
+테스트은행 사용자
+출금가능금액 : 38,239,177원
+----`;
+  const r=resolve(withdrawal);
+  assert.equal(r.kind,'WITHDRAW');assert.equal(r.krwAmount,1000000);
+  assert.equal(r.reportedAvailableKrw,38239177);assert.equal(r.eventDate,'2026-09-30');
+  assert.equal(r.occurredAt,'2026-09-30T13:16:00+09:00');assert.equal(r.accountId,'acc');
+  assert.deepEqual(r.errors,[]);
+  const ctx={...context,accounts:[{id:'acc',deposit_krw:1000004,deposit_usd:10}],flows:[{id:'withdrawn',account_id:'acc',currency:'KRW',event_date:'2026-09-30',amount_krw:-1000000}]};
+  assert.equal(chosenFlow(r,ctx),'withdrawn');assert.equal(noticeApiRow(r,ctx).existing_flow_id,'withdrawn');
+  assert.equal(previewNhNotices([r],{'2026-09-30':ctx}).balances.acc.deposit_krw,4);
+  assert.equal(previewNhNotices([{...r,applyCash:false}],{'2026-09-30':ctx}).balances.acc.deposit_krw,1000004);
+});
+
+test('pre-baseline cash messages can be saved as history but cannot change current cash',()=>{
+  const r={...resolve(deposit),eventDate:'2026-09-30',messageMonthDay:'09-30',applyCash:false};
+  const ctx={...context,flows:[],trackings:{p:{baseline_date:'2026-10-05'}}};
+  assert.deepEqual(validateNhNotice(r,ctx,accounts,assets,'p',[],[]).errors,[]);
+  assert.ok(validateNhNotice({...r,applyCash:true},ctx,accounts,assets,'p',[],[]).errors.some(e=>e.includes('기준일 이전')));
+});
+
+test('cross portfolio withdrawal previews equal and opposite movements and links both flows',()=>{
+  const r={kind:'WITHDRAW',accountId:'acc',eventDate:'2026-10-08',destinationAccountId:'peer',external:false,crossPortfolio:true,krwAmount:1000000,applyCash:true,errors:[]};
+  const ctx={...context,accounts:[{id:'acc',deposit_krw:1000004,deposit_usd:10}],flows:[{id:'out',account_id:'acc',currency:'KRW',amount_krw:-1000000}],
+    transfer_accounts:[...accounts,{id:'peer',portfolio_id:'pool',account_alias:'Pool',deposit_krw:100,deposit_usd:0}],transfer_flows:[{id:'in',account_id:'peer',currency:'KRW',amount_krw:1000000}]};
+  assert.deepEqual(validateNhNotice(r,ctx,accounts,assets,'p',[],[]).errors,[]);
+  const preview=previewNhNotices([r],{'2026-10-08':ctx});
+  assert.equal(preview.balances.acc.deposit_krw,4);assert.equal(preview.balances.peer.deposit_krw,1000100);assert.deepEqual(preview.errors,[]);
+  assert.equal(preview.expected.peer.deposit_krw,100);
+  const api=noticeApiRow(r,ctx);assert.equal(api.destination_account_id,'peer');assert.equal(api.existing_flow_id,'out');assert.equal(api.counterparty_flow_id,'in');
+  assert.ok(validateNhNotice({...r,crossPortfolio:false},ctx,accounts,assets,'p',[],[]).errors.length);
+  assert.equal(previewNhNotices([{...r,applyCash:false}],{'2026-10-08':ctx}).balances.peer.deposit_krw,100);
+});

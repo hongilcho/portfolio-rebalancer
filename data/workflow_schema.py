@@ -61,7 +61,7 @@ def initialize(cursor):
     cursor.execute('''CREATE TABLE IF NOT EXISTS nh_notice_items (
         id TEXT PRIMARY KEY, sequence BIGSERIAL UNIQUE, batch_id TEXT NOT NULL REFERENCES nh_notice_batches(id) ON DELETE CASCADE,
         portfolio_id TEXT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE, account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
-        event_date DATE NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('DEPOSIT','EXCHANGE_IN','BUY','KRW_ADJUST')),
+        event_date DATE NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('DEPOSIT','WITHDRAW','EXCHANGE_IN','BUY','KRW_ADJUST')),
         fingerprint TEXT NOT NULL, payload JSONB NOT NULL, result JSONB NOT NULL,
         performance_flow_id TEXT REFERENCES performance_flows(id) ON DELETE SET NULL,
         linked_trade_id TEXT REFERENCES trade_history(id) ON DELETE SET NULL,
@@ -69,3 +69,13 @@ def initialize(cursor):
     cursor.execute('''CREATE UNIQUE INDEX IF NOT EXISTS idx_nh_notice_flow_cash
         ON nh_notice_items(performance_flow_id) WHERE performance_flow_id IS NOT NULL AND reversed_at IS NULL''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_nh_notice_scope ON nh_notice_items(portfolio_id,event_date)')
+
+    # Upgrade the existing named check once; retain all historical NH records.
+    cursor.execute('''DO $$ BEGIN
+        IF EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='nh_notice_items'::regclass
+            AND conname='nh_notice_items_kind_check' AND POSITION('WITHDRAW' IN pg_get_constraintdef(oid))=0) THEN
+            ALTER TABLE nh_notice_items DROP CONSTRAINT nh_notice_items_kind_check;
+            ALTER TABLE nh_notice_items ADD CONSTRAINT nh_notice_items_kind_check
+                CHECK(kind IN ('DEPOSIT','WITHDRAW','EXCHANGE_IN','BUY','KRW_ADJUST'));
+        END IF;
+    END $$''')

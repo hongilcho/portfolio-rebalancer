@@ -1,7 +1,7 @@
 {
   "source_commit": "b273a8a",
   "reviewed_updates": {
-    "history": "2026-10-08: reviewed focus layout with input/history split, preserved hidden drafts, selected input methods, read-only paged history; all other snapshots unchanged",
+    "history": "2026-10-08: reviewed focus layout with input/history split, preserved hidden drafts, selected input methods, read-only paged history; all other snapshots unchanged; withdrawal/transfer support text reviewed, controls covered in nhNoticeControls tests",
     "dashboard": "2026-10-05: moved maturity, dividend and period panels to analysis tab 6; original dashboard markup restored and reviewed"
   },
   "sha256": {
@@ -15,8 +15,8 @@
     "settings/edit-account": "fed93aabb3e2a2fdcc03b0ec7d90b9a82cdcf631b6fbe2c6841c9bfe5fe73c43",
     "settings/new-US-asset": "c43e14b7142de6472ab196586aad2be60f156c786f4ff2ab2403e59f02d31471",
     "settings/edit-deposit": "d02fb4415e43592e07b2ac6695b68f9515761341240337953690513cc428cbe4",
-    "history/empty": "612510331c21f6fee48ee69a1f2b5d490c1aa9025820859d69e60211c3a31e8a",
-    "history/filled-forms": "2ea5010d4066f0bcad289ba46b2642330465f56cb5608d686cad67c6ca6237d4",
+    "history/empty": "e65bba516641323ea2abc07994552fe562aadee7daca6ee436c36baddccf4e97",
+    "history/filled-forms": "72e378fdf603cf13c4ca21ffdcba96e6b7a383212074558d6f364d92e2e7297c",
     "overview/KRW": "ad703d16caad5132a682394a3a358d7c6b709b6a5c15ecaa27f225d03020498b",
     "overview/USD": "1162b5dc324691a7af8b194cd3733b1ece5c8ebaef1f4ddbb8ede45aa8b8d42f",
     "overview/no-crypto": "ae95dc5b044bc5e8d2ff29079fd3ffacefa93491d0de2dd4756bf96d2ca7b242",

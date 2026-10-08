@@ -110,7 +110,7 @@ def void_flow(ctx,pid,ident,voided):
         c.execute('SELECT portfolio_id FROM performance_tracking WHERE portfolio_id=%s FOR UPDATE', (pid,))
         c.execute('SELECT id FROM nh_notice_items WHERE performance_flow_id=%s AND reversed_at IS NULL', (ident,))
         if c.fetchone():
-            raise ValueError('예수금과 연결된 입금은 NH 알림 가져오기의 반영 이력에서 묶음 취소해주세요.')
+            raise ValueError('예수금과 연결된 입출금은 NH 알림 가져오기의 반영 이력에서 묶음 취소해주세요.')
         c.execute('UPDATE performance_flows SET voided=%s WHERE id=%s AND portfolio_id=%s AND voided<>%s', (voided,ident,pid,voided))
         if c.rowcount:
             c.execute('UPDATE performance_tracking SET revision=revision+1 WHERE portfolio_id=%s', (pid,))
