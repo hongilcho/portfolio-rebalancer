@@ -184,7 +184,8 @@ def test_failed_force_refresh_has_http_503(mocker):
     mocker.patch.object(dashboard,'get_overview_batch_data',return_value={})
     mocker.patch.object(dashboard.market_service,'get_prices',side_effect=MarketRefreshUnavailable())
     # No lifespan: schema and warmup IO are unnecessary for this response test.
-    response=TestClient(app).get('/api/dashboard/bundle?force_refresh=true')
+    from backend.security import issue_session
+    response=TestClient(app).get('/api/dashboard/bundle?force_refresh=true', headers={'Authorization':'Bearer '+issue_session()['access_token']})
     assert response.status_code == 503
 
 

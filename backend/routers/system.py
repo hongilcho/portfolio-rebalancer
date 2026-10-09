@@ -40,7 +40,7 @@ def run_system_benchmark() -> Dict[str, Any]:
         db_ms = round((time.time() - t0) * 1000, 1)
         db_status = "정상"
     except Exception as e:
-        db_status = f"실패: {e}"
+        db_status = f"실패: {type(e).__name__}"
 
     # 2. USD/KRW 실시간 환율 수집 속도
     rate_ms = None
@@ -51,7 +51,7 @@ def run_system_benchmark() -> Dict[str, Any]:
         rate_val, rate_src = get_exchange_rate_usd_krw()
         rate_ms = round((time.time() - t0) * 1000, 1)
     except Exception as e:
-        rate_src = f"실패: {e}"
+        rate_src = f"실패: {type(e).__name__}"
 
     # 3. 국내 주식 시세 샘플 (삼성전자 005930) 수집 속도
     kr_ms = None
@@ -62,7 +62,7 @@ def run_system_benchmark() -> Dict[str, Any]:
         kr_val, kr_src = get_kr_stock_price("005930")
         kr_ms = round((time.time() - t0) * 1000, 1)
     except Exception as e:
-        kr_src = f"실패: {e}"
+        kr_src = f"실패: {type(e).__name__}"
 
     # 4. 미국 주식 시세 샘플 (Vanguard VT) 수집 속도
     us_ms = None
@@ -73,7 +73,7 @@ def run_system_benchmark() -> Dict[str, Any]:
         us_val, us_src = get_us_stock_price("VT", usd_krw=rate_val or 1380.0)
         us_ms = round((time.time() - t0) * 1000, 1)
     except Exception as e:
-        us_src = f"실패: {e}"
+        us_src = f"실패: {type(e).__name__}"
 
     # 5. 인메모리 캐시 상태
     now = time.time()

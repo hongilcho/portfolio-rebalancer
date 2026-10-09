@@ -278,7 +278,7 @@ export default function HistoryTab({
         alert(res.message);await changed();
       } catch(error) {
         if(recorded) alert(`저장은 완료됐지만 ${error.message}`);
-        else if(error.status && error.status<500) {
+        else if(error.status && error.status<500 && ![401,403,429].includes(error.status)) {
           setPendingSubmission(null);setUncertainSubmission(false);setDraftReviewed(true);
           writeTradeDraft(draftStorage(),currentPortfolioId,{tradeDate,buyRows,sellRows,uncertainSubmission:false,pendingSubmission:null});
           alert(error.message);

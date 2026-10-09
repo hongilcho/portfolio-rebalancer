@@ -19,3 +19,6 @@ requests
 yfinance
 lxml
 urllib3
+
+# Signed, expiring API sessions
+itsdangerous>=2.2,<3

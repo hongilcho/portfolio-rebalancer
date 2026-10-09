@@ -17,8 +17,10 @@ _isolation = pytest.MonkeyPatch()
 for key, value in {
     "PORTFOLIO_LOAD_CONFIG_FILES": "0",
     "PERFORMANCE_CLOSE_SCHEDULER_ENABLED": "0",
+    "PORTFOLIO_DB_SECURITY_ENABLED": "0",
     "SUPABASE_URL": "",
     "APP_PASSWORD": "test-only",
+    "APP_SESSION_SECRET": "synthetic-session-secret-for-tests-only-32",
     "NAMUH_APP_KEY": "",
     "NAMUH_APP_SECRET": "",
 }.items():

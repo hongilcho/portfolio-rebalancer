@@ -85,12 +85,12 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
     try{const {notice_source,...body}=request;await api.commitLedgerCorrection(portfolioId,body);recorded=true;
       if(notice_source && matchesWithdrawalCorrection(notice_source,body.proposal)){const result={source:notice_source,proposal:body.proposal};if(!settleStoredCorrection(result))throw new Error('정정은 저장됐지만 문자 대기 목록 갱신에 실패했습니다. 동일 요청으로 결과를 다시 확인해주세요.');onNoticeSettled?.(result);setNoticeSource(null);}
       setPending(null);setPreview(null);setForm(f=>({...f,amount:'',reason:'',asset_id:''}));setConfirmed(false);setRevision(n=>n+1);setMessage('장부 정정을 저장했습니다. 미확정 과거 기록은 아래에서 계속 확인할 수 있습니다.');await onChanged();}
-    catch(e){if(recorded)throw new Error('정정은 저장됐지만 화면 갱신에 실패했습니다. 다시 등록하지 말고 새로고침해주세요.');if(e.status && e.status<500){setPending(null);setPreview(null);setConfirmed(false);setRevision(n=>n+1);}throw e;}
+    catch(e){if(recorded)throw new Error('정정은 저장됐지만 화면 갱신에 실패했습니다. 다시 등록하지 말고 새로고침해주세요.');if(e.status && e.status<500 && ![401,403,429].includes(e.status)){setPending(null);setPreview(null);setConfirmed(false);setRevision(n=>n+1);}throw e;}
   });
   const checkHistory=id=>run(async()=>{const r=await api.reviewLedgerCorrection(portfolioId,id);setReviewId(id);setPreview(r);setDecisions({});setHistoryChoice('');setConfirmed(false);setMode('manual');});
   const saveReview=()=>run(async()=>{const req=pending || {request_id:crypto.randomUUID(),token:preview.token,decisions,confirmed:true,review_id:reviewId};setPending(req);
     let recorded=false;try{const {review_id,...body}=req;await api.confirmLedgerHistory(portfolioId,review_id,body);recorded=true;setPending(null);setPreview(null);setReviewId('');setRevision(n=>n+1);setMessage('과거 성과 기록의 확인 내용을 저장했습니다. 현재 예수금은 다시 변경하지 않습니다.');await onChanged();}
-    catch(e){if(recorded)throw new Error('확인은 저장됐지만 화면 갱신에 실패했습니다. 새로고침해주세요.');if(e.status && e.status<500){setPending(null);setPreview(null);setReviewId('');}throw e;}
+    catch(e){if(recorded)throw new Error('확인은 저장됐지만 화면 갱신에 실패했습니다. 새로고침해주세요.');if(e.status && e.status<500 && ![401,403,429].includes(e.status)){setPending(null);setPreview(null);setReviewId('');}throw e;}
   });
   const undo=id=>{if(window.confirm('이 정정의 잔고·원가·과거 성과 보정을 함께 되돌릴까요? 후속 변경이 있으면 취소가 차단됩니다.'))run(async()=>{await api.undoLedgerCorrection(portfolioId,id);setRevision(n=>n+1);await onChanged();setMessage('정정을 취소했습니다.');});};
   const compare=()=>run(async()=>{setComparison(await api.compareNamuh({portfolio_id:portfolioId,account_id:form.account_id}));setMessage('조회 결과입니다. 장부는 변경하지 않았습니다.');});

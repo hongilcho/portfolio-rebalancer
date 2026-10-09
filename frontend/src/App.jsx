@@ -24,6 +24,7 @@ import {
   BarChart3, Target, Scale, History, Settings, RefreshCw 
 } from 'lucide-react';
 import { api } from './utils/api';
+import { getAuthSession, clearAuthSession, onAuthExpired } from './utils/authSession';
 import Header from './components/Header';
 import AuthModal from './components/AuthModal';
 import DashboardTab from './components/Tab1Dashboard/DashboardTab';
@@ -55,7 +56,7 @@ const TABS = [
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem('portfolio_auth') === 'true';
+    return Boolean(getAuthSession());
   });
 
   const [theme, setTheme] = useState(() => {
@@ -132,6 +133,15 @@ export default function App() {
 
   const [childRefreshKey, setChildRefreshKey] = useState(0);
   const requestSequence = useRef(0);
+  useEffect(() => onAuthExpired(() => {
+    requestSequence.current++;
+    setIsAuthenticated(false);
+    setDashboardData(null);
+    setLoadedBundle(null);
+    setAssets([]);
+    setAccounts([]);
+    setPricesData(null);
+  }), []);
 
   const loadAllData = useCallback(async (forceRefresh = false, targetPid = null) => {
     const pid = targetPid || currentPortfolioIdRef.current;
@@ -226,6 +236,7 @@ export default function App() {
         onOpenManagePortfolios={() => setIsManagePortfoliosOpen(true)}
         currencyMode={currencyMode}
         onCurrencyModeChange={handleCurrencyModeChange}
+        onLogout={() => clearAuthSession()}
       />
 
       {/* Error Alert */}

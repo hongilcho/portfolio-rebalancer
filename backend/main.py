@@ -25,6 +25,8 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from logic.refreshing_cache import MarketRefreshUnavailable
 from data.data_manager import init_db, get_overview_batch_data
 from backend.routers import forex, plans, performance, nh_notices, activity, ledger_adjustments, deposits
@@ -32,11 +34,13 @@ from logic.dividend_fetcher import prepare_dividend_cache
 from backend.services import market_service
 from backend.close_performance import start_scheduler
 from logic.crypto_price_fetcher import get_crypto_prices
+from backend.security import ApiAuthenticationMiddleware, validate_settings, cors_origins
 from backend.routers import auth, market, dashboard, accounts, assets, holdings, rebalance, trades, sync, crypto, portfolios, system
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Imports and test collection must not connect to a database.
+    validate_settings()
     init_db()
     # Market collection and dividend DB restoration run independently.
     def _background_warmup():
@@ -44,7 +48,7 @@ async def lifespan(app: FastAPI):
             market_service.warmup()
             get_crypto_prices()
         except Exception as e:
-            print(f"Background warmup notice: {e}")
+            print(f"Background warmup notice: {type(e).__name__}")
 
     threading.Thread(target=_background_warmup, daemon=True).start()
     def _background_dividend_warmup():
@@ -67,8 +71,17 @@ app = FastAPI(
     title="Portfolio Rebalancer API",
     description="High-performance backend API for portfolio rebalancing and multi-account asset management",
     version="2.0.0",
+    docs_url=None, redoc_url=None, openapi_url=None,
     lifespan=lifespan
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, error):
+    if request.url.path == "/api/auth/verify":
+        return JSONResponse({"detail": "로그인 입력 형식이 올바르지 않습니다."}, status_code=422,
+                            headers={"Cache-Control": "no-store"})
+    return await request_validation_exception_handler(request, error)
+
 
 @app.exception_handler(MarketRefreshUnavailable)
 async def market_unavailable(request, error):
@@ -84,13 +97,16 @@ async def add_server_timing_header(request: Request, call_next):
     response.headers["Server-Timing"] = f"total;desc=\"Total Process Time\";dur={duration_ms}"
     return response
 
-# Setup CORS for development and production
+# Authentication covers every HTTP route, including future routers.
+app.add_middleware(ApiAuthenticationMiddleware)
+
+# CORS wraps authentication so approved browser preflights can complete.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins(),
+    allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Register Routers

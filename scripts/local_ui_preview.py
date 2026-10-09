@@ -45,7 +45,8 @@ with admin.cursor() as cursor:
 admin.close()
 settings["dbname"] = name
 os.environ.update(PORTFOLIO_LOAD_CONFIG_FILES="0", SUPABASE_URL=make_dsn(**settings),
-                  PERFORMANCE_CLOSE_SCHEDULER_ENABLED="0",
+                  PERFORMANCE_CLOSE_SCHEDULER_ENABLED="0", PORTFOLIO_DB_SECURITY_ENABLED="0",
+                  APP_SESSION_SECRET="synthetic-ui-session-secret-not-for-production",
                   APP_PASSWORD="ui-test-only", NAMUH_APP_KEY="", NAMUH_APP_SECRET="")
 
 # Explicitly prevent accidental production connections and external market IO.

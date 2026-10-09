@@ -65,7 +65,7 @@ try{
   const client=(await server.ssrLoadModule('/src/utils/api.js')).api;
   const render=(Component,props,seeds={})=>{globalThis.__bookSeeds=seeds;globalThis.__bookHandlers=[];return renderToStaticMarkup(React.createElement(Component,props));};
   const props={accounts,assets,currentPortfolioId:'p',priceMap:{},onSaved:async()=>{},performance:{data:null,busy:false,error:'',notice:'',run:async action=>action(),capture:async()=>{}}};
-  test('restored manual request opens its retry controls and refresh failure cannot mislabel a saved trade',async()=>{
+  await test('restored manual request opens its retry controls and refresh failure cannot mislabel a saved trade',async()=>{
     globalThis.localStorage=memory();alerts.length=0;
     const row={id:'row',accountId:'a',assetId:'etf',quantity:1,price:100,exchangeRate:1};
     writeTradeDraft(globalThis.localStorage,'p',{tradeDate:'2026-01-02',buyRows:[row],sellRows:[],uncertainSubmission:true,pendingSubmission:payload});
@@ -81,7 +81,21 @@ try{
     assert.equal(globalThis.localStorage.getItem(draftKey('p')),null);
     assert.ok(alerts.some(m=>m.includes('저장은 완료')));
   });
-  test('lost FX response preserves one exact request and navigation returns directly to dollar retry',async()=>{
+  await test('server session expiry keeps the exact manual trade request for login and retry',async()=>{
+    globalThis.localStorage=memory();alerts.length=0;
+    const row={id:'row',accountId:'a',assetId:'etf',quantity:1,price:100,exchangeRate:1};
+    writeTradeDraft(globalThis.localStorage,'p',{tradeDate:'2026-01-02',buyRows:[row],sellRows:[],uncertainSubmission:true,pendingSubmission:payload});
+    client.getBookkeepingCapabilities=async()=>({bookkeeping_protocol:1});
+    client.batchExecuteTrades=async()=>{throw Object.assign(new Error('login expired'),{status:401});};
+    render(History,props);
+    const retry=globalThis.__bookHandlers.find(h=>h.component==='HistoryTab' && h.label.includes('submitManual(pendingSubmission)'));
+    await retry.callback();
+    assert.deepEqual(JSON.parse(globalThis.localStorage.getItem(draftKey('p'))).pendingSubmission,payload);
+    client.getUsdLedgers=async()=>({ledgers:[]});client.getTrades=async()=>({trades:[]});
+    client.batchExecuteTrades=async body=>{assert.deepEqual(body,payload);return {message:'saved original request',results:[{index:0,success:true}]};};
+    await retry.callback();assert.equal(globalThis.localStorage.getItem(draftKey('p')),null);
+  });
+  await test('lost FX response preserves one exact request and navigation returns directly to dollar retry',async()=>{
     globalThis.localStorage=memory();
     const request={account_id:'a',payload:{request_id:'fx-exact-retry',portfolio_id:'p',kind:'EXCHANGE_IN',occurred_at:'2026-01-02T09:00:00+09:00',usd_amount:10,krw_amount:13000,rate:0,notes:''}};
     persistPendingRequest('manual-forex/v1/p',request);
@@ -94,7 +108,7 @@ try{
     client.recordUsdEvent=async()=>({message:'original result'});
     await retry.callback();assert.equal(readPendingRequest('manual-forex/v1/p'),null);assert.equal(calls,1);
   });
-  test('several pending receipts lock edits but allow navigation to each retry',()=>{
+  await test('several pending receipts lock edits but allow navigation to each retry',()=>{
     globalThis.localStorage=memory();
     persistPendingRequest('manual-funds/v1/p',{payload:{request_id:'funds-request'}});
     persistPendingRequest('manual-forex/v1/p',{account_id:'a',payload:{request_id:'forex-request'}});
@@ -104,7 +118,7 @@ try{
     assert.equal(methodButton.length,3);assert.ok(methodButton.every(m=>!m[1].includes('disabled')));
     assert.match(html,/<fieldset disabled="" class="workflow-form"/);
   });
-  test('first manual cash input remains available before a performance baseline exists',()=>{
+  await test('first manual cash input remains available before a performance baseline exists',()=>{
     globalThis.localStorage=memory();
     const html=render(History,{...props,performance:{...props.performance,data:{tracking:null,flows:[]}}},
       {HistoryTab:{method:'manual',manualKind:'funds'}});
@@ -112,7 +126,7 @@ try{
     assert.match(html,/외부 입출금 기록 저장/);
     assert.doesNotMatch(html,/<fieldset disabled="" class="workflow-form"/);
   });
-  test('pending external cash and deposit corrections reopen their manual destination',()=>{
+  await test('pending external cash and deposit corrections reopen their manual destination',()=>{
     for(const key of ['manual-funds/v1/p','manual-deposit/v1/p']){
       globalThis.localStorage=memory();persistPendingRequest(key,{payload:{request_id:'restore-request'}});
       const html=render(History,props);assert.match(html,/aria-pressed="true"[^>]*>[\s\S]*?직접 입력/);

@@ -47,7 +47,7 @@ export default function ExternalCashFlowPanel({ portfolioId, accounts, performan
           await onCashChanged?.();await capture();
         }catch(error){
           if(recorded)throw new Error('입출금은 저장됐지만 화면 갱신에 실패했습니다. 다시 입력하지 말고 새로고침해주세요.');
-          if(error.status && error.status<500){clearPendingRequest(pendingKey);setPending(null);setFlowChecked(false);setForm(f=>({...f,request_id:crypto.randomUUID()}));}
+          if(error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(pendingKey);setPending(null);setFlowChecked(false);setForm(f=>({...f,request_id:crypto.randomUUID()}));}
           throw error;
         }
     });

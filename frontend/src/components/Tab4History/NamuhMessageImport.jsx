@@ -97,7 +97,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
       const refreshed=await Promise.allSettled((result.performance_portfolios || []).filter(p=>p!==portfolioId).map(p=>api.capturePerformance(p)));
       if(refreshed.some(r=>r.status==='rejected'))setMessage('장부 반영은 완료됐습니다. 상대 포트폴리오의 종가 기록 갱신은 해당 포트폴리오에서 다시 확인해주세요.');
     }catch(error){
-      if(!recorded && error.status && error.status<500){setPendingPayload(null);persist({rows,requestId,pendingPayload:null});setConfirmed(false);setReload(n=>n+1);}
+      if(!recorded && error.status && error.status<500 && ![401,403,429].includes(error.status)){setPendingPayload(null);persist({rows,requestId,pendingPayload:null});setConfirmed(false);setReload(n=>n+1);}
       setMessage(recorded?'저장은 완료됐지만 화면 갱신에 실패했습니다. 다시 등록하지 말고 새로고침해주세요.':error.message);
     }finally{setSaving(false);}
   };

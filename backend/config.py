@@ -36,10 +36,11 @@ def load_config():
             with open(SECRETS_PATH, "r", encoding="utf-8") as f:
                 secrets = toml.load(f)
         except Exception as e:
-            print(f"Error loading secrets.toml: {e}")
+            print(f"Error loading private configuration: {type(e).__name__}")
 
     supabase_url = os.getenv("SUPABASE_URL") or secrets.get("SUPABASE_URL", "")
-    app_password = os.getenv("APP_PASSWORD") or str(secrets.get("APP_PASSWORD", "1234"))
+    raw_password = os.getenv("APP_PASSWORD") or secrets.get("APP_PASSWORD")
+    app_password = str(raw_password) if raw_password is not None else ""
     
     nh_sec = secrets.get("nh_api", {})
     namuh_app_key = os.getenv("NAMUH_APP_KEY") or nh_sec.get("app_key", "")
@@ -48,3 +49,6 @@ def load_config():
     return supabase_url, app_password, namuh_app_key, namuh_app_secret
 
 SUPABASE_URL, APP_PASSWORD, NAMUH_APP_KEY, NAMUH_APP_SECRET = load_config()
+
+# Session signing is separate from the login password; never sent to the browser.
+APP_SESSION_SECRET = os.getenv("APP_SESSION_SECRET", "")

@@ -1,3 +1,5 @@
+import { authHeaders, saveAuthSession, clearAuthSession } from './authSession';
+
 /**
  * 포트폴리오 리밸런서 프론트엔드 REST API 클라이언트 모듈
  * ========================================================
@@ -18,16 +20,19 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
  * @param {RequestInit} [options] - fetch 옵션
  * @returns {Promise<any>} JSON 파싱된 응답 데이터
  */
-async function request(endpoint, options = {}) {
+async function request(endpoint, options = {}, format = 'json') {
   const url = `${API_BASE_URL}${endpoint}`;
-  // GET requests have no JSON body; avoid an unnecessary CORS preflight.
+  // GET has no JSON body. Bearer authentication still requires a CORS preflight.
   const defaultHeaders = options.body ? { 'Content-Type': 'application/json' } : {};
 
+  const authentication = endpoint === '/api/auth/verify' ? {} : authHeaders();
+  const usedToken = authentication.Authorization?.slice(7);
   const config = {
     ...options,
     headers: {
       ...defaultHeaders,
       ...options.headers,
+      ...authentication,
     },
   };
 
@@ -37,11 +42,12 @@ async function request(endpoint, options = {}) {
       const errorData = await response.json().catch(() => ({}));
       const error = new Error(errorData.detail || errorData.message || `API Error: ${response.status}`);
       error.status = response.status;
+      if (response.status === 401 && usedToken) clearAuthSession(usedToken);
       throw error;
     }
-    return await response.json();
+    return format === 'blob' ? await response.blob() : await response.json();
   } catch (error) {
-    console.error(`Fetch error on ${endpoint}:`, error);
+    if (error.status !== 401) console.error(`Fetch error on ${endpoint}:`, error);
     throw error;
   }
 }
@@ -73,10 +79,11 @@ export const api = {
     method: 'DELETE',
   }),
   // Auth
-  verifyPassword: (password) => request('/api/auth/verify', {
-    method: 'POST',
-    body: JSON.stringify({ password }),
-  }),
+  verifyPassword: async (password) => {
+    const result = await request('/api/auth/verify', { method: 'POST', body: JSON.stringify({ password }) });
+    saveAuthSession(result);
+    return result;
+  },
 
   // Market & Exchange Rate
   getExchangeRate: () => request('/api/market/exchange-rate'),
@@ -94,7 +101,7 @@ export const api = {
     }
     return request(url);
   },
-  getExportCsvUrl: () => `${API_BASE_URL}/api/market/export-csv`,
+  downloadBackup: () => request('/api/market/export-csv', {}, 'blob'),
 
   // Dashboard Summary & High-Speed Unified Bundle
   getDashboardSummary: (portfolioId = 'default') => request(`/api/dashboard/summary?portfolio_id=${portfolioId}`),

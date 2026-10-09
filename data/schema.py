@@ -3,6 +3,7 @@ from datetime import datetime
 from data.repository_context import RepositoryContext
 from data.usd_schema import initialize as initialize_usd_ledger
 from data.workflow_schema import initialize as initialize_workflow
+from data.security_schema import initialize as initialize_security
 
 def init_db(db: RepositoryContext, schema_initializer=None):
     """
@@ -285,6 +286,7 @@ def _do_init_db_schema(db: RepositoryContext, conn, cursor):
 
     initialize_usd_ledger(cursor)
     initialize_workflow(cursor)
+    initialize_security(cursor)
     conn.commit()
     clean_deposit_shadow_accounts(db)
 

@@ -80,7 +80,7 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
         await onChanged();setMessage(result.message);
       } catch(error) {
         if(recorded)setMessage('저장은 완료됐지만 화면 갱신에 실패했습니다. 다시 등록하지 말고 새로고침해주세요. '+error.message);
-        else if(error.status && error.status<500){clearPendingRequest(pendingKey);setPending(null);setMessage(error.message);}
+        else if(error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(pendingKey);setPending(null);setMessage(error.message);}
         else setMessage('저장 결과를 확인하지 못했습니다. 같은 요청의 결과를 다시 확인해주세요. '+error.message);
       } finally {setSaving(false);}
     });

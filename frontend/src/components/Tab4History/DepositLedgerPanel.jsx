@@ -46,7 +46,7 @@ export default function DepositLedgerPanel({portfolioId,assets,onChanged,disable
         setReload(n=>n+1);await onChanged();setMessage(result.message);
       }catch(error){
         if(recorded)setMessage('예금 장부는 저장됐지만 화면 갱신에 실패했습니다. 다시 등록하지 말고 새로고침해주세요.');
-        else {if(error.status && error.status<500){clearPendingRequest(key);setPending(null);}setMessage(error.message);}
+        else {if(error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(key);setPending(null);}setMessage(error.message);}
       }finally{setSaving(false);}
     });
   };

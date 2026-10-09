@@ -17,7 +17,7 @@
  */
 
 import React, { useState } from 'react';
-import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee, Briefcase, Settings, Coins } from 'lucide-react';
+import { RefreshCw, Download, Edit3, DollarSign, TrendingUp, Moon, Sun, Coffee, Briefcase, Settings, Coins, LogOut } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatKRW } from '../utils/formatters';
 
@@ -33,7 +33,8 @@ export default function Header({
   onSelectPortfolio,
   onOpenManagePortfolios,
   currencyMode = 'KRW',
-  onCurrencyModeChange
+  onCurrencyModeChange,
+  onLogout
 }) {
   const [isEditRateOpen, setIsEditRateOpen] = useState(false);
   const [customRate, setCustomRate] = useState(usdKrw || 1380);
@@ -65,8 +66,18 @@ export default function Header({
     }
   };
 
-  const handleDownloadBackup = () => {
-    window.location.href = api.getExportCsvUrl();
+  const handleDownloadBackup = async () => {
+    try {
+      const blob = await api.downloadBackup();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'portfolio-backup.zip';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { alert(error.message || '백업 다운로드에 실패했습니다.'); }
   };
 
   return (
@@ -229,6 +240,7 @@ export default function Header({
             <Download size={16} />
             CSV 백업
           </button>
+    {onLogout && <button type="button" className="btn btn-secondary" onClick={onLogout} title="로그아웃"><LogOut size={16} /> 로그아웃</button>}
         </div>
       </div>
 
