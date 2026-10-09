@@ -17,8 +17,11 @@ def test_execute_trade_deposit_update(mock_get_connection):
     mock_conn.cursor.return_value = mock_cursor
     mock_get_connection.return_value = mock_conn
 
+    asset=dict(market='KR',is_deposit=False,allowed_accounts=['acc_1'],portfolio_id='p',account_portfolio='p')
+    mock_cursor.fetchall.return_value=[]
     # 1. Test BUY (should deduct from deposit_krw)
     mock_cursor.fetchone.side_effect = [
+        asset, # verified account/asset scope
         {'deposit_krw': 19000.0}, # account balance
         None, # USD ledger is opt-in
         None # holdings lookup
@@ -35,6 +38,7 @@ def test_execute_trade_deposit_update(mock_get_connection):
     # 2. Test SELL (should add to deposit_krw)
     mock_cursor.reset_mock()
     mock_cursor.fetchone.side_effect = [
+        asset, # verified account/asset scope
         {'deposit_krw': 10000.0}, # account balance
         None, # USD ledger is opt-in
         {'quantity': 10, 'avg_price': 25000.0} # holdings lookup (selling 5 at 26000)

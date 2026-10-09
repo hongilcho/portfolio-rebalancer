@@ -5,6 +5,8 @@ It verifies real commit/rollback behavior, not PostgreSQL concurrency or DDL.
 """
 
 import sqlite3
+import json
+from psycopg2.extras import Json
 from decimal import Decimal
 import pytest
 from data import data_manager as dm
@@ -31,7 +33,7 @@ class CursorAdapter:
         if self.db.fail_on and self.db.fail_on in sql:
             raise sqlite3.OperationalError("injected write failure")
         return self.cursor.execute(sql.replace('%s', '?').replace(' FOR UPDATE', ''),
-                                   tuple(float(v) if isinstance(v, Decimal) else v for v in params))
+                                   tuple(json.dumps(v.adapted,default=str) if isinstance(v,Json) else float(v) if isinstance(v, Decimal) else v for v in params))
 
     def fetchone(self):
         row = self.cursor.fetchone()
@@ -47,8 +49,13 @@ class DatabaseAdapter:
         self.raw.row_factory = sqlite3.Row
         self.fail_on = None
         self.raw.executescript('''
-            CREATE TABLE accounts (id TEXT PRIMARY KEY, deposit_krw REAL, deposit_usd REAL);
-            CREATE TABLE assets (id TEXT PRIMARY KEY, market TEXT);
+            CREATE TABLE portfolios(id TEXT PRIMARY KEY,name TEXT DEFAULT 'Test');
+            INSERT INTO portfolios(id) VALUES('p');
+            CREATE TABLE performance_tracking(portfolio_id TEXT PRIMARY KEY,baseline_date TEXT,revision INT DEFAULT 0);
+            CREATE TABLE accounts (id TEXT PRIMARY KEY, deposit_krw REAL, deposit_usd REAL,portfolio_id TEXT DEFAULT 'p');
+            CREATE TABLE assets (id TEXT PRIMARY KEY, market TEXT,portfolio_id TEXT DEFAULT 'p',
+                is_deposit INTEGER DEFAULT 0,allowed_accounts TEXT DEFAULT '["acc"]');
+            CREATE TABLE bookkeeping_requests(sequence INTEGER PRIMARY KEY AUTOINCREMENT,scope TEXT,request_id TEXT,payload TEXT,result TEXT,UNIQUE(scope,request_id));
             CREATE TABLE trade_history (
                 trade_sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE,
                 trade_date TEXT, account_id TEXT, asset_id TEXT, trade_type TEXT,
@@ -62,8 +69,8 @@ class DatabaseAdapter:
                 first_buy_date TEXT DEFAULT '', manual_dividend_override REAL,
                 UNIQUE(account_id, asset_id)
             );
-            INSERT INTO accounts VALUES ('acc', 1000000, 1000);
-            INSERT INTO assets VALUES ('ast', 'KR');
+            INSERT INTO accounts(id,deposit_krw,deposit_usd) VALUES ('acc', 1000000, 1000);
+            INSERT INTO assets(id,market) VALUES ('ast', 'KR');
             CREATE TABLE usd_cash_state (account_id TEXT PRIMARY KEY, usd_balance NUMERIC,
                 cost_krw NUMERIC, last_event_date TEXT, started_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE usd_cash_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE,
@@ -115,6 +122,7 @@ def db(mocker):
 
 
 def record(db, kind, quantity=10, price=100, currency='KRW', fx=1, date='2026-01-02'):
+    db.raw.execute('UPDATE assets SET market=?',('US' if currency=='USD' else 'KR',));db.commit()
     success, message = dm.execute_trade(date, 'acc', 'ast', kind, quantity, price, currency, fx)
     assert success, message
     return db.raw.execute('SELECT id FROM trade_history ORDER BY trade_sequence DESC LIMIT 1').fetchone()[0]

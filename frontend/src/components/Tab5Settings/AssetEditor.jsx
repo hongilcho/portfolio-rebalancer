@@ -29,6 +29,7 @@ export default function AssetEditor({
             <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', background: 'var(--bg-card-subtle)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
               <button
                 type="button"
+                disabled={Boolean(editAssetTarget?.is_deposit)}
                 onClick={() => setAssetForm({ ...assetForm, is_deposit: false, is_risk_asset: true })}
                 style={{
                   flex: 1,
@@ -64,6 +65,8 @@ export default function AssetEditor({
                   background: assetForm.is_deposit ? 'var(--accent-primary)' : 'transparent',
                   color: assetForm.is_deposit ? '#FFFFFF' : 'var(--text-secondary)'
                 }}
+                disabled={true}
+                title="예금 등록·원금·조건 변경은 5번 탭의 직접 입력 → 예금 장부에서 처리합니다."
               >
                 🏦 정기예금
               </button>
@@ -73,6 +76,7 @@ export default function AssetEditor({
               {assetForm.is_deposit ? (
                 /* ================= DEPOSIT FORM ================= */
                 <div>
+                  <p role="note">예금 원금·계약 조건의 등록과 정정은 5번 탭 ‘직접 입력 → 예금 장부’에서 처리합니다.</p>
                   <div style={{
                     padding: '12px 14px',
                     borderRadius: 'var(--radius-sm)',
@@ -113,6 +117,7 @@ export default function AssetEditor({
                   <KoreanNumberInput
                     label="예금 원금"
                     value={assetForm.deposit_principal}
+                    disabled
                     onChange={(val) => setAssetForm({ ...assetForm, deposit_principal: val })}
                     step={1000000}
                   />
@@ -125,6 +130,7 @@ export default function AssetEditor({
                         step="0.01"
                         min="0"
                         className="input-number"
+                        disabled
                         value={assetForm.interest_rate}
                         onChange={(e) => setAssetForm({ ...assetForm, interest_rate: parseFloat(e.target.value) || 0 })}
                         placeholder="예: 4.0"
@@ -138,6 +144,7 @@ export default function AssetEditor({
                         step="0.01"
                         min="0"
                         className="input-number"
+                        disabled
                         value={assetForm.early_termination_rate}
                         onChange={(e) => setAssetForm({ ...assetForm, early_termination_rate: parseFloat(e.target.value) || 0 })}
                         placeholder="예: 0.5"
@@ -151,6 +158,7 @@ export default function AssetEditor({
                       <input
                         type="date"
                         className="input-text"
+                        disabled
                         value={assetForm.start_date}
                         onChange={(e) => setAssetForm({ ...assetForm, start_date: e.target.value })}
                         required
@@ -161,6 +169,7 @@ export default function AssetEditor({
                       <input
                         type="date"
                         className="input-text"
+                        disabled
                         value={assetForm.maturity_date}
                         onChange={(e) => setAssetForm({ ...assetForm, maturity_date: e.target.value })}
                         required
@@ -178,6 +187,7 @@ export default function AssetEditor({
                         max="50"
                         className="input-number"
                         style={{ width: '130px' }}
+                        disabled
                         value={assetForm.tax_rate}
                         onChange={(e) => setAssetForm({ ...assetForm, tax_rate: parseFloat(e.target.value) || 0 })}
                         required
@@ -186,6 +196,7 @@ export default function AssetEditor({
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
+                          disabled
                           onClick={() => setAssetForm({ ...assetForm, tax_rate: 15.4 })}
                         >
                           일반과세 15.4%
@@ -193,6 +204,7 @@ export default function AssetEditor({
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
+                          disabled
                           onClick={() => setAssetForm({ ...assetForm, tax_rate: 9.9 })}
                         >
                           세제우대 9.9%

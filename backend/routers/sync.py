@@ -9,7 +9,7 @@ class Compare(BaseModel):
     account_id: str
 @router.post('/namuh')
 def sync_namuh_accounts():
-    raise HTTPException(status_code=410,detail='자동 잔고 덮어쓰기를 중단했습니다. 4번 탭의 나무 잔고 대조를 이용해주세요.')
+    raise HTTPException(status_code=410,detail='자동 잔고 덮어쓰기를 중단했습니다. 5번 탭의 나무 잔고 대조를 이용해주세요.')
 @router.post('/namuh/compare')
 def compare_namuh(req:Compare):
     account=next((a for a in get_all_accounts(portfolio_id=req.portfolio_id) if str(a['id'])==req.account_id),None)

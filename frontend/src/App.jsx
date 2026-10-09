@@ -176,10 +176,12 @@ export default function App() {
       setUsdKrw(bundle.usd_krw || 1380.0);
       setRateSource(bundle.rate_source || '');
       setLoadedBundle({ portfolioId: pid });
+      return {ok:true};
     } catch (err) {
       if (sequence !== requestSequence.current || pid !== currentPortfolioIdRef.current) return;
       console.error('Failed to load portfolio data:', err);
       setError(err.message || '데이터를 불러오는 중 오류가 발생했습니다.');
+      return {ok:false,error:err};
     } finally {
       if (sequence === requestSequence.current && pid === currentPortfolioIdRef.current) {
         setLoading(false);
@@ -187,6 +189,11 @@ export default function App() {
       }
     }
   }, []);
+
+  const reloadAfterSave = async () => {
+    const result = await loadAllData(false,currentPortfolioIdRef.current);
+    if (result?.error) throw result.error;
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -304,7 +311,7 @@ export default function App() {
                   <WeightsTab
                     assets={assets}
                     accounts={accounts}
-                    onSaved={() => loadAllData(false, currentPortfolioId)}
+                    onSaved={reloadAfterSave}
                   />
                 )}
 
@@ -327,7 +334,7 @@ export default function App() {
                     currentPortfolioId={currentPortfolioId}
                     performance={performance}
                     onOpenAnalysis={() => setActiveTab('tab6')}
-                    onSaved={() => loadAllData(false, currentPortfolioId)}
+                    onSaved={reloadAfterSave}
                   />
                 )}
 
@@ -337,7 +344,7 @@ export default function App() {
                     accounts={accounts}
                     assets={assets}
                     currentPortfolioId={currentPortfolioId}
-                    onSaved={() => loadAllData(false, currentPortfolioId)}
+                    onSaved={reloadAfterSave}
                   />
                 )}
                 {activeTab === 'tab6' && (

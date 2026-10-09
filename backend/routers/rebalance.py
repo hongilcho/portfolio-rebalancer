@@ -138,4 +138,4 @@ def calculate_plan(req: CalculateRebalanceRequest):
 
 @router.post("/apply-transfers")
 def apply_transfers(req: ApplyTransfersRequest):
-    raise HTTPException(status_code=410,detail='계획으로 잔고를 변경하지 않습니다. 실제 이체 후 4번 탭에서 기록해주세요.')
+    raise HTTPException(status_code=410,detail='계획으로 잔고를 변경하지 않습니다. 실제 이체 후 5번 탭에서 기록해주세요.')

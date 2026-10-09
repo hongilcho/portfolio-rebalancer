@@ -95,11 +95,12 @@ try {
     assert.match(html, /7\. 분석 및 확인에서 기간 성과 확인/);
     assert.doesNotMatch(html, /기간 입출금 기록 확인 완료/);
   });
-  await test('tab 4 directs an unregistered portfolio to the explicit baseline in tab 6', () => {
+  await test('initial cash input is available before establishing a positive performance baseline', () => {
     const html = renderToStaticMarkup(React.createElement(Flows, { portfolioId: 'default', accounts: [],
       performance: { ...performance, data: { tracking: null } }, onOpenAnalysis: noop }));
-    assert.match(html, /7\. 분석 및 확인으로 이동/);
-    assert.doesNotMatch(html, /외부 입출금 기록 저장|aria-label="입출금 금액"/);
+    assert.match(html, /아직 성과 시작 기준이 없습니다/);
+    assert.match(html, /외부 입출금 기록 저장/);
+    assert.match(html, /7\. 분석 및 확인에서 기간 성과 확인/);
   });
   await test('analysis keeps all three destinations visible when no assets exist', () => {
     const html = renderToStaticMarkup(React.createElement(Analysis, { portfolioId: 'empty', assets: [], dashboardData: {},

@@ -91,3 +91,10 @@ def initialize(cursor):
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,reversed_at TIMESTAMPTZ,
         UNIQUE(portfolio_id,request_id))''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_ledger_adjustments_scope ON ledger_adjustments(portfolio_id,event_date)')
+
+    # Manual requests are committed with their financial changes, never backfilled.
+    cursor.execute("""CREATE TABLE IF NOT EXISTS bookkeeping_requests (
+        sequence BIGSERIAL UNIQUE NOT NULL,
+        scope TEXT NOT NULL, request_id TEXT NOT NULL, payload JSONB NOT NULL,
+        result JSONB, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(scope,request_id))""")

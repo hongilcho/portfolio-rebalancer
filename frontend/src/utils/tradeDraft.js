@@ -12,9 +12,11 @@ export function readTradeDraft(storage, portfolioId, now = Date.now()) {
     if (!raw) return null;
     const d = JSON.parse(raw);
     if (d.version !== 1 || d.portfolioId !== String(portfolioId) || !validDate(d.tradeDate)
-      || !Number.isFinite(d.savedAt) || now - d.savedAt > 30 * 86400000 || d.savedAt > now + 60000
+      || !Number.isFinite(d.savedAt) || (!d.pendingSubmission && now - d.savedAt > 30 * 86400000) || d.savedAt > now + 60000
       || !Array.isArray(d.buyRows) || !Array.isArray(d.sellRows)
       || d.buyRows.length + d.sellRows.length > 500 || ![...d.buyRows, ...d.sellRows].every(validRow)) return null;
+    if (d.pendingSubmission && (d.pendingSubmission.portfolio_id!==String(portfolioId)
+      || typeof d.pendingSubmission.request_id!=='string' || !Array.isArray(d.pendingSubmission.trades))) return null;
     return hasDraftRows([...d.buyRows, ...d.sellRows]) ? d : null;
   } catch { return null; }
 }

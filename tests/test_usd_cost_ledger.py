@@ -182,10 +182,10 @@ def test_http_validation_and_error_messages(ledger_db):
     app = FastAPI()
     app.include_router(router.router)
     client = TestClient(app)
-    body = dict(kind='OPENING', occurred_at='2026-01-02T09:00:00+09:00', rate=1300)
+    body = dict(request_id='opening-retry-1',portfolio_id='p',kind='OPENING', occurred_at='2026-01-02T09:00:00+09:00', rate=1300)
     response = client.post('/api/forex/acc/events', json=body)
     assert response.status_code == 200
-    assert client.post('/api/forex/acc/events', json=body).status_code == 400
+    assert client.post('/api/forex/acc/events', json=body).status_code == 200
     assert client.post('/api/forex/acc/events', json={**body, 'rate': -1}).status_code == 422
     records = client.get('/api/forex/acc/events').json()['events']
     assert records[0]['kind'] == 'OPENING'
@@ -217,22 +217,26 @@ def test_sell_requires_explicit_receipt_rate_and_kr_assets_cannot_spend_usd(ledg
     before = all_state(ledger_db)
     assert not dm.execute_trade('2026-01-02', 'acc', 'ast', 'SELL', 1, 100, 'USD', None)[0]
     assert all_state(ledger_db) == before
-    ledger_db.raw.execute("INSERT INTO assets VALUES ('kr','KR')")
+    ledger_db.raw.execute("INSERT INTO assets(id,market) VALUES ('kr','KR')")
     ledger_db.commit()
     assert not dm.execute_trade('2026-01-02', 'acc', 'kr', 'BUY', 1, 100, 'USD', 1300)[0]
     assert all_state(ledger_db) == before
 
 
-def test_batch_result_identifies_failed_rows_for_safe_retry(ledger_db):
+def test_failed_manual_batch_is_atomic_and_safe_to_correct(ledger_db):
     from backend.routers.trades import BatchTradeRequest, execute_batch_trades
+    from fastapi import HTTPException
     start(ledger_db)
-    result = execute_batch_trades(BatchTradeRequest(trade_date='2026-01-02', trades=[
-        dict(account_id='acc', asset_id='ast', trade_type='BUY', quantity=3, price=100, currency='USD'),
-        dict(account_id='acc', asset_id='ast', trade_type='BUY', quantity=3, price=100, currency='USD'),
-    ]))
-    assert result['success_count'] == 1 and result['errors']
-    assert [(r['index'], r['success']) for r in result['results']] == [(0, True), (1, False)]
-    assert ledger_db.balances() == (5000000, 100)
+    before=all_state(ledger_db)
+    request=BatchTradeRequest(request_id='manual-failed-1',portfolio_id='p',trade_date='2026-01-02',trades=[
+        dict(account_id='acc',asset_id='ast',trade_type='BUY',quantity=3,price=100,currency='USD'),
+        dict(account_id='acc',asset_id='ast',trade_type='BUY',quantity=3,price=100,currency='USD')])
+    with pytest.raises(HTTPException) as error:
+        execute_batch_trades(request)
+    assert '모두 미반영' in error.value.detail
+    assert all_state(ledger_db)==before
+    assert ledger_db.raw.execute('SELECT COUNT(*) FROM bookkeeping_requests').fetchone()[0]==0
+
 
 
 def test_csv_export_preserves_journal_json_and_canceled_events(mocker):

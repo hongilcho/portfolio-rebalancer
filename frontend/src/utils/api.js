@@ -47,6 +47,10 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  getBookkeepingCapabilities:()=>request('/api/trades/capabilities'),
+  saveDepositEntry:(pid,body)=>request(`/api/deposit-ledger/${encodeURIComponent(pid)}`,{method:'POST',body:JSON.stringify(body)}),
+  getDepositEntries:pid=>request(`/api/deposit-ledger/${encodeURIComponent(pid)}`),
+  undoDepositEntry:(pid,aid,rid)=>request(`/api/deposit-ledger/${encodeURIComponent(pid)}/${encodeURIComponent(aid)}/${encodeURIComponent(rid)}`,{method:'DELETE'}),
   getLedgerCorrections: pid=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}`),
   getLedgerAccount: (pid,aid)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/account/${encodeURIComponent(aid)}`),
   previewLedgerCorrection: (pid,data)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/preview`,{method:'POST',body:JSON.stringify(data)}),
@@ -195,9 +199,9 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/api/trades/${query ? `?${query}` : ''}`);
   },
-  batchExecuteTrades: (trade_date, trades) => request('/api/trades/batch', {
+  batchExecuteTrades: (payload) => request('/api/trades/batch', {
     method: 'POST',
-    body: JSON.stringify({ trade_date, trades }),
+    body: JSON.stringify(payload),
   }),
   batchDeleteTrades: (trade_ids) => request('/api/trades/batch', {
     method: 'DELETE',

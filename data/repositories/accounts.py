@@ -76,7 +76,7 @@ def update_account(
         if not current:raise ValueError('계좌를 찾을 수 없습니다.')
         for supplied,old in zip((deposit_krw,deposit_usd),([current['deposit_krw'],current['deposit_usd']] if isinstance(current,dict) else current)):
             if supplied is not None and abs(float(supplied)-float(old or 0))>1e-6:
-                raise ValueError('예수금은 4번 탭의 장부 정정 또는 입출금 기록으로 변경해주세요.')
+                raise ValueError('예수금은 5번 탭의 장부 정정 또는 입출금 기록으로 변경해주세요.')
         cursor.execute('''
             UPDATE accounts
             SET account_no = %s, account_alias = %s, account_type = %s, annual_limit = %s, tax_limit = %s, notes = %s, priority = %s, limit_preference = %s, current_year_deposit = %s
@@ -148,10 +148,25 @@ def delete_account(db: RepositoryContext, account_id):
     conn = db.connect()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM holdings WHERE account_id = %s", (str(account_id),))
-        cursor.execute("DELETE FROM accounts WHERE id = %s", (str(account_id),))
+        cursor.execute('SELECT portfolio_id FROM accounts WHERE id=%s',(str(account_id),))
+        owner=cursor.fetchone()
+        if not owner: raise ValueError('계좌를 찾을 수 없습니다.')
+        pid=owner['portfolio_id'] if isinstance(owner,dict) else owner[0]
+        cursor.execute('SELECT id FROM portfolios WHERE id=%s FOR UPDATE',(pid,))
+        cursor.execute('SELECT deposit_krw,deposit_usd FROM accounts WHERE id=%s FOR UPDATE',(str(account_id),))
+        cash=cursor.fetchone()
+        values=(cash['deposit_krw'],cash['deposit_usd']) if isinstance(cash,dict) else cash
+        if any(abs(float(v or 0))>1e-9 for v in values):
+            raise ValueError('잔고가 있는 계좌는 삭제할 수 없습니다. 5번 탭에서 실제 잔고를 먼저 확인해주세요.')
+        for table,column in (('holdings','account_id'),('trade_history','account_id'),
+                             ('usd_cash_state','account_id'),('usd_cash_events','account_id'),
+                             ('performance_flows','account_id'),('nh_notice_items','account_id'),
+                             ('ledger_adjustments','account_id')):
+            cursor.execute(f'SELECT 1 FROM {table} WHERE {column}=%s LIMIT 1',(str(account_id),))
+            if cursor.fetchone(): raise ValueError('보유·거래·정정 이력이 있는 계좌는 삭제할 수 없습니다.')
+        cursor.execute('DELETE FROM accounts WHERE id=%s',(str(account_id),))
         conn.commit()
-        return True, "계좌 및 보유 내역이 삭제되었습니다."
+        return True, "사용 이력이 없는 빈 계좌를 삭제했습니다."
     except Exception as e:
         conn.rollback()
         return False, str(e)

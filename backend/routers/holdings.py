@@ -87,4 +87,4 @@ def get_all_holdings_list(portfolio_id: Optional[str] = None):
 
 @router.post("/save")
 def save_holdings(req: SaveAccountHoldingsRequest):
-    raise HTTPException(status_code=410,detail='잔고 덮어쓰기 저장을 중단했습니다. 4번 탭의 장부 정정을 이용해주세요.')
+    raise HTTPException(status_code=410,detail='잔고 덮어쓰기 저장을 중단했습니다. 5번 탭의 장부 정정을 이용해주세요.')

@@ -128,7 +128,7 @@ export default function SettingsTab({
   };
 
   const handleDeleteAccount = async (id, alias) => {
-    if (!window.confirm(`정말 계좌 '${alias}' 및 연결된 보유 잔고를 삭제하시겠습니까?`)) return;
+    if (!window.confirm(`사용 이력과 잔고가 없는 계좌 '${alias}'를 삭제하시겠습니까?`)) return;
     try {
       await api.deleteAccount(id);
       alert('계좌가 삭제되었습니다.');
@@ -272,7 +272,7 @@ export default function SettingsTab({
   };
 
   const handleDeleteAsset = async (id, name) => {
-    if (!window.confirm(`⚠️ 주의: 자산 '${name}' 및 과거 모든 매매 기록이 DB에서 완전히 삭제됩니다!\n\n단순히 현황·목표비중·리밸런싱에서 숨기려면 [📦 보관] 기능을 이용하세요.\n\n정말 영구 삭제하시겠습니까?`)) return;
+    if (!window.confirm(`보유·거래 이력이 없는 종목 '${name}'를 삭제하시겠습니까? 이력이 있는 종목은 보관 기능을 이용해주세요.`)) return;
     try {
       await api.deleteAsset(id);
       alert('자산 및 관련 데이터가 삭제되었습니다.');

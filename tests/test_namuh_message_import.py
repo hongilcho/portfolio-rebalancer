@@ -8,11 +8,11 @@ from test_trade_reversal import DatabaseAdapter
 def db(mocker):
     database = DatabaseAdapter()
     database.raw.executescript('''
-        ALTER TABLE accounts ADD COLUMN portfolio_id TEXT DEFAULT 'p';
-        ALTER TABLE assets ADD COLUMN portfolio_id TEXT DEFAULT 'p';
-        ALTER TABLE assets ADD COLUMN is_deposit INTEGER DEFAULT 0;
+
+
+
         ALTER TABLE assets ADD COLUMN ticker TEXT DEFAULT '0085P0';
-        ALTER TABLE assets ADD COLUMN allowed_accounts TEXT DEFAULT '["acc"]';
+
         ALTER TABLE trade_history ADD COLUMN import_source TEXT;
         ALTER TABLE trade_history ADD COLUMN broker_order_no TEXT;
         CREATE UNIQUE INDEX trade_import_order ON trade_history(account_id,trade_date,import_source,broker_order_no)
@@ -64,10 +64,10 @@ def test_import_enforces_domestic_account_asset_scope(db):
 def test_distinct_orders_batch_retry_only_registers_missing_orders(db):
     items = [router.TradeBatchItem(account_id='acc',asset_id='ast',trade_type='BUY',quantity=1,price=9320,
         currency='KRW',exchange_rate=1,import_source='NAMUH_KAKAO',broker_order_no=order) for order in ('42954','42955')]
-    request = router.BatchTradeRequest(trade_date='2026-10-05',trades=items)
+    request = router.BatchTradeRequest(request_id='import-retry-1',portfolio_id='p',trade_date='2026-10-05',trades=items)
     assert router.execute_batch_trades(request)['success_count'] == 2
     before = db.state()
-    assert router.execute_batch_trades(request)['success_count'] == 0
+    assert router.execute_batch_trades(request)['success_count'] == 2
     assert db.state() == before
 
 def test_explicit_delete_reverses_import_and_allows_corrected_re_registration(db):

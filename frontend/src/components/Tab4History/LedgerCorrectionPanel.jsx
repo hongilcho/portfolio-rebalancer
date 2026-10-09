@@ -45,7 +45,7 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
   const [reviewId,setReviewId]=useState('');const [confirmed,setConfirmed]=useState(false);const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');const [message,setMessage]=useState('');const [revision,setRevision]=useState(0);
   const [entries,setEntries]=useState([]);const [comparison,setComparison]=useState(null);
-  useEffect(()=>{onBusyChange?.(busy || Boolean(pending));},[busy,pending,onBusyChange]);
+  useEffect(()=>{onBusyChange?.(busy || Boolean(pending),busy);},[busy,pending,onBusyChange]);
   useEffect(()=>{try{if(pending)localStorage.setItem(storageKey,JSON.stringify(pending));else localStorage.removeItem(storageKey);}catch{setError('정정 요청 임시 저장을 사용할 수 없습니다. 저장 결과 확인 전에는 창을 닫지 마세요.');}},[pending,storageKey]);
   useEffect(()=>{
     if(!open || !active)return;let cancelled=false;

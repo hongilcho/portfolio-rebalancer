@@ -2,12 +2,12 @@
 import math
 import json
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Tuple
 from psycopg2.extras import RealDictCursor
 from logic.trade_accounting import cash_movement, replay_holding
 from data.repository_context import RepositoryContext
-from data.repositories import forex
+from data.repositories import forex, bookkeeping
 
 def execute_trade(
     db: RepositoryContext,
@@ -32,9 +32,23 @@ def execute_trade(
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     new_trade_id = db.new_id()
     try:
-        is_us = (currency == 'USD') if currency else (exchange_rate is not None and float(exchange_rate) > 1.0)
-        if currency is None:
-            currency = 'USD' if is_us else 'KRW'
+        day = date.fromisoformat(str(trade_date))
+        if day.isoformat() != str(trade_date) or day > datetime.now(forex.KST).date():
+            raise ValueError('실제 체결일은 오늘까지의 올바른 날짜여야 합니다.')
+        cursor.execute("""SELECT a.market,a.is_deposit,a.allowed_accounts,a.portfolio_id,
+            c.portfolio_id AS account_portfolio FROM assets a
+            JOIN accounts c ON c.id=%s WHERE a.id=%s""", (str(account_id),str(asset_id)))
+        asset = cursor.fetchone()
+        if not asset or asset['portfolio_id'] != asset['account_portfolio'] or asset['is_deposit']:
+            raise ValueError('계좌와 같은 포트폴리오의 주식·ETF·금 종목을 선택해주세요.')
+        allowed = asset['allowed_accounts'] or []
+        if isinstance(allowed, str): allowed = json.loads(allowed)
+        if str(account_id) not in map(str, allowed):
+            raise ValueError('이 계좌에 허용된 종목이 아닙니다.')
+        is_us = asset['market'] == 'US'
+        currency = currency or ('USD' if is_us else 'KRW')
+        if currency != ('USD' if is_us else 'KRW'):
+            raise ValueError('미국 종목은 달러 단가, 국내 종목은 원화 단가로 입력해주세요.')
 
         # Lock before reading balances; deletion takes the same account lock.
         cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
@@ -85,19 +99,33 @@ def execute_trade(
             if currency == 'USD':
                 raise ValueError('달러 원가 추적 계좌에서는 미국 자산에만 달러 거래를 등록할 수 있습니다.')
         if currency == 'USD':
-            if exchange_rate is None or float(exchange_rate) <= 1.0:
-                try:
-                    exchange_rate = db.exchange_rate() or 1380.0
-                except Exception:
-                    exchange_rate = 1380.0
-            else:
-                exchange_rate = float(exchange_rate)
+            if exchange_rate is None:
+                raise ValueError('미국 종목은 확인한 매입환율을 입력하거나 달러 원가 추적을 먼저 시작해주세요.')
+            exchange_rate = float(exchange_rate)
         else:
             exchange_rate = 1.0
         if not math.isfinite(exchange_rate) or exchange_rate <= 0:
             raise ValueError("매입환율은 양수여야 합니다.")
-        if not math.isfinite(quantity * price * exchange_rate):
+        if not math.isfinite(quantity * price * exchange_rate) or quantity * price * exchange_rate > 1e18:
             raise ValueError("거래 금액이 허용 범위를 초과합니다.")
+        cursor.execute('SELECT * FROM trade_history WHERE account_id=%s AND asset_id=%s',
+                       (str(account_id),str(asset_id)))
+        prior_trades = cursor.fetchall()
+        backdated = any(str(t['trade_date']) > str(trade_date) for t in prior_trades)
+        if backdated:
+            if any(t['trade_type'] != 'INIT' and (t.get('cash_delta_krw') is None or t.get('cash_delta_usd') is None) for t in prior_trades):
+                raise ValueError('과거 기록의 결제 정보가 부족합니다. 5번 탭 장부 정정으로 현재 보유 기준을 먼저 확인해주세요.')
+            cursor.execute('SELECT * FROM holdings WHERE account_id=%s AND asset_id=%s',
+                           (str(account_id),str(asset_id)))
+            old_holding = cursor.fetchone() or {}
+            rebuilt = replay_holding(prior_trades)
+            current = (float(old_holding.get('quantity') or 0),
+                       float(old_holding.get('original_avg_price') or old_holding.get('avg_price') or 0),
+                       float(old_holding.get('original_avg_price_usd') or old_holding.get('avg_price_usd') or 0),
+                       float(old_holding.get('buy_fx_rate') or 0))
+            fields=1 if abs(current[0])<1e-9 else 4
+            if any(not math.isclose(a,b,abs_tol=1e-5,rel_tol=1e-6) for a,b in zip(rebuilt[:fields],current[:fields])):
+                raise ValueError('매매 이력과 현재 보유 원가가 다릅니다. 5번 탭 장부 정정으로 기준을 확인해주세요.')
         delta_krw, delta_usd = cash_movement(
             trade_type, quantity, price, currency, exchange_rate, dep_krw, dep_usd
         )
@@ -112,6 +140,21 @@ def execute_trade(
             cursor.execute("""
                 UPDATE accounts SET deposit_krw = %s, deposit_usd = %s WHERE id = %s
             """, (dep_krw + delta_krw, dep_usd + delta_usd, str(account_id)))
+
+        if backdated:
+            cursor.execute('SELECT * FROM trade_history WHERE account_id=%s AND asset_id=%s',
+                           (str(account_id),str(asset_id)))
+            qty,avg_krw,avg_usd,fx = replay_holding(cursor.fetchall())
+            cursor.execute("""INSERT INTO holdings
+                (id,account_id,asset_id,quantity,avg_price,avg_price_usd,buy_fx_rate,original_avg_price,original_avg_price_usd)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(account_id,asset_id) DO UPDATE SET quantity=EXCLUDED.quantity,
+                    avg_price=EXCLUDED.avg_price,avg_price_usd=EXCLUDED.avg_price_usd,
+                    buy_fx_rate=EXCLUDED.buy_fx_rate,original_avg_price=EXCLUDED.original_avg_price,
+                    original_avg_price_usd=EXCLUDED.original_avg_price_usd""",
+                (db.new_id(),str(account_id),str(asset_id),qty,avg_krw,avg_usd,fx,avg_krw,avg_usd))
+            if transaction is None: conn.commit()
+            return True, '거래일 순서로 보유 수량·원가를 재계산하고 매매를 저장했습니다.'
 
         cursor.execute('''
             SELECT quantity, avg_price, avg_price_usd, buy_fx_rate FROM holdings 
@@ -305,6 +348,17 @@ def delete_trades(db: RepositoryContext, trade_ids, transaction=None):
                 trade.get('cash_delta_krw') is None or trade.get('cash_delta_usd') is None
             ):
                 raise ValueError("기존 거래의 결제 통화·예수금 변동 기록이 없습니다. 잔고 대사 후 삭제해주세요.")
+        if transaction is None:
+            for aid,asset_id in sorted({(t['account_id'],t['asset_id']) for t in selected}):
+                cursor.execute('SELECT * FROM trade_history WHERE account_id=%s AND asset_id=%s',(aid,asset_id))
+                rebuilt=replay_holding(cursor.fetchall())
+                cursor.execute('SELECT * FROM holdings WHERE account_id=%s AND asset_id=%s',(aid,asset_id))
+                h=cursor.fetchone() or {}
+                current=(float(h.get('quantity') or 0),float(h.get('original_avg_price') or h.get('avg_price') or 0),
+                         float(h.get('original_avg_price_usd') or h.get('avg_price_usd') or 0),float(h.get('buy_fx_rate') or 0))
+                fields=1 if abs(current[0])<1e-9 else 4
+                if any(not math.isclose(a,b,abs_tol=1e-5,rel_tol=1e-6) for a,b in zip(rebuilt[:fields],current[:fields])):
+                    raise ValueError('거래 이력만으로 현재 보유 원가를 복원할 수 없습니다. 5번 탭 장부 정정으로 확인해주세요.')
         cursor.execute(f"DELETE FROM trade_history WHERE id IN ({placeholders})", tuple(ids))
         for trade in selected:
             if trade['trade_type'] != 'INIT':
@@ -398,5 +452,46 @@ def apply_transfer_plan(db: RepositoryContext, transfer_plan: list) -> Tuple[boo
     except Exception as e:
         conn.rollback()
         return False, f"이체 내역 반영 중 오류가 발생했습니다: {str(e)}"
+    finally:
+        conn.close()
+
+
+def execute_batch(db, payload):
+    """Manual rows commit together. A lost response can retry the exact receipt."""
+    conn = db.connect()
+    try:
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        scope = 'trades:' + payload['portfolio_id']
+        existing = bookkeeping.begin(c,scope,payload['request_id'],payload)
+        if existing is not None:
+            ids=existing.get('trade_ids',[])
+            if ids:
+                marks=','.join(['%s']*len(ids))
+                c.execute(f'SELECT id FROM trade_history WHERE id IN ({marks})',tuple(ids))
+                if len(c.fetchall())!=len(ids):
+                    existing={**existing,'message':'이미 저장한 요청입니다. 일부 또는 전체 매매는 이후 취소되어 추가 반영하지 않았습니다.'}
+            conn.rollback()
+            return existing
+        from data.repositories.nh_notices import lock_scope
+        ids = sorted({row['account_id'] for row in payload['trades']})
+        lock_scope(c,payload['portfolio_id'],ids)
+        results = []
+        trade_ids = []
+        for index,row in enumerate(payload['trades']):
+            ok,message = execute_trade(db,trade_date=payload['trade_date'],transaction=conn,**row)
+            if not ok:
+                raise ValueError(f'{index+1}번째 거래: {message} 이번 묶음은 모두 미반영입니다.')
+            c.execute('SELECT id FROM trade_history WHERE account_id=%s ORDER BY trade_sequence DESC LIMIT 1',(row['account_id'],))
+            trade_ids.append(c.fetchone()['id'])
+            results.append(dict(index=index,success=True,message=message))
+        result = dict(success=True,success_count=len(results),errors=[],results=results,trade_ids=trade_ids,
+                      message=f'{len(results)}건의 매매를 함께 저장했습니다.')
+        bookkeeping.finish(c,scope,payload['request_id'],result)
+        conn.commit()
+        db.invalidate()
+        return result
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()

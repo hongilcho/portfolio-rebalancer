@@ -45,7 +45,7 @@ try{
   assert.match(html,/평균 취득환율/);assert.match(html,/1,300\.0000/);assert.doesNotMatch(html,/처리 후 달러·평균환율|가장 최근 기록 취소/);
  });
  test('saving blocks changing work modes, while current form remains mounted',()=>{
-  const html=render(History,props,{HistoryTab:{childBusy:{nh:true}}});assert.match(html,/id="history-record-tab"[^>]*disabled=""/);
+  const html=render(History,props,{HistoryTab:{childBusy:{nh:true},childWriting:{nh:true}}});assert.match(html,/id="history-record-tab"[^>]*disabled=""/);
   assert.match(html,/aria-pressed="false"[^>]*disabled=""/);assert.match(html,/NH 알림 붙여넣기/);
  });
  test('paged history keeps transaction details and batch cancel collapsed',()=>{

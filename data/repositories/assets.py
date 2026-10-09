@@ -1,5 +1,6 @@
 """Asset CRUD and deposit attributes persistence."""
 import json
+import math
 import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -42,8 +43,10 @@ def add_asset(
     account_no='',
     include_in_rebalance=True,
     is_dividend_cost_deduct=False,
+    transaction=None,
+    bookkeeping_write=False,
 ):
-    conn = db.connect()
+    conn = transaction if transaction is not None else db.connect()
     cursor = conn.cursor()
     new_id = db.new_id()
     target_pid = portfolio_id or "default"
@@ -62,6 +65,8 @@ def add_asset(
     clean_accs = sanitize_account_names(allowed_accounts)
 
     try:
+        if is_deposit and not bookkeeping_write:
+            raise ValueError('예금 등록은 5번 탭의 예금 장부에서 처리해주세요.')
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
             INSERT INTO assets (
@@ -81,17 +86,17 @@ def add_asset(
             bool(is_dividend_cost_deduct)
         ))
 
-        conn.commit()
+        if transaction is None: conn.commit()
         db.invalidate()
         return True, "성공적으로 추가되었습니다."
     except psycopg2.IntegrityError:
-        conn.rollback()
+        if transaction is None: conn.rollback()
         return False, f"이미 존재하는 티커/종목코드입니다: {ticker}"
     except Exception as e:
-        conn.rollback()
+        if transaction is None: conn.rollback()
         return False, str(e)
     finally:
-        conn.close()
+        if transaction is None: conn.close()
 
 
 def update_asset(
@@ -117,8 +122,10 @@ def update_asset(
     account_no='',
     include_in_rebalance=True,
     is_dividend_cost_deduct=False,
+    transaction=None,
+    bookkeeping_write=False,
 ):
-    conn = db.connect()
+    conn = transaction if transaction is not None else db.connect()
     cursor = conn.cursor()
     clean_acc_no = (account_no or '').strip()
 
@@ -132,6 +139,27 @@ def update_asset(
 
     clean_accs = sanitize_account_names(allowed_accounts)
     try:
+        cursor.execute('SELECT portfolio_id FROM assets WHERE id=%s',(str(asset_id),))
+        ref=cursor.fetchone()
+        if not ref: raise ValueError('종목을 찾을 수 없습니다.')
+        pid=ref['portfolio_id'] if isinstance(ref,dict) else ref[0]
+        cursor.execute('SELECT id FROM portfolios WHERE id=%s FOR UPDATE',(pid,))
+        lookup=conn.cursor(cursor_factory=RealDictCursor)
+        lookup.execute('SELECT * FROM assets WHERE id=%s FOR UPDATE',(str(asset_id),))
+        current=lookup.fetchone()
+        for table in ('holdings','trade_history'):
+            lookup.execute(f'SELECT 1 FROM {table} WHERE asset_id=%s LIMIT 1',(str(asset_id),))
+            if lookup.fetchone() and (market!=current['market'] or bool(is_deposit)!=bool(current['is_deposit']) or ticker.strip().upper()!=current['ticker']):
+                raise ValueError('보유·거래 이력이 있는 종목의 시장·종류·종목코드는 변경할 수 없습니다.')
+        if not bookkeeping_write:
+            if bool(is_deposit)!=bool(current['is_deposit']):
+                raise ValueError('예금 종류 변경은 5번 탭 예금 장부를 이용해주세요.')
+            if current['is_deposit']:
+                protected=dict(deposit_principal=deposit_principal,interest_rate=interest_rate,
+                    start_date=start_date,maturity_date=maturity_date,
+                    early_termination_rate=early_termination_rate,tax_rate=tax_rate)
+                if any(str(v or 0)!=str(current.get(k) or 0) if k in ('start_date','maturity_date') else not math.isclose(float(v or 0),float(current.get(k) or 0),abs_tol=1e-5,rel_tol=1e-7) for k,v in protected.items()):
+                    raise ValueError('예금 원금·계약 조건은 5번 탭 예금 장부에서 사유와 함께 변경해주세요.')
         allowed_json = json.dumps(clean_accs, ensure_ascii=False)
         cursor.execute('''
             UPDATE assets
@@ -153,14 +181,14 @@ def update_asset(
             str(asset_id)
         ))
 
-        conn.commit()
+        if transaction is None: conn.commit()
         db.invalidate()
         return True, "성공적으로 수정되었습니다."
     except Exception as e:
-        conn.rollback()
+        if transaction is None: conn.rollback()
         return False, str(e)
     finally:
-        conn.close()
+        if transaction is None: conn.close()
 
 
 def toggle_asset_active(db: RepositoryContext, asset_id, is_active: bool):
@@ -183,10 +211,22 @@ def delete_asset(db: RepositoryContext, asset_id):
     conn = db.connect()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM holdings WHERE asset_id = %s", (str(asset_id),))
-        cursor.execute("DELETE FROM trade_history WHERE asset_id = %s", (str(asset_id),))
-        cursor.execute("DELETE FROM assets WHERE id = %s", (str(asset_id),))
-
+        cursor.execute('SELECT portfolio_id FROM assets WHERE id=%s',(str(asset_id),))
+        ref=cursor.fetchone()
+        if not ref: raise ValueError('종목을 찾을 수 없습니다.')
+        pid=ref['portfolio_id'] if isinstance(ref,dict) else ref[0]
+        cursor.execute('SELECT id FROM portfolios WHERE id=%s FOR UPDATE',(pid,))
+        cursor.execute('SELECT is_deposit,deposit_principal FROM assets WHERE id=%s FOR UPDATE',(str(asset_id),))
+        row=cursor.fetchone()
+        is_deposit,principal=(row['is_deposit'],row['deposit_principal']) if isinstance(row,dict) else row
+        if is_deposit and abs(float(principal or 0))>1e-9:
+            raise ValueError('원금이 있는 예금은 삭제할 수 없습니다. 5번 탭 예금 장부를 이용해주세요.')
+        for table in ('holdings','trade_history','usd_cash_events'):
+            cursor.execute(f'SELECT 1 FROM {table} WHERE asset_id=%s LIMIT 1',(str(asset_id),))
+            if cursor.fetchone(): raise ValueError('보유·거래 이력이 있는 종목은 영구 삭제할 수 없습니다. 보관 기능을 이용해주세요.')
+        cursor.execute("SELECT request_id FROM bookkeeping_requests WHERE scope=%s LIMIT 1",('deposit:'+str(asset_id),))
+        if cursor.fetchone(): raise ValueError('예금 장부 이력이 있는 종목은 영구 삭제할 수 없습니다.')
+        cursor.execute('DELETE FROM assets WHERE id=%s',(str(asset_id),))
         conn.commit()
         db.invalidate()
         return True, "종목이 성공적으로 삭제되었습니다."

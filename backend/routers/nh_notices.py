@@ -10,8 +10,8 @@ router=APIRouter(prefix='/api/nh-notices',tags=['nh-notices'])
 
 
 class Cash(BaseModel):
-    deposit_krw: float = Field(ge=0,allow_inf_nan=False)
-    deposit_usd: float = Field(ge=0,allow_inf_nan=False)
+    deposit_krw: float = Field(allow_inf_nan=False)
+    deposit_usd: float = Field(allow_inf_nan=False)
 
 
 class Row(BaseModel):

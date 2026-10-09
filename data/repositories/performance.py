@@ -1,3 +1,4 @@
+import json
 """Performance bookkeeping only; external-flow records never adjust actual cash."""
 from datetime import datetime, timezone, timedelta
 from psycopg2.extras import RealDictCursor, Json
@@ -114,6 +115,12 @@ def void_flow(ctx,pid,ident,voided):
         c.execute('SELECT id FROM nh_notice_items WHERE performance_flow_id=%s AND reversed_at IS NULL', (ident,))
         if c.fetchone():
             raise ValueError('예수금과 연결된 입출금은 NH 알림 가져오기의 반영 이력에서 묶음 취소해주세요.')
+        c.execute("SELECT result FROM bookkeeping_requests WHERE result->>'flow_id'=%s",(ident,))
+        for row in c.fetchall():
+            value=row['result'] if isinstance(row,dict) else row[0]
+            linked=value if isinstance(value,dict) else json.loads(value)
+            if linked.get('created_flow') or not linked.get('reversed'):
+                raise ValueError('달러 잔고와 함께 반영한 입출금은 5번 탭 달러 기록에서 함께 취소해주세요.')
         c.execute('UPDATE performance_flows SET voided=%s WHERE id=%s AND portfolio_id=%s AND voided<>%s', (voided,ident,pid,voided))
         if c.rowcount:
             c.execute('UPDATE performance_tracking SET revision=revision+1 WHERE portfolio_id=%s', (pid,))

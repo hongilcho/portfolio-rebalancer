@@ -108,7 +108,7 @@ if args.workflow:
                 VALUES('qa_deposit','검증 정기예금','-','KR','["qa_acc"]','default',TRUE,1000000,4,%s,%s,15.4,0,FALSE)''',
                 (str(today-timedelta(days=355)), str(today+timedelta(days=10))))
         conn.commit()
-    assert dm.execute_trade(str(today),'qa_acc','qa_deposit','INIT',1,1000000,'KRW',1)[0]
+    # Pure deposits are valued once from their audited master; no shadow holding.
 
 from backend import main
 from backend.services import market_service

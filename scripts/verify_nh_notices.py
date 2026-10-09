@@ -3,14 +3,17 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,date
 from decimal import Decimal
 import json,os,sys
+import argparse
 from pathlib import Path
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn,parse_dsn
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-settings=json.loads((ROOT/'backups/local_validation/local_connection.json').read_text())
-assert settings['host']=='127.0.0.1' and settings['port']==55437 and settings['dbname']=='postgres'
+parser=argparse.ArgumentParser()
+parser.add_argument('--trust-local-port',type=int,choices=[55438],required=True)
+args=parser.parse_args()
+settings=dict(host='127.0.0.1',port=args.trust_local_port,dbname='postgres',user='ledger_qa')
 name='portfolio_nh_'+datetime.now().strftime('%Y%m%d_%H%M%S')
 admin=psycopg2.connect(**settings);admin.autocommit=True
 with admin.cursor() as c:c.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(name)))
@@ -18,7 +21,7 @@ admin.close();settings['dbname']=name
 original_connect=psycopg2.connect
 def guarded_connect(dsn=None,*args,**kwargs):
     parsed=parse_dsn(dsn) if dsn else {};parsed.update(kwargs)
-    assert parsed['host']=='127.0.0.1' and str(parsed['port'])=='55437'
+    assert parsed['host']=='127.0.0.1' and str(parsed['port'])=='55438'
     return original_connect(dsn,*args,**kwargs)
 psycopg2.connect=guarded_connect
 os.environ.update(PORTFOLIO_LOAD_CONFIG_FILES='0',SUPABASE_URL=make_dsn(**settings),NAMUH_APP_KEY='',NAMUH_APP_SECRET='',PERFORMANCE_CLOSE_SCHEDULER_ENABLED='0')
@@ -88,9 +91,8 @@ with dm.get_connection() as conn,conn.cursor() as c:
 internal=nh_notices.commit(ctx,'p',batch([row('DEPOSIT',krw_amount=10000,external=False,source_account_id='source')],'QA-internal-0001'))
 assert cash()==(10004,10) and cash('source')==(990000,0)
 nh_notices.undo(ctx,'p',internal['batch_id']);assert cash()==(4,10) and cash('source')==(1000000,0)
-adjust=nh_notices.commit(ctx,'p',batch([row('KRW_ADJUST',krw_amount=960004)],'QA-adjust-0001'))
-assert cash()==(960004,10)
-nh_notices.undo(ctx,'p',adjust['batch_id']);assert cash()==(4,10)
+fails(lambda:nh_notices.commit(ctx,'p',batch([row('KRW_ADJUST',krw_amount=960004)],'QA-adjust-0001')),'5번 탭')
+assert cash()==(4,10)
 foreign=batch([row('KRW_ADJUST','foreign',krw_amount=1)],'QA-foreign-0001')
 fails(lambda:nh_notices.commit(ctx,'p',foreign),'포트폴리오')
 # Two distinct concurrent previews cannot both apply the same cash movement.
@@ -100,7 +102,7 @@ def submit(payload):
     except ValueError as e:return str(e)
 with ThreadPoolExecutor(max_workers=2) as pool:race=list(pool.map(submit,[left,right]))
 assert sum(isinstance(r,dict) for r in race)==1 and cash()==(7,727.31)
-print('PostgreSQL NH QA passed: atomic rollback, concurrent idempotency, stale previews, existing flow link, FX cost, API, scoped accounts, cash-only adjustment and audited undo. DB:',name)
+print('PostgreSQL NH QA passed: atomic rollback, concurrent idempotency, stale previews, existing flow link, FX cost, API, scoped accounts, retired overwrite guard and audited undo. DB:',name)
 
 # The history read does not replay transactions or double-count linked flows.
 from data.repositories import activity

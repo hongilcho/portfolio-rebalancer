@@ -19,10 +19,11 @@ ACTIVITY = '''WITH activity AS (
    CASE WHEN f.amount_krw>0 THEN 'DEPOSIT' ELSE 'WITHDRAW' END,f.currency,f.native_amount,
    CASE WHEN n.payload->>'transfer'='true' THEN '포트폴리오 간 이체' ELSE '외부 투자자금' END,f.voided,n.batch_id,f.recorded_at,
    jsonb_build_object('flow_id',f.id,'exchange_rate',f.exchange_rate,'amount_krw',f.amount_krw,'notes',f.notes,
-     'occurred_at',n.payload->>'occurred_at','reported_available_krw',n.payload->>'reported_available_krw','peer_account',peer.account_alias,'cash_linked',n.id IS NOT NULL,'cash_applied',n.payload->>'apply_cash'='true','can_restore',NOT EXISTS(SELECT 1 FROM nh_notice_items x WHERE x.performance_flow_id=f.id AND (x.reversed_at IS NULL OR x.result->>'created_flow'='true')))
+     'occurred_at',n.payload->>'occurred_at','reported_available_krw',n.payload->>'reported_available_krw','peer_account',peer.account_alias,'usd_event_id',br.result->>'event_id','cash_linked',n.id IS NOT NULL OR br.request_id IS NOT NULL,'cash_applied',n.payload->>'apply_cash'='true','can_restore',br.request_id IS NULL AND NOT EXISTS(SELECT 1 FROM nh_notice_items x WHERE x.performance_flow_id=f.id AND (x.reversed_at IS NULL OR x.result->>'created_flow'='true')))
  FROM performance_flows f LEFT JOIN accounts a ON a.id=f.account_id
  LEFT JOIN nh_notice_items n ON n.performance_flow_id=f.id AND n.reversed_at IS NULL
  LEFT JOIN accounts peer ON peer.id=n.payload->>'peer_account_id'
+ LEFT JOIN bookkeeping_requests br ON br.result->>'flow_id'=f.id AND (br.result->>'created_flow'='true' OR COALESCE(br.result->>'reversed','false')='false')
  WHERE f.portfolio_id=%(pid)s
  UNION ALL
  SELECT 'USD:'||e.id,'USD',e.event_date::text,e.account_id,a.account_alias,e.kind,'USD',e.usd_amount,
@@ -32,6 +33,7 @@ ACTIVITY = '''WITH activity AS (
  FROM usd_cash_events e JOIN accounts a ON a.id=e.account_id
  LEFT JOIN nh_notice_items n ON n.linked_usd_event_id=e.id AND n.reversed_at IS NULL
  WHERE a.portfolio_id=%(pid)s AND e.kind NOT IN ('BUY','SELL') AND NOT EXISTS(SELECT 1 FROM ledger_adjustments l WHERE l.usd_event_id=e.id)
+   AND NOT EXISTS(SELECT 1 FROM bookkeeping_requests br WHERE br.result->>'event_id'=e.id AND br.result->>'flow_id' IS NOT NULL AND (br.result->>'created_flow'='true' OR COALESCE(br.result->>'reversed','false')='false'))
  UNION ALL
  SELECT 'NOTICE:'||n.id,CASE WHEN n.kind='KRW_ADJUST' THEN 'ADJUST' ELSE 'CASH' END,
    n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),

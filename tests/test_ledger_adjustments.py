@@ -104,7 +104,8 @@ def test_followup_cash_movement_blocks_undo_without_partial_changes(book):
     assert book.raw.execute('SELECT baseline_value FROM performance_tracking').fetchone()[0]==1014000
 
 def test_active_close_job_blocks_correction_and_waiting_job_is_refreshed(book):
-    book.raw.execute("INSERT INTO performance_close_jobs VALUES('p','2026-10-08','running','{}')");book.commit()
+    day=repo.datetime.now(repo.forex.KST).date().isoformat()
+    book.raw.execute("INSERT INTO performance_close_jobs VALUES('p',?,'running','{}')",(day,));book.commit()
     req=request(book)
     with pytest.raises(ValueError,match='종가 수집'):repo.commit(book.ctx,'p',req)
     book.raw.execute("UPDATE performance_close_jobs SET state='retry'");book.commit()

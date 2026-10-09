@@ -96,6 +96,13 @@ def _do_init_db_schema(db: RepositoryContext, conn, cursor):
     cursor.execute("UPDATE assets SET portfolio_id = 'default' WHERE portfolio_id IS NULL")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_deposit BOOLEAN DEFAULT FALSE")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS deposit_principal REAL DEFAULT 0.0")
+    # Preserve every existing stored value; future KRW principal entries retain won units.
+    cursor.execute("""DO $$ BEGIN
+        IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
+            AND table_name='assets' AND column_name='deposit_principal' AND data_type='real') THEN
+            ALTER TABLE assets ALTER COLUMN deposit_principal TYPE DOUBLE PRECISION;
+        END IF;
+    END $$""")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS interest_rate REAL DEFAULT 0.0")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT ''")
     cursor.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS maturity_date TEXT DEFAULT ''")
@@ -283,36 +290,9 @@ def _do_init_db_schema(db: RepositoryContext, conn, cursor):
 
 
 def clean_deposit_shadow_accounts(db: RepositoryContext):
+    """Retired compatibility hook: startup must never delete financial records.
+
+    Old deposit shadow accounts may still contain real balances or history.
+    Preserve them; explicit audited bookkeeping handles any correction instead.
     """
-    정기예금은 계좌가 아닌 '순수 자산(Pure Asset)'이므로,
-    기존에 임시로 자동 생성되었던 accounts(정기예금 유형 또는 DEP- 계좌) 및 holdings 레코드를 DB에서 완전 정리.
-    """
-    conn = db.connect()
-    cursor = conn.cursor()
-    try:
-        # 1. 정기예금 또는 DEP- 형태의 가상 계좌 조회
-        cursor.execute("SELECT id FROM accounts WHERE account_type = '정기예금' OR account_no LIKE 'DEP-%'")
-        shadow_acc_ids = [str(r[0]) for r in cursor.fetchall()]
-        
-        if shadow_acc_ids:
-            cursor.execute("DELETE FROM holdings WHERE account_id = ANY(%s)", (shadow_acc_ids,))
-            cursor.execute("DELETE FROM trade_history WHERE account_id = ANY(%s)", (shadow_acc_ids,))
-            cursor.execute("DELETE FROM accounts WHERE id = ANY(%s)", (shadow_acc_ids,))
-            
-        cursor.execute('''
-            UPDATE assets 
-            SET allowed_accounts = '[]'
-            WHERE is_deposit = TRUE
-        ''')
-        cursor.execute('''
-            UPDATE assets
-            SET account_no = ''
-            WHERE is_deposit = TRUE AND account_no LIKE 'DEP-%'
-        ''')
-        conn.commit()
-        db.invalidate()
-    except Exception as e:
-        conn.rollback()
-        print(f"Error cleaning deposit shadow accounts: {e}")
-    finally:
-        conn.close()
+    return None

@@ -25,12 +25,13 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
   const filter=(key,value)=>{setFilters(old=>({...old,[key]:value,...(key==='category'?{asset_id:''}:{})}));setPage(1);setMessage('');};
   const cancel=async item=>{
     const restore=item.cancelled && item.category==='CASH' && item.detail.can_restore;
-    const prompt=item.batch_id?'같은 알림 묶음의 입출금·이체·환전·매수를 함께 취소합니다. 이후 잔고 변경이 있으면 취소가 거절될 수 있습니다.':restore?'이 입출금 성과 기록을 복원할까요? 예수금은 변경하지 않습니다.':item.category==='TRADE'?'매매를 취소하고 예수금·수량·원가를 되돌릴까요?':item.category==='CASH'?'외부 입출금 성과 기록을 취소할까요? 예수금은 변경하지 않습니다.':'이 현금·원가 기록을 취소하고 이전 상태로 되돌릴까요?';
+    const prompt=item.batch_id?'같은 알림 묶음의 입출금·이체·환전·매수를 함께 취소합니다. 이후 잔고 변경이 있으면 취소가 거절될 수 있습니다.':restore?'이 입출금 성과 기록을 복원할까요? 예수금은 변경하지 않습니다.':item.category==='TRADE'?'매매를 취소하고 예수금·수량·원가를 되돌릴까요?':item.category==='CASH'?(item.detail.usd_event_id?'달러 입출금의 잔고·원가·성과 기록을 함께 취소할까요?':'외부 입출금 성과 기록을 취소할까요? 예수금은 변경하지 않습니다.'):'이 현금·원가 기록을 취소하고 이전 상태로 되돌릴까요?';
     if(!window.confirm(prompt))return;
     setSaving(true);setError('');setMessage('');let recorded=false;
     try{
       if(item.batch_id){const result=await api.undoNhNotices(portfolioId,item.batch_id);await Promise.allSettled((result.performance_portfolios || []).filter(p=>p!==portfolioId).map(p=>api.capturePerformance(p)));}
       else if(item.category==='TRADE')await api.batchDeleteTrades([item.detail.trade_id]);
+      else if(item.category==='CASH' && item.detail.usd_event_id)await api.undoUsdEvent(item.account_id,item.detail.usd_event_id);
       else if(item.category==='CASH')await api.voidPerformanceFlow(portfolioId,item.detail.flow_id,!restore);
       else if(item.category==='USD')await api.undoUsdEvent(item.account_id,item.detail.usd_event_id);
       else if(item.detail.correction_id)await api.undoLedgerCorrection(portfolioId,item.detail.correction_id);
@@ -72,7 +73,7 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
             {d.reported_available_krw!=null && <p>알림의 출금가능금액 {formatKRW(Number(d.reported_available_krw))} · 참고값</p>}{d.occurred_at && <p>실제 일시 {new Date(d.occurred_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})}</p>}
             {d.balance!=null && <p>처리 후 달러 {formatUSD(Number(d.balance))} · 원화 취득원가 {formatKRW(Number(d.cost_krw))}</p>}
             {d.source_account && <p>출금 계좌: {d.source_account}</p>}{d.destination_account && <p>입금 계좌: {d.destination_account}</p>}{d.peer_account && <p>이체 상대 계좌: {d.peer_account}</p>}{item.category==='CASH' && !d.flow_id && d.cash_applied===false && <p>과거 이력만 저장 · 예수금 변경 없음</p>}{d.broker_order_no && <p>주문번호 {d.broker_order_no}</p>}
-            {d.notes && <p>{d.notes}</p>}{item.category==='CASH' && d.flow_id && <p>{d.cash_linked?(d.cash_applied?'성과 기록·예수금 함께 반영':'NH 알림 연결 · 성과 기록만'):'성과 계산용 입출금 기록'} · {formatKRW(Number(d.amount_krw))}</p>}
+            {d.notes && <p>{d.notes}</p>}{item.category==='CASH' && d.flow_id && <p>{d.cash_linked?(d.usd_event_id?'달러 잔고·원가·성과 함께 반영':d.cash_applied?'성과 기록·예수금 함께 반영':'NH 알림 연결 · 성과 기록만'):'성과 계산용 입출금 기록'} · {formatKRW(Number(d.amount_krw))}</p>}
             {item.batch_id && <p>같은 알림 묶음의 입출금·이체·환전·매수는 함께 취소됩니다. 묶음 ID: {item.batch_id.slice(0,8)}</p>}
             {canCancel && item.category==='TRADE' && !item.batch_id && <label className="history-check"><input type="checkbox" disabled={saving} checked={selectedTrades.includes(d.trade_id)} onChange={e=>setSelectedTrades(old=>e.target.checked?[...old,d.trade_id]:old.filter(id=>id!==d.trade_id))}/>여러 매매를 함께 취소할 목록에 선택</label>}
             {(canCancel || (item.cancelled && d.can_restore)) && <button type="button" className="btn btn-secondary btn-sm" disabled={saving} onClick={()=>cancel(item)}>{item.cancelled?'성과 기록 복원':item.batch_id?'이 알림 묶음 취소':'이 기록 취소'}</button>}

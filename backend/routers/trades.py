@@ -6,9 +6,10 @@
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
-from data.data_manager import execute_trade, get_trade_history, delete_trades
+from data.data_manager import _context, get_trade_history, delete_trades
+from data.repositories import trades as repository
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
@@ -16,22 +17,28 @@ class TradeBatchItem(BaseModel):
     """일괄 체결 개별 거래 아이템 스키마"""
     account_id: str
     asset_id: str
-    trade_type: str # 'BUY' or 'SELL'
-    quantity: float
-    price: float
-    currency: Optional[str] = None
-    exchange_rate: Optional[float] = None
+    trade_type: Literal['BUY','SELL']
+    quantity: float = Field(gt=0,le=1e12,allow_inf_nan=False)
+    price: float = Field(gt=0,le=1e12,allow_inf_nan=False)
+    currency: Literal['KRW','USD']
+    exchange_rate: Optional[float] = Field(default=None,gt=0,le=1e6,allow_inf_nan=False)
     import_source: Optional[Literal['NAMUH_KAKAO']] = None
     broker_order_no: Optional[str] = None
 
 class BatchTradeRequest(BaseModel):
     """일괄 매매 기록 실행 요청 스키마"""
+    request_id: str = Field(min_length=8,max_length=100)
+    portfolio_id: str = Field(min_length=1,max_length=100)
     trade_date: str # YYYY-MM-DD
-    trades: List[TradeBatchItem]
+    trades: List[TradeBatchItem] = Field(min_length=1,max_length=100)
 
 class DeleteTradesRequest(BaseModel):
     """매매 기록 일괄 삭제 요청 스키마"""
     trade_ids: List[str]
+
+@router.get('/capabilities')
+def capabilities():
+    return {'bookkeeping_protocol':1}
 
 @router.get("/")
 def list_trades(
@@ -68,54 +75,10 @@ def list_trades(
 
 @router.post("/batch")
 def execute_batch_trades(req: BatchTradeRequest):
-    success_count = 0
-    errors = []
-    results = []
-    
-    for index, item in enumerate(req.trades):
-        if item.trade_type not in ('BUY','SELL'):
-            results.append({'index':index,'success':False,'message':'초기 보유·원가 정정은 4번 탭의 장부 확인 및 정정을 이용해주세요.'})
-            errors.append(results[-1]['message'])
-            continue
-        if item.quantity <= 0 or item.price <= 0:
-            results.append({"index": index, "success": False, "message": "수량과 단가는 양수여야 합니다."})
-            errors.append(results[-1]["message"])
-            continue
-            
-        import_identity = {"import_source": item.import_source, "broker_order_no": item.broker_order_no} if item.import_source or item.broker_order_no else {}
-        success, msg = execute_trade(
-            trade_date=req.trade_date,
-            account_id=item.account_id,
-            asset_id=item.asset_id,
-            trade_type=item.trade_type,
-            quantity=item.quantity,
-            price=item.price,
-            currency=item.currency,
-            exchange_rate=item.exchange_rate,
-            **import_identity,
-        )
-        if success:
-            success_count += 1
-        else:
-            errors.append(msg)
-        results.append({"index": index, "success": success, "message": msg})
-            
-    if errors:
-        return {
-            "success": success_count > 0,
-            "success_count": success_count,
-            "errors": errors,
-            "results": results,
-            "message": f"{success_count}건 처리 완료, {len(errors)}건 실패"
-        }
-        
-    return {
-        "success": True,
-        "success_count": success_count,
-        "errors": [],
-        "results": results,
-        "message": f"{success_count}건의 매매 기록이 성공적으로 저장되었습니다."
-    }
+    try:
+        return repository.execute_batch(_context(),req.model_dump(mode='json'))
+    except ValueError as exc:
+        raise HTTPException(status_code=400,detail=str(exc)) from exc
 
 @router.delete("/batch")
 def batch_delete_trades(req: DeleteTradesRequest):

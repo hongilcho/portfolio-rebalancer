@@ -43,19 +43,12 @@ class NoticeDatabase(DatabaseAdapter):
 def db():
     database=NoticeDatabase()
     database.raw.executescript('''
-      CREATE TABLE portfolios(id TEXT PRIMARY KEY,name TEXT DEFAULT 'Test');
-      INSERT INTO portfolios(id) VALUES('p');
       ALTER TABLE accounts ADD COLUMN account_alias TEXT DEFAULT 'Test';
-      ALTER TABLE accounts ADD COLUMN portfolio_id TEXT DEFAULT 'p';
-      ALTER TABLE assets ADD COLUMN portfolio_id TEXT DEFAULT 'p';
-      ALTER TABLE assets ADD COLUMN is_deposit INTEGER DEFAULT 0;
       ALTER TABLE assets ADD COLUMN ticker TEXT DEFAULT '0085P0';
-      ALTER TABLE assets ADD COLUMN allowed_accounts TEXT DEFAULT '["acc"]';
       ALTER TABLE trade_history ADD COLUMN import_source TEXT;
       ALTER TABLE trade_history ADD COLUMN broker_order_no TEXT;
       UPDATE accounts SET deposit_krw=4,deposit_usd=10;
       INSERT INTO usd_cash_state(account_id,usd_balance,cost_krw,last_event_date) VALUES('acc',10,13000,'2026-01-01');
-      CREATE TABLE performance_tracking(portfolio_id TEXT PRIMARY KEY,baseline_date TEXT,revision INT DEFAULT 0);
       INSERT INTO performance_tracking(portfolio_id,baseline_date) VALUES('p','2026-01-01');
       CREATE TABLE performance_flows(id TEXT PRIMARY KEY,portfolio_id TEXT,account_id TEXT,request_id TEXT,
         event_date TEXT,amount_krw REAL,currency TEXT,native_amount REAL,exchange_rate REAL,notes TEXT,
@@ -153,7 +146,7 @@ def test_undo_restores_cost_and_original_flow_preserves_audit_and_blocks_late_ch
 
 def test_legacy_cash_adjustment_is_blocked_without_audited_correction(db):
     before=db.balances(),db.rows('usd_cash_state')
-    with pytest.raises(ValueError,match='4번 탭'):
+    with pytest.raises(ValueError,match='5번 탭'):
         nh_notices.commit(db.ctx,'p',payload(db,[row('KRW_ADJUST',krw_amount=960004)]))
     assert (db.balances(),db.rows('usd_cash_state'))==before
 

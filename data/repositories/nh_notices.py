@@ -166,7 +166,7 @@ def commit(db,pid,payload):
             conn.rollback()
             return existing['result']
         if any(r['kind']=='KRW_ADJUST' for r in rows):
-            raise ValueError('예수금 직접 덮어쓰기는 중단했습니다. 4번 탭의 장부 정정을 이용해주세요.')
+            raise ValueError('예수금 직접 덮어쓰기는 중단했습니다. 5번 탭의 장부 정정을 이용해주세요.')
         for aid in ids:
             expected = payload['expected_cash'].get(aid)
             c.execute('SELECT deposit_krw,deposit_usd FROM accounts WHERE id=%s', (aid,))
