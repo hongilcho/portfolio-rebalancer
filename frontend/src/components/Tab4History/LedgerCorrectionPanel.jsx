@@ -1,7 +1,8 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useState,useRef} from 'react';
 import {api} from '../../utils/api';
 import {formatKRW,formatUSD} from '../../utils/formatters';
 import {normalizeCorrection,restoreCorrection} from '../../utils/ledgerCorrection';
+import {matchesWithdrawalCorrection,settleStoredCorrection} from '../../utils/withdrawalCorrection';
 import {kstToday} from '../../utils/depositMaturities';
 const labels={PAST_WITHDRAWAL:'과거 출금 누락',CASH:'예수금 정정·초기 잔고',HOLDING:'수량·평단가 정정·초기 보유 등록'};
 const blank=()=>({kind:'PAST_WITHDRAWAL',account_id:'',event_date:kstToday(),reason:'',currency:'KRW',amount:'',balance:'',usd_average_rate:'',asset_id:'',quantity:'',avg_price:'',avg_price_usd:'',buy_fx_rate:'',first_buy_date:'',manual_dividend_override:''});
@@ -14,9 +15,11 @@ function HistoryReview({history,decisions,onChange,disabled}){
     </select>{h.error && <small>{h.error}</small>}
   </div>)}</div>;
 }
-export default function LedgerCorrectionPanel({portfolioId,accounts,assets,active=true,disabled=false,onChanged,onBusyChange,reviewRequest=null}){
+export default function LedgerCorrectionPanel({portfolioId,accounts,assets,active=true,disabled=false,onChanged,onBusyChange,reviewRequest=null,noticeRequest=null,onNoticeSettled}){
   const storageKey=`ledger-correction-pending/v1/${portfolioId}`;
   const [initial]=useState(()=>{try{return restoreCorrection(localStorage.getItem(storageKey));}catch{return null;}});
+  const panelRef=useRef(null);
+  const [noticeSource,setNoticeSource]=useState(initial?.notice_source || null);
   const [open,setOpen]=useState(Boolean(initial));const [mode,setMode]=useState('manual');
   const [form,setForm]=useState(initial?.proposal || blank());const [pending,setPending]=useState(initial);
   const [context,setContext]=useState(null);const [preview,setPreview]=useState(null);const [decisions,setDecisions]=useState({});
@@ -34,7 +37,7 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
     if(!open || !active || !form.account_id)return;let cancelled=false;setContext(null);if(!reviewId)setPreview(null);setConfirmed(false);setComparison(null);
     api.getLedgerAccount(portfolioId,form.account_id).then(r=>{if(!cancelled){setContext(r);if(!pending)setForm(f=>({...f,balance:r.state.cash[f.currency==='USD'?'deposit_usd':'deposit_krw'],usd_average_rate:r.state.state?.usd_balance>0?r.state.state.cost_krw/r.state.state.usd_balance:''}));}}).catch(e=>{if(!cancelled)setError(e.message);});
     return()=>{cancelled=true;};
-  },[portfolioId,open,active,form.account_id,revision,pending,reviewId]);
+  },[portfolioId,open,active,form.account_id,revision,pending,reviewId,noticeRequest]);
   const change=(key,value)=>{setForm(f=>({...f,[key]:value}));setPreview(null);setReviewId('');setConfirmed(false);setMessage('');setError('');
     if(key==='account_id')setForm(f=>({...f,amount:'',balance:'',reason:'',asset_id:'',quantity:'',avg_price:'',avg_price_usd:'',buy_fx_rate:'',first_buy_date:'',manual_dividend_override:''}));
     if(key==='currency' && context)setForm(f=>({...f,balance:context.state.cash[value==='USD'?'deposit_usd':'deposit_krw']}));
@@ -47,9 +50,11 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
     const p=normalizeCorrection(form);const r=await api.previewLedgerCorrection(portfolioId,p);setPreview({...r,proposal:p});setDecisions({});setConfirmed(false);setReviewId('');
   });
   const save=()=>run(async()=>{
-    const request=pending || {request_id:crypto.randomUUID(),token:preview.token,proposal:preview.proposal,decisions,confirmed:true};
+    const request=pending || {request_id:crypto.randomUUID(),token:preview.token,proposal:preview.proposal,decisions,confirmed:true,...(noticeSource?{notice_source:noticeSource}:{})};
     setPending(request);let recorded=false;
-    try{await api.commitLedgerCorrection(portfolioId,request);recorded=true;setPending(null);setPreview(null);setForm(f=>({...f,amount:'',reason:'',asset_id:''}));setConfirmed(false);setRevision(n=>n+1);setMessage('장부 정정을 저장했습니다. 미확정 과거 기록은 아래에서 계속 확인할 수 있습니다.');await onChanged();}
+    try{const {notice_source,...body}=request;await api.commitLedgerCorrection(portfolioId,body);recorded=true;
+      if(notice_source && matchesWithdrawalCorrection(notice_source,body.proposal)){const result={source:notice_source,proposal:body.proposal};if(!settleStoredCorrection(result))throw new Error('정정은 저장됐지만 문자 대기 목록 갱신에 실패했습니다. 동일 요청으로 결과를 다시 확인해주세요.');onNoticeSettled?.(result);setNoticeSource(null);}
+      setPending(null);setPreview(null);setForm(f=>({...f,amount:'',reason:'',asset_id:''}));setConfirmed(false);setRevision(n=>n+1);setMessage('장부 정정을 저장했습니다. 미확정 과거 기록은 아래에서 계속 확인할 수 있습니다.');await onChanged();}
     catch(e){if(recorded)throw new Error('정정은 저장됐지만 화면 갱신에 실패했습니다. 다시 등록하지 말고 새로고침해주세요.');if(e.status && e.status<500){setPending(null);setPreview(null);setConfirmed(false);setRevision(n=>n+1);}throw e;}
   });
   const checkHistory=id=>run(async()=>{const r=await api.reviewLedgerCorrection(portfolioId,id);setReviewId(id);setPreview(r);setDecisions({});setConfirmed(false);setMode('manual');});
@@ -65,17 +70,28 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
     api.reviewLedgerCorrection(portfolioId,reviewRequest.id).then(r=>{if(!cancelled){setPreview(r);setDecisions({});setConfirmed(false);}}).catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setBusy(false);});
     return()=>{cancelled=true;};
   },[portfolioId,reviewRequest]);
+  useEffect(()=>{
+    if(!noticeRequest)return;
+    setNoticeSource(noticeRequest.source);setForm({...blank(),...noticeRequest.proposal});setContext(null);setOpen(true);setMode('manual');
+    setPreview(null);setReviewId('');setDecisions({});setConfirmed(false);setError('');setMessage('출금 알림의 계좌·날짜·금액을 가져왔습니다. 미리보기 후 확인해 반영해주세요.');
+    panelRef.current?.scrollIntoView?.({block:'start'});
+  },[noticeRequest]);
+  const cancelNotice=()=>{
+    const result={source:noticeSource,cancelled:true};settleStoredCorrection(result);onNoticeSettled?.(result);setNoticeSource(null);
+    setForm(blank());setContext(null);setPreview(null);setConfirmed(false);setMessage('문자 누락 보정 입력을 취소했습니다.');
+  };
   const asset=assets.find(a=>a.id===form.asset_id),us=asset?.market==='US';
   const locked=busy || disabled || Boolean(pending);
   const history=preview?.history || [];
   const pendingSummary=pending && <details><summary>저장 확인 중인 요청 내용</summary><p>{pending.proposal?`${pending.proposal.event_date} · ${labels[pending.proposal.kind]} · ${pending.proposal.reason}`:'과거 평가 기록 추가 확인'}</p>{pending.proposal && <p>계좌 {accounts.find(a=>a.id===pending.proposal.account_id)?.account_alias || '계좌 확인 필요'} · {pending.proposal.kind==='HOLDING'?`수량 ${pending.proposal.quantity} · 단가 ${pending.proposal.avg_price_usd || pending.proposal.avg_price}`:pending.proposal.kind==='PAST_WITHDRAWAL'?`누락 출금 ${pending.proposal.amount} ${pending.proposal.currency}`:`목표 예수금 ${pending.proposal.balance} ${pending.proposal.currency}`}</p>}{Object.entries(pending.decisions).map(([key,v])=><p key={key}>{key} · {v==='ERROR'?'동일 오차 보정':v==='NORMAL'?'정상 기록 유지':'미확정'}</p>)}</details>;
   const waiting=entries.filter(e=>!e.reversed_at && e.history.some(h=>h.decision==='UNKNOWN'));
-  return <details className="section-card history-help" open={open} onToggle={e=>setOpen(e.currentTarget.open)}>
+  return <details ref={panelRef} className="section-card history-help" open={open} onToggle={e=>setOpen(e.currentTarget.open)}>
     <summary>장부 확인 및 정정</summary>
     <p className="history-muted">실제 매매·기준일 이후 입출금은 위의 일반 입력을 사용하세요. 여기서는 초기 잔고·누락·오류를 사유와 함께 정정합니다.</p>
+    {noticeSource && <div className="history-help"><p>출금 문자에서 가져온 누락 보정 · {noticeSource.eventDate} · {formatKRW(noticeSource.amount)}</p>{Number.isFinite(noticeSource.reportedAvailableKrw) && <p>문자의 출금가능금액 {formatKRW(noticeSource.reportedAvailableKrw)} · 참고값</p>}<button className="btn btn-secondary btn-sm" disabled={locked} onClick={cancelNotice}>문자 누락 보정 취소</button></div>}
     <fieldset className="ledger-correction-form" disabled={locked} style={{border:0,padding:0}}>
-      <div className="history-inline-choice"><button type="button" aria-pressed={mode==='manual'} onClick={()=>setMode('manual')}>수동 정정</button><button type="button" aria-pressed={mode==='compare'} onClick={()=>setMode('compare')}>나무 잔고 대조</button></div>
-      <label>계좌<select className="input-select" aria-label="정정 계좌" value={form.account_id} onChange={e=>change('account_id',e.target.value)}><option value="">계좌 선택</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.account_alias}</option>)}</select></label>
+      <div className="history-inline-choice"><button type="button" aria-pressed={mode==='manual'} onClick={()=>setMode('manual')}>수동 정정</button><button type="button" disabled={Boolean(noticeSource)} aria-pressed={mode==='compare'} onClick={()=>setMode('compare')}>나무 잔고 대조</button></div>
+      <label>계좌<select className="input-select" disabled={Boolean(noticeSource)} aria-label="정정 계좌" value={form.account_id} onChange={e=>change('account_id',e.target.value)}><option value="">계좌 선택</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.account_alias}</option>)}</select></label>
       {form.account_id && !context && !error && <p className="history-muted" role="status">현재 장부 조회 중…</p>}
       <fieldset className="ledger-correction-fields" disabled={(!context && !reviewId) || locked}>
       {mode==='compare'?<div><p>증권사 제공 잔고와 비교합니다. 수량·평단가를 자동으로 덮어쓰지 않습니다.</p><button className="btn btn-secondary" disabled={!form.account_id} onClick={compare}>나무 잔고 조회·대조</button>{comparison && <div>
@@ -84,12 +100,12 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
         {comparison.holdings.map((h,i)=><p key={i}>{h.name} · 앱 수량 {h.book_quantity} / 증권사 {h.broker_quantity} · 평단가 {h.broker_avg_price_usd || h.broker_avg_price || '미제공'}{h.asset_id && <button className="btn btn-secondary btn-sm" onClick={()=>{change('kind','HOLDING');change('asset_id',h.asset_id);setForm(f=>({...f,quantity:h.broker_quantity,reason:'나무 보유 잔고 대조 후 수량·원가 확인'}));setMode('manual');}}>수량 정정 검토</button>}{!h.asset_id && ' · 종목 마스터 등록 필요'}</p>)}
       </div>}</div>:<div>
         {!reviewId && <>
-          <label>정정 종류<select className="input-select" value={form.kind} onChange={e=>change('kind',e.target.value)}>{Object.entries(labels).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
-          <label>실제 발생일<input className="input-text" type="date" max={kstToday()} value={form.event_date} onChange={e=>change('event_date',e.target.value)}/></label>
+          <label>정정 종류<select className="input-select" disabled={Boolean(noticeSource)} value={form.kind} onChange={e=>change('kind',e.target.value)}>{Object.entries(labels).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+          <label>실제 발생일<input className="input-text" type="date" disabled={Boolean(noticeSource)} max={kstToday()} value={form.event_date} onChange={e=>change('event_date',e.target.value)}/></label>
           {form.kind!=='HOLDING'?<>
-            <label>통화<select className="input-select" value={form.currency} onChange={e=>change('currency',e.target.value)}><option>KRW</option><option>USD</option></select></label>
+            <label>통화<select className="input-select" disabled={Boolean(noticeSource)} value={form.currency} onChange={e=>change('currency',e.target.value)}><option>KRW</option><option>USD</option></select></label>
             {context && <p>현재 예수금 {form.currency==='USD'?formatUSD(context.state.cash.deposit_usd):formatKRW(context.state.cash.deposit_krw)}</p>}
-            <label>{form.kind==='PAST_WITHDRAWAL'?'누락된 출금액':'정정할 실제 예수금'}<input className="input-number" type="number" min="0" step="any" value={form.kind==='PAST_WITHDRAWAL'?form.amount:form.balance} onChange={e=>change(form.kind==='PAST_WITHDRAWAL'?'amount':'balance',e.target.value)}/></label>
+            <label>{form.kind==='PAST_WITHDRAWAL'?'누락된 출금액':'정정할 실제 예수금'}<input className="input-number" type="number" min="0" step="any" disabled={Boolean(noticeSource)} value={form.kind==='PAST_WITHDRAWAL'?form.amount:form.balance} onChange={e=>change(form.kind==='PAST_WITHDRAWAL'?'amount':'balance',e.target.value)}/></label>
             {form.currency==='USD' && <label>확인한 달러 평균 취득환율<input className="input-number" type="number" min="0" step="any" value={form.usd_average_rate} onChange={e=>change('usd_average_rate',e.target.value)}/></label>}
           </>:<>
             <label>종목<select className="input-select" value={form.asset_id} onChange={e=>change('asset_id',e.target.value)}><option value="">종목 선택</option>{assets.filter(a=>!a.is_deposit).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
@@ -113,7 +129,7 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
     {pendingSummary}
     {pending && <p role="alert">저장 결과가 확정될 때까지 입력을 고정합니다. 동일 요청으로 재확인하면 중복 반영하지 않습니다.</p>}
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
-    {waiting.map(a=><p key={a.id}>{a.event_date} · {labels[a.kind]} · 과거 성과 미확정 <button className="btn btn-secondary btn-sm" disabled={locked} onClick={()=>checkHistory(a.id)}>남은 기록 확인</button></p>)}
-    <details><summary>최근 정정·취소</summary>{entries.slice(0,5).map(a=><p key={a.id}>{a.event_date} · {labels[a.kind]} · {a.reason} {a.reversed_at?'취소됨':<button className="btn btn-secondary btn-sm" disabled={locked} onClick={()=>undo(a.id)}>정정 취소</button>}</p>)}<p>이전 정정은 기록 조회에서 확인합니다.</p></details>
+    {waiting.map(a=><p key={a.id}>{a.event_date} · {labels[a.kind]} · 과거 성과 미확정 <button className="btn btn-secondary btn-sm" disabled={locked || Boolean(noticeSource)} onClick={()=>checkHistory(a.id)}>남은 기록 확인</button></p>)}
+    <details><summary>최근 정정·취소</summary>{entries.slice(0,5).map(a=><p key={a.id}>{a.event_date} · {labels[a.kind]} · {a.reason} {a.reversed_at?'취소됨':<button className="btn btn-secondary btn-sm" disabled={locked || Boolean(noticeSource)} onClick={()=>undo(a.id)}>정정 취소</button>}</p>)}<p>이전 정정은 기록 조회에서 확인합니다.</p></details>
   </details>;
 }

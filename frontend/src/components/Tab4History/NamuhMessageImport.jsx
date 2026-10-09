@@ -1,12 +1,13 @@
 import React,{useEffect,useState} from 'react';
 import {api} from '../../utils/api';
+import {isHistoricalWithdrawal,withdrawalCorrectionDraft,settleCorrectionRows} from '../../utils/withdrawalCorrection';
 import {kstToday} from '../../utils/depositMaturities';
 import {formatKRW,formatUSD} from '../../utils/formatters';
 import {parseNhNotifications,noticeFingerprint,resolveNhNotice,flowCandidates,chosenFlow,validateNhNotice,
   noticeApiRow,previewNhNotices,readNoticeDraft,writeNoticeDraft,validNoticeDate,isCashNotice,peerAccount} from '../../utils/nhNotices';
 
 const names={BUY:'매수 체결',DEPOSIT:'원화 입금',WITHDRAW:'원화 출금',EXCHANGE_IN:'원화 → 달러 환전'};
-export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange}) {
+export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange,onCorrectionRequest,correctionResult=null}) {
   const [initial]=useState(()=>readNoticeDraft(portfolioId));
   const [open,setOpen]=useState(focused || Boolean(initial?.rows.length));
   const [text,setText]=useState('');
@@ -37,6 +38,11 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
       .finally(()=>{if(!cancelled)setLoading(false);});
     return()=>{cancelled=true;};
   },[portfolioId,open,active,dateKey,reload]);
+  useEffect(()=>{
+    if(!correctionResult || correctionResult.source?.portfolioId!==portfolioId)return;
+    setRows(previous=>settleCorrectionRows(previous,correctionResult));setConfirmed(false);setReload(n=>n+1);
+    setMessage(correctionResult.cancelled?'문자 누락 보정을 취소했습니다. 잔고 반영 여부를 다시 선택해주세요.':'문자의 누락 출금을 정정했습니다. 이 알림은 일반 출금 대기 목록에서 제외했습니다.');
+  },[portfolioId,correctionResult]);
   const edit=(index,key,value)=>{
     setRows(previous=>previous.map((row,i)=>i!==index?row:{...row,
       ...(key==='movement'?{external:value==='EXTERNAL',crossPortfolio:value==='CROSS',sourceAccountId:'',destinationAccountId:'',flowId:undefined,counterpartyFlowId:undefined}:{[key]:value}),
@@ -61,13 +67,25 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
     }catch(error){setMessage(error.message);}
     finally{setSaving(false);}
   };
-  const checks=rows.map((row,i)=>validateNhNotice(row,contexts[row.eventDate],accounts,assets,portfolioId,buyRows,rows.slice(0,i)));
-  const preview=previewNhNotices(rows,contexts,ledgers || []);
+  const ordinaryRows=rows.map(row=>isHistoricalWithdrawal(row,contexts[row.eventDate],portfolioId)?{...row,applyCash:false}:row);
+  const checks=ordinaryRows.map((row,i)=>{
+    const check=validateNhNotice(row,contexts[row.eventDate],accounts,assets,portfolioId,buyRows,ordinaryRows.slice(0,i));
+    if(isHistoricalWithdrawal(row,contexts[row.eventDate],portfolioId) && row.historicalCashChoice!=='REFLECTED')
+      check.errors.push(row.historicalCashChoice==='CORRECTION'?'누락 보정 화면에서 확인·반영해주세요.':'이 과거 출금이 현재 장부 잔고에 이미 반영됐는지 선택해주세요.');
+    return check;
+  });
+  const startCorrection=(row,index)=>{
+    const draft=withdrawalCorrectionDraft(row,contexts[row.eventDate],accounts,portfolioId);
+    if(!draft || !onCorrectionRequest)return;
+    setRows(previous=>previous.map((r,i)=>i===index?{...r,applyCash:false,historicalCashChoice:'CORRECTION'}:r));
+    setConfirmed(false);onCorrectionRequest(draft);
+  };
+  const preview=previewNhNotices(ordinaryRows,contexts,ledgers || []);
   const ready=rows.length>0 && confirmed && !loading && !contextError && !checks.some(c=>c.errors.length) && !preview.errors.length;
   const persist=(data)=>setStorageError(!writeNoticeDraft(portfolioId,data));
   const save=async()=>{
     if(!confirmed || (!pendingPayload && !ready))return;
-    const payload=pendingPayload || {request_id:requestId,confirmed:true,expected_cash:preview.expected,rows:rows.map(row=>noticeApiRow(row,contexts[row.eventDate]))};
+    const payload=pendingPayload || {request_id:requestId,confirmed:true,expected_cash:preview.expected,rows:ordinaryRows.map(row=>noticeApiRow(row,contexts[row.eventDate]))};
     setSaving(true);setMessage('');setPendingPayload(payload);persist({rows,requestId,pendingPayload:payload});
     let recorded=false;
     try{
@@ -102,15 +120,23 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
         {focused && rows.length>0 && <div className="history-section-heading history-review-heading"><h3>반영할 알림</h3><span className="history-kind">{rows.length}건 · 미반영</span></div>}
         {rows.map((row,i)=>{
           const context=contexts[row.eventDate],matches=flowCandidates(row,context),flow=chosenFlow(row,context);
+          const historical=isHistoricalWithdrawal(row,context,portfolioId);
+          const correctionDraft=historical?withdrawalCorrectionDraft(row,context,accounts,portfolioId):null;
           return <div className={focused?"history-notice-row":"trade-row-card"} key={row.id} style={{marginTop:12}}>
             <b>{i+1}. {names[row.kind]}{row.assetName?` · ${row.assetName}`:''}</b>
             <p>{row.kind==='BUY'?`${row.quantity}주 × ${formatKRW(row.price)} · 주문 ${row.brokerOrderNo || '확인 불가'}`:
               isCashNotice(row)?formatKRW(row.krwAmount):`${formatKRW(row.krwAmount)} → ${formatUSD(row.usdAmount)} · 고시환율 ${row.quotedRate}`}</p>
             {row.kind==='WITHDRAW' && Number.isFinite(row.reportedAvailableKrw) && <small>알림의 출금가능금액 {formatKRW(row.reportedAvailableKrw)} · 참고값이며 잔고를 덮어쓰지 않습니다.</small>}
             {focused && <div className="history-row-context">{accounts.find(a=>String(a.id)===row.accountId)?.account_alias || '계좌 선택 필요'} · {row.eventDate} · 미반영</div>}
+            {historical && <div className="history-help" aria-label={`알림 ${i+1} 과거 출금 처리`}>
+              <p>성과 기준일 이전 출금입니다. 이 출금이 현재 장부 잔고에 이미 반영돼 있나요?</p>
+              {row.historicalCashChoice==='CORRECTION'?<p>누락 보정 입력 중 · 아래 정정 화면에서 확인 후 반영하세요.</p>:<button type="button" className="btn btn-secondary btn-sm" aria-pressed={row.historicalCashChoice==='REFLECTED'} onClick={()=>{edit(i,'historicalCashChoice','REFLECTED');edit(i,'applyCash',false);}}>이미 반영됨 · 과거 이력만 저장</button>}
+              <button type="button" className="btn btn-secondary btn-sm" disabled={!correctionDraft || !onCorrectionRequest} onClick={()=>startCorrection(row,i)}>{row.historicalCashChoice==='CORRECTION'?'누락 보정 입력 계속하기':`누락된 ${formatKRW(row.krwAmount)} 출금 보정`}</button>
+              {!correctionDraft && <small>정정할 계좌와 문자의 날짜·금액을 먼저 확인해주세요.</small>}
+            </div>}
             <details className={focused?'history-notice-details':''} open={!focused || checks[i].errors.length>0 || undefined}>
             <summary>계좌·날짜·반영 방식 확인 / 수정</summary>
-            <div className="history-notice-fields">
+            <fieldset className="history-notice-fields" disabled={row.historicalCashChoice==='CORRECTION'} style={{border:0,padding:0}}>
             <label>계좌 <select aria-label={`알림 ${i+1} 계좌`} className="input-select" value={row.accountId} onChange={e=>edit(i,'accountId',e.target.value)}><option value="">계좌 선택</option>{scopedAccounts.map(a=><option key={a.id} value={a.id}>{a.account_alias} ({a.account_no})</option>)}</select></label>
             {row.accountWarning && <p>{row.accountWarning}</p>}
             <label>적용 날짜 <input aria-label={`알림 ${i+1} 날짜`} type="date" className="input-text" value={row.eventDate} onChange={e=>edit(i,'eventDate',e.target.value)} /></label>
@@ -119,18 +145,18 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
             {isCashNotice(row) && <>
               <label>입출금 구분 <select aria-label={`알림 ${i+1} 입출금 구분`} className="input-select" value={row.external?'EXTERNAL':row.crossPortfolio?'CROSS':'INTERNAL'} onChange={e=>edit(i,'movement',e.target.value)}><option value="EXTERNAL">{row.kind==='WITHDRAW'?'앱 밖으로 출금':'외부 투자금 입금'}</option><option value="INTERNAL">같은 포트폴리오 안의 계좌 이체</option><option value="CROSS">포트폴리오 간 이체</option></select></label>
               {!row.external && <label>{row.kind==='DEPOSIT'?'출금':'입금'} 상대 계좌 <select aria-label={`알림 ${i+1} 이체 상대 계좌`} className="input-select" value={peerAccount(row) || ''} onChange={e=>edit(i,row.kind==='DEPOSIT'?'sourceAccountId':'destinationAccountId',e.target.value)}><option value="">상대 계좌 선택</option>{allAccounts.filter(a=>String(a.id)!==row.accountId && (row.crossPortfolio?String(a.portfolio_id)!==String(portfolioId):!a.portfolio_id || String(a.portfolio_id)===String(portfolioId))).map(a=><option key={a.id} value={a.id}>{a.portfolio_name?`${a.portfolio_name} · `:''}{a.account_alias}</option>)}</select></label>}
-              <label>예수금 반영 <select aria-label={`알림 ${i+1} 예수금 반영`} className="input-select" value={row.applyCash?'APPLY':'REFLECTED'} onChange={e=>edit(i,'applyCash',e.target.value==='APPLY')}><option value="APPLY">{row.external?`예수금에도 ${row.kind==='WITHDRAW'?'출금':'입금'} 반영`:'양쪽 예수금에 이체 반영'}</option><option value="REFLECTED">{row.external?'잔고에 이미 반영됨 · 기록만 저장':'양쪽 잔고에 이미 반영됨 · 기록만 저장'}</option></select></label>
+              {!historical && <label>예수금 반영 <select aria-label={`알림 ${i+1} 예수금 반영`} className="input-select" value={row.applyCash?'APPLY':'REFLECTED'} onChange={e=>edit(i,'applyCash',e.target.value==='APPLY')}><option value="APPLY">{row.external?`예수금에도 ${row.kind==='WITHDRAW'?'출금':'입금'} 반영`:'양쪽 예수금에 이체 반영'}</option><option value="REFLECTED">{row.external?'잔고에 이미 반영됨 · 기록만 저장':'양쪽 잔고에 이미 반영됨 · 기록만 저장'}</option></select></label>}
               {(row.external || row.crossPortfolio) && matches.length>0 && <label>성과 입출금 기록 <select aria-label={`알림 ${i+1} 입금 연결`} className="input-select" value={flow===null?'NEW':flow} onChange={e=>edit(i,'flowId',e.target.value)}><option value="">연결할 기록 선택</option>{matches.map(f=><option key={f.id} value={f.id}>기존 {formatKRW(Math.abs(Number(f.amount_krw)))} {row.kind==='WITHDRAW'?'출금':'입금'}에 연결{f.cash_handled?' · 이미 처리됨':''}</option>)}<option value="NEW">별도 입출금 · 새 기록</option></select><small>기존 기록을 연결하면 성과 입출금을 중복 생성하지 않습니다.</small></label>}
               {row.crossPortfolio && flowCandidates(row,context,true).length>0 && <label>상대 포트폴리오 성과 기록 <select className="input-select" value={chosenFlow(row,context,true) ?? 'NEW'} onChange={e=>edit(i,'counterpartyFlowId',e.target.value)}><option value="">연결할 기록 선택</option>{flowCandidates(row,context,true).map(f=><option key={f.id} value={f.id}>기존 {formatKRW(Math.abs(Number(f.amount_krw)))} 입출금에 연결{f.cash_handled?' · 이미 처리됨':''}</option>)}<option value="NEW">별도 입출금 · 새 기록</option></select></label>}
               {context?.trackings?.[portfolioId] && row.eventDate<context.trackings[portfolioId].baseline_date && <small>성과 기준일 이전 기록입니다. 과거 이력만 남기며 기준일 이후 수익률에는 반영하지 않습니다. 누락된 출금이 현재 잔고에 남아 있다면 아래 ‘장부 확인 및 정정’의 ‘과거 출금 누락’을 이용하세요.</small>}
               {row.crossPortfolio && <small>양쪽 기록은 함께 저장·취소됩니다. 상대 계좌가 앱에 없으면 ‘앱 밖으로 출금’으로 기록하세요.</small>}
             </>}
-            </div></details>
+            </fieldset></details>
             {checks[i].errors.map(error=><p role="alert" key={error}>{error}</p>)}
             {checks[i].duplicate && <label><input type="checkbox" checked={Boolean(row.duplicateConfirmed)} onChange={e=>edit(i,'duplicateConfirmed',e.target.checked)} />기존 기록과 별개의 거래임을 확인했습니다.</label>}
-            <div className="history-row-actions"><button type="button" className="btn btn-secondary btn-sm" disabled={i===0} onClick={()=>move(i,-1)}>위로</button>{' '}
-            <button type="button" className="btn btn-secondary btn-sm" disabled={i===rows.length-1} onClick={()=>move(i,1)}>아래로</button>{' '}
-            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>{setRows(previous=>previous.filter(r=>r.id!==row.id));setConfirmed(false);}}>목록에서 제외</button></div>
+            <div className="history-row-actions"><button type="button" className="btn btn-secondary btn-sm" disabled={i===0 || row.historicalCashChoice==='CORRECTION'} onClick={()=>move(i,-1)}>위로</button>{' '}
+            <button type="button" className="btn btn-secondary btn-sm" disabled={i===rows.length-1 || row.historicalCashChoice==='CORRECTION'} onClick={()=>move(i,1)}>아래로</button>{' '}
+            <button type="button" className="btn btn-secondary btn-sm" disabled={row.historicalCashChoice==='CORRECTION'} onClick={()=>{setRows(previous=>previous.filter(r=>r.id!==row.id));setConfirmed(false);}}>목록에서 제외</button></div>
           </div>;
         })}
       </fieldset>
