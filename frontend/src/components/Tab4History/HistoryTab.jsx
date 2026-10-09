@@ -87,6 +87,7 @@ export default function HistoryTab({
   const [reviewCorrection,setReviewCorrection]=useState(null);
   const [noticeCorrection,setNoticeCorrection]=useState(null);
   const [correctionResult,setCorrectionResult]=useState(null);
+  const [correctionReset,setCorrectionReset]=useState(null);
   const correctionCompleted=useCallback(result=>{setCorrectionResult(result);setNoticeCorrection(null);},[]);
   const [method,setMethod]=useState('nh');
   const [manualKind,setManualKind]=useState('trades');
@@ -279,7 +280,7 @@ export default function HistoryTab({
         <div hidden={method!=='nh'}>
           <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
             tradeDate={tradeDate} buyRows={buyRows} disabled={busy && !childBusy.nh} ledgers={usdLedgers} focused
-            correctionResult={correctionResult?.source?.portfolioId===currentPortfolioId?correctionResult:null} onCorrectionRequest={draft=>{setReviewCorrection(null);setNoticeCorrection({...draft,key:crypto.randomUUID()});}} active={view==='input' && method==='nh'} onBusyChange={nhBusy} onChanged={changed}/>
+            onDraftCleared={()=>{setNoticeCorrection(null);setCorrectionResult(null);setCorrectionReset(crypto.randomUUID());}} correctionResult={correctionResult?.source?.portfolioId===currentPortfolioId?correctionResult:null} onCorrectionRequest={draft=>{setReviewCorrection(null);setNoticeCorrection({...draft,key:crypto.randomUUID()});}} active={view==='input' && method==='nh'} onBusyChange={nhBusy} onChanged={changed}/>
         </div>
         <div hidden={method!=='manual'}>
           <div className="history-inline-choice" aria-label="직접 입력 종류">
@@ -312,7 +313,7 @@ export default function HistoryTab({
           {ledgerError && <p role="alert">{ledgerError}</p>}
         </div>
         <LedgerCorrectionPanel key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
-          noticeRequest={noticeCorrection?.source?.portfolioId===currentPortfolioId?noticeCorrection:null} onNoticeSettled={correctionCompleted}
+          resetRequest={correctionReset} noticeRequest={noticeCorrection?.source?.portfolioId===currentPortfolioId?noticeCorrection:null} onNoticeSettled={correctionCompleted}
           reviewRequest={reviewCorrection?.portfolioId===currentPortfolioId?reviewCorrection:null} active={view==='input'} disabled={busy && !childBusy.correction} onBusyChange={correctionBusy} onChanged={changed}/>
       </div>
       <div id="history-record-panel" role="tabpanel" aria-labelledby="history-record-tab" hidden={view!=='records'}>

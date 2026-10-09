@@ -17,3 +17,17 @@ export function restoreCorrection(raw){
     return r;
   }catch{return null;}
 }
+
+// A shared decision never fabricates evidence for an uncorrectable snapshot.
+export function groupHistoryDecisions(history,choice){
+  return Object.fromEntries(history.map(h=>[h.key,choice==='ALL' && h.can_correct?'ERROR':'UNKNOWN']));
+}
+export function correctionInputHint(form){
+  if(!form.account_id)return '정정할 계좌를 선택해주세요.';
+  if(!form.event_date)return '실제 발생일을 입력해주세요.';
+  if(!form.reason || form.reason.trim().length<3)return '정정 사유를 3자 이상 입력해주세요.';
+  if(form.kind==='PAST_WITHDRAWAL' && !(Number(form.amount)>0))return '누락된 출금액을 입력해주세요.';
+  if(form.kind==='CASH' && (form.balance==='' || !Number.isFinite(Number(form.balance)) || Number(form.balance)<0))return '정정할 실제 예수금을 입력해주세요.';
+  if(form.kind==='HOLDING' && (!form.asset_id || form.quantity==='' || !Number.isFinite(Number(form.quantity)) || Number(form.quantity)<0))return '종목과 실제 보유 수량을 입력해주세요.';
+  return '';
+}

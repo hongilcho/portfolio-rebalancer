@@ -1162,3 +1162,26 @@ body {
 .ledger-correction-fields { border: 0; padding: 0; min-width: 0; }
 .ledger-correction-fields > div > label { max-width: 40rem; }
 .ledger-correction-form textarea { box-sizing: border-box; width: 100%; }
+
+/* Keep the financial summary and final action separate from optional detail. */
+.ledger-correction-panel { overflow: visible; }
+.correction-notice-summary, .correction-balance-summary { padding: 16px; margin: 14px 0; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-card-subtle); }
+.correction-balance-summary { display: grid; gap: 6px; }
+.correction-balance-summary p { margin: 0 0 6px; color: var(--text-secondary); }
+.correction-balance-summary strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.correction-balance-summary span { color: var(--text-secondary); font-size: .85rem; }
+.correction-history-choice { margin: 20px 0; }
+.correction-choice-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.correction-choice-buttons [aria-pressed="true"] { border-color: var(--accent-primary); background: var(--accent-glow); }
+.correction-action-bar { position: sticky; bottom: 12px; z-index: 5; display: flex; gap: 16px; justify-content: space-between; align-items: center; margin: 20px 0 12px; padding: 16px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.16); }
+.correction-action-bar p { margin: 6px 0; font-size: .85rem; color: var(--text-secondary); }
+.correction-action-bar label { display: flex; gap: 8px; align-items: baseline; margin-top: 8px; }
+.correction-action-bar small { display: block; margin-top: 6px; }
+.correction-action-bar .btn { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .correction-action-bar { bottom: 8px; flex-direction: column; align-items: stretch; padding: 12px; }
+  .correction-action-bar .btn { width: 100%; min-height: 44px; }
+  .correction-choice-buttons .btn { flex: 1 1 100%; min-height: 44px; }
+}
+
+.ledger-correction-panel [hidden] { display: none !important; }

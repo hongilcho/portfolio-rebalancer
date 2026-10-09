@@ -3,6 +3,7 @@
   "reviewed_updates": {
     "history": "2026-10-08: reviewed focus layout with input/history split, preserved hidden drafts, selected input methods, read-only paged history; all other snapshots unchanged; withdrawal/transfer support text reviewed, controls covered in nhNoticeControls tests",
     "dashboard": "2026-10-05: moved maturity, dividend and period panels to analysis tab 6; original dashboard markup restored and reviewed",
+    "correction_simplification": "2026-10-09: reviewed NH reset and always-visible final correction action in collapsed history forms; only two history hashes changed. Decision/effect handlers covered by nhNoticeControls; unrelated screens unchanged",
     "ledger_correction": "2026-10-08: tab1 display only, settings no cash edits, tab4 audited corrections collapsed; behavior covered by historyFocus and isolated PostgreSQL tests; unrelated screen hashes unchanged"
   },
   "sha256": {
@@ -16,8 +17,8 @@
     "settings/edit-account": "fad57d17f694f15cdb39ba8f7e098fa9f1c2039afd636e9336ab08f91e877a38",
     "settings/new-US-asset": "c0a09ba23f17d2f14737726fcb8e1ee7a4fc280446f2995cb2c1369fa846ec82",
     "settings/edit-deposit": "bc48f3470cd9b6d859324fbc5e953b8693df363040d0ba353bcf4f97e587c86c",
-    "history/empty": "023d69caf2d0880dfb8aecd7dd4cf8f85593b86ea0779328db73d60162458760",
-    "history/filled-forms": "ea93a3c496ac8f7550436392a903df154274b345fdce70c326fa9163422d64da",
+    "history/empty": "02409a5e29faaf576c8ac7c15053249818b265fd9f86f2fccce1ede72dac9450",
+    "history/filled-forms": "4154f352c407c43acc391ab6bbc613e3ea8299411467b3cfb8f4f0bca3196e94",
     "overview/KRW": "ad703d16caad5132a682394a3a358d7c6b709b6a5c15ecaa27f225d03020498b",
     "overview/USD": "1162b5dc324691a7af8b194cd3733b1ece5c8ebaef1f4ddbb8ede45aa8b8d42f",
     "overview/no-crypto": "ae95dc5b044bc5e8d2ff29079fd3ffacefa93491d0de2dd4756bf96d2ca7b242",

@@ -7,7 +7,7 @@ import {parseNhNotifications,noticeFingerprint,resolveNhNotice,flowCandidates,ch
   noticeApiRow,previewNhNotices,readNoticeDraft,writeNoticeDraft,validNoticeDate,isCashNotice,peerAccount} from '../../utils/nhNotices';
 
 const names={BUY:'매수 체결',DEPOSIT:'원화 입금',WITHDRAW:'원화 출금',EXCHANGE_IN:'원화 → 달러 환전'};
-export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange,onCorrectionRequest,correctionResult=null}) {
+export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange,onCorrectionRequest,correctionResult=null,onDraftCleared}) {
   const [initial]=useState(()=>readNoticeDraft(portfolioId));
   const [open,setOpen]=useState(focused || Boolean(initial?.rows.length));
   const [text,setText]=useState('');
@@ -108,12 +108,19 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
     catch(error){setMessage(error.message);}
     finally{setSaving(false);}
   };
+  const clearInput=()=>{
+    if(saving || disabled || pendingPayload)return;
+    if(!window.confirm('붙여넣은 문자와 미반영 알림·연결된 누락 보정 입력을 비울까요? 저장된 장부는 변경되지 않습니다.'))return;
+    const nextId=crypto.randomUUID();
+    if(!writeNoticeDraft(portfolioId,{rows:[],requestId:nextId,pendingPayload:null})){setStorageError(true);return;}
+    setRows([]);setText('');setRequestId(nextId);setConfirmed(false);setMessage('미반영 입력을 비웠습니다.');onDraftCleared?.();
+  };
   const move=(index,delta)=>{setRows(previous=>{const next=[...previous];[next[index],next[index+delta]]=[next[index+delta],next[index]];return next;});setConfirmed(false);};
   const batches=contexts[tradeDate]?.batches || [];
   return <section className={`section-card workflow-panel ${focused?'history-focused history-notices':''}`}>
     {focused?<div className="history-section-heading"><h3>NH 알림 붙여넣기</h3><span className="history-muted">입력 → 확인 → 반영</span></div>:<button type="button" className="btn btn-secondary" aria-expanded={open} onClick={()=>setOpen(!open)}>NH 알림 가져오기 · 매수 / 입출금 / 이체 / 환전 {open?'접기':'열기'}</button>}
     {open && <div>
-      <p className="history-muted">여러 알림을 붙여넣거나 반복해서 목록에 추가한 뒤 함께 반영하세요.</p>
+      <div className="history-section-heading"><p className="history-muted">여러 알림을 붙여넣거나 반복해서 목록에 추가한 뒤 함께 반영하세요.</p><button type="button" className="btn btn-secondary btn-sm" disabled={disabled || saving || Boolean(pendingPayload) || (!rows.length && !text)} onClick={clearInput}>입력 비우고 새로 시작</button></div>
       <fieldset disabled={disabled || saving || Boolean(pendingPayload)} style={{border:0,padding:0}}>
         <label>NH 카카오톡 알림<textarea aria-label="NH 알림" className="input-text" rows={focused?4:7} maxLength={30000} style={{width:'100%',boxSizing:'border-box'}} value={text} onChange={e=>setText(e.target.value)} /></label>
         <button type="button" className="btn btn-secondary" onClick={add}>알림을 확인 목록에 추가</button>

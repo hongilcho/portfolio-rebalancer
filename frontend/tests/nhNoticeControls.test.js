@@ -5,6 +5,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {createServer} from 'vite';
 import {parseSync} from 'rolldown/experimental';
 import {fileURLToPath} from 'node:url';
+import {groupHistoryDecisions} from '../src/utils/ledgerCorrection.js';
 import {parseNhNotifications,resolveNhNotice} from '../src/utils/nhNotices.js';
 
 // Seed states in the same SSR transformation used for presentation regression.
@@ -19,6 +20,10 @@ const server=await createServer({root:fileURLToPath(new URL('../',import.meta.ur
       if(node.type==='VariableDeclarator' && node.id.type==='ArrayPattern' && node.init?.callee?.name==='useState'){
         const key=node.id.elements[0]?.name,arg=node.init.arguments[0];
         if(arg)edits.push({start:arg.start,end:arg.end,text:`(Object.hasOwn(globalThis.__nhStates,'${key}')?globalThis.__nhStates.${key}:(${source.slice(arg.start,arg.end)}))`});
+      }
+      if(node.type==='CallExpression' && node.callee?.name==='useEffect' && node.arguments[0]){
+        const e=node.arguments[0],label=source.slice(e.start,e.end);
+        edits.push({start:e.start,end:e.end,text:`(()=>{const callback=(${label});globalThis.__nhEffects.push({label:${JSON.stringify(label)},callback});return callback;})()`});
       }
       if(node.type==='JSXAttribute' && node.name.name==='onClick' && node.value?.expression){
         const e=node.value.expression,label=source.slice(e.start,e.end);
@@ -45,7 +50,7 @@ globalThis.localStorage={getItem:()=>null,setItem:noop,removeItem:noop};
 try{
   const Import=(await server.ssrLoadModule('/src/components/Tab4History/NamuhMessageImport.jsx')).default;
   const Edit=(await server.ssrLoadModule('/src/components/Tab1Dashboard/EditHoldingsModal.jsx')).default;
-  const render=(component,props,state)=>{globalThis.__nhStates=state;globalThis.__nhHandlers=[];return renderToStaticMarkup(React.createElement(component,props));};
+  const render=(component,props,state)=>{globalThis.__nhStates=state;globalThis.__nhHandlers=[];globalThis.__nhEffects=[];return renderToStaticMarkup(React.createElement(component,props));};
   const state={open:true,rows:[row],contexts:{[day]:context},confirmed:true,loading:false};
   test('a missing-account buy cannot save until manual account choice, then final confirmation enables save',()=>{
     const missing=render(Import,props,state);assert.match(missing,/<button[^>]*disabled=""[^>]*>확인한 알림 1건 장부에 일괄 반영/);
@@ -109,10 +114,15 @@ try{
     const panelProps={portfolioId:'p',accounts:cma,assets:[],onChanged:async()=>{},onNoticeSettled:r=>{settled=r;}};
     try{
       render(Panel,panelProps,{open:true,form,context:{state:before},noticeSource:handed.source});
-      await globalThis.__nhHandlers.find(h=>h.label==='makePreview').callback();
+      const automatic=globalThis.__nhEffects.find(h=>h.label.includes('api.previewLedgerCorrection'));
+      assert.ok(automatic,'valid inputs automatically prepare the preview');
+      const nativeTimer=globalThis.setTimeout;let scheduled;
+      globalThis.setTimeout=callback=>{scheduled=callback;return 1;};
+      let cleanup;
+      try{cleanup=automatic.callback();await scheduled();}finally{cleanup?.();globalThis.setTimeout=nativeTimer;}
       assert.equal(previewed.amount,1000000);assert.equal(previewed.event_date,'2026-09-30');
       const html=render(Panel,panelProps,{open:true,form,context:{state:before},noticeSource:handed.source,preview:{...proof,proposal:previewed},confirmed:true});
-      assert.match(html,/변경 후 38239177/);assert.match(html,/출금가능금액 38,239,177 원 · 참고값/);
+      assert.match(html,/38,239,177 원<\/strong>/);assert.match(html,/>1,000,000 원 출금 보정 반영<\/button>/);assert.match(html,/출금가능금액 38,239,177 원 · 참고값/);
       assert.match(html,/<select[^>]*disabled=""[^>]*aria-label="정정 계좌"/);
       const saveHandler=globalThis.__nhHandlers.find(h=>h.label.includes('saveReview:save')).callback;
       api.commitLedgerCorrection=async()=>{const e=new Error('QA failed');e.status=500;throw e;};
@@ -120,6 +130,55 @@ try{
       api.commitLedgerCorrection=async(pid,r)=>{submitted=r;assert.equal(pid,'p');assert.equal(r.confirmed,true);assert.ok(!Object.hasOwn(r,'notice_source'));return {id:'QA-correction',saved:true};};
       await saveHandler();assert.equal(submitted.proposal.amount,1000000);assert.equal(settled.source.rowId,old.id);assert.equal(memory.has('nh-notice-draft/v1/p'),false);
     }finally{api.previewLedgerCorrection=savedMethods.preview;api.commitLedgerCorrection=savedMethods.commit;globalThis.localStorage=previousStorage;}
+  });
+  await test('correction asks one question for four records; detail is collapsed and missing evidence stays unresolved',async()=>{
+    const Panel=(await server.ssrLoadModule('/src/components/Tab4History/LedgerCorrectionPanel.jsx')).default;
+    const history=[{key:'baseline',date:'2026-10-05',value:4000000,corrected_value:3000000,can_correct:true},
+      {key:'day-1',date:'2026-10-06',value:4010000,corrected_value:3010000,can_correct:true},
+      {key:'day-2',date:'2026-10-07',value:4020000,corrected_value:3020000,can_correct:true},
+      {key:'day-3',date:'2026-10-08',value:4030000,can_correct:false}];
+    const form={account_id:'usd',event_date:'2026-09-30',kind:'PAST_WITHDRAWAL',amount:1000000,currency:'KRW',reason:'QA missed withdrawal'};
+    const before={cash:{deposit_krw:4000000,deposit_usd:0},holdings:[]};
+    const proof={proposal:form,before,delta:-1000000,history,token:'a'.repeat(64)};
+    const panelProps={portfolioId:'p',accounts,assets:[],onChanged:noop};
+    const base={open:true,form,context:{state:before},preview:proof,confirmed:true};
+    const html=render(Panel,panelProps,base);
+    assert.match(html,/성과 기록을 시작한 뒤에도 이 출금 누락이 계속 남아 있었나요/);
+    assert.match(html,/<details><summary>날짜별 상세 확인 · 4건/);
+    assert.match(html,/<button[^>]*disabled=""[^>]*>1,000,000 원 출금 보정 반영/);
+    const chosen=render(Panel,panelProps,{...base,historyChoice:'ALL',decisions:groupHistoryDecisions(history,'ALL')});
+    assert.match(chosen,/과거 기록 3건도 함께 바로잡습니다/);assert.match(chosen,/근거가 부족한 1건/);
+    assert.match(chosen,/<button type="button" class="btn btn-primary">1,000,000 원 출금 보정 반영/);
+    assert.match(chosen,/<details><summary>날짜별 상세 확인 · 4건/);
+    const mixed=render(Panel,panelProps,{...base,historyChoice:'DETAIL'});
+    assert.match(mixed,/<details open=""><summary>날짜별 상세 확인/);
+    const unknown=render(Panel,panelProps,{...base,historyChoice:'UNKNOWN'});
+    assert.match(unknown,/과거 기록 4건에 관련된 손익·수익률은 미확정/);
+  });
+  await test('final action remains visible before preview, and uncertain writes can only retry the same request',async()=>{
+    const Panel=(await server.ssrLoadModule('/src/components/Tab4History/LedgerCorrectionPanel.jsx')).default;
+    const panelProps={portfolioId:'p',accounts,assets:[],onChanged:noop};
+    const html=render(Panel,panelProps,{open:true});
+    assert.match(html,/aria-label="정정 확정"/);assert.match(html,/<button[^>]*disabled=""[^>]*>정정 반영/);
+    assert.match(html,/정정할 계좌를 선택해주세요/);
+    const pending={request_id:'QA-pending',token:'a'.repeat(64),proposal:{kind:'PAST_WITHDRAWAL',account_id:'usd',amount:1000000,currency:'KRW',event_date:'2026-09-30',reason:'QA missed'},decisions:{},confirmed:true};
+    const locked=render(Panel,panelProps,{open:true,pending,confirmed:true});
+    assert.match(locked,/<fieldset class="ledger-correction-form" disabled=""/);
+    assert.match(locked,/<button type="button" class="btn btn-primary">저장 결과 다시 확인/);
+  });
+  test('reset clears unsent notice storage and linked correction, but cannot discard a pending write',()=>{
+    const priorWindow=globalThis.window;const priorStorage=globalThis.localStorage;
+    let discarded=0,removed=0;
+    globalThis.window={confirm:()=>true};globalThis.localStorage={getItem:()=>null,setItem:noop,removeItem:()=>{removed++;}};
+    try{
+      const html=render(Import,{...props,onDraftCleared:()=>{discarded++;}},state);
+      assert.match(html,/입력 비우고 새로 시작/);
+      globalThis.__nhHandlers.find(h=>h.label==='clearInput').callback();
+      assert.equal(removed,1);assert.equal(discarded,1);
+      render(Import,{...props,onDraftCleared:()=>{discarded++;}},{...state,pendingPayload:{request_id:'QA-pending'}});
+      globalThis.__nhHandlers.find(h=>h.label==='clearInput').callback();
+      assert.equal(removed,1);assert.equal(discarded,1);
+    }finally{globalThis.window=priorWindow;globalThis.localStorage=priorStorage;}
   });
   test('cross portfolio transfer has a counterparty choice and previews both accounts before saving',()=>{
     const transfer={id:'qa-transfer',kind:'WITHDRAW',accountId:'usd',destinationAccountId:'peer',eventDate:day,krwAmount:3,external:false,crossPortfolio:true,applyCash:true,errors:[],fingerprint:'e'.repeat(64)};
@@ -145,4 +204,4 @@ try{
     const html=render(Edit,{accounts,assets,onSaved:noop,onClose:noop},{selectedAccId:'usd',ledgerStatus:{accountId:'isa',ready:true,tracked:false,error:''}});
     assert.match(html,/<button[^>]*disabled=""[^>]*>💾 예수금 및 보유 수량\/평단가 저장/);
   });
-}finally{globalThis.localStorage=originalStorage;globalThis.fetch=originalFetch;delete globalThis.__nhStates;delete globalThis.__nhHandlers;await server.close();}
+}finally{globalThis.localStorage=originalStorage;globalThis.fetch=originalFetch;delete globalThis.__nhStates;delete globalThis.__nhHandlers;delete globalThis.__nhEffects;await server.close();}
