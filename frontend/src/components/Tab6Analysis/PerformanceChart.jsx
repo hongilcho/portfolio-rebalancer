@@ -1,20 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { performanceSeries, performanceValue, performanceAxisValue, performanceDomain, performanceDay,
-  dailyPerformanceSeries, dailyPerformanceSegments } from '../../utils/performanceChart';
+  dailyPerformanceSeries, dailyPerformanceSegments,performanceChartLayout,nearestPerformanceRecord } from '../../utils/performanceChart';
 
 export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate }) {
   const [kind, setKind] = useState(dailyReports.length ? '일' : '월');
   const [metric, setMetric] = useState('return_pct');
   const [year, setYear] = useState('latest');
-  const [range, setRange] = useState('90');
+  const [range, setRange] = useState('auto');
   const [selectedKey, setSelectedKey] = useState(null);
   const [containerWidth, setContainerWidth] = useState(560);
-  const [scrollLeft, setScrollLeft] = useState(0);
+  const {width,compact,left,right,top,bottom,height}=performanceChartLayout(containerWidth);
+  const effectiveRange=range==='auto'?(compact?'30':'90'):range;
   const chartRef = useRef(null);
   const years = [...new Set(reports.filter(row => row.kind === '월').map(row => row.label.slice(0, 4)))].sort();
   const selectedYear = years.includes(year) ? year : years.at(-1);
   const daily = kind === '일';
-  const series = daily ? dailyPerformanceSeries(dailyReports, metric, range) : performanceSeries(reports, kind, metric, selectedYear);
+  const series = daily ? dailyPerformanceSeries(dailyReports, metric, effectiveRange) : performanceSeries(reports, kind, metric, selectedYear);
   const selected = series.find(row => row.key === selectedKey) || series.at(-1);
   const [minimum, maximum] = performanceDomain(series, metric);
   const hasSeries = series.length > 0;
@@ -26,36 +27,25 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
   }, [hasSeries]);
   const firstDay = series.length ? performanceDay(series[0].label) : 0;
   const daySpan = daily && series.length ? performanceDay(series.at(-1).label) - firstDay : 0;
-  const width = Math.max(containerWidth, 560, daily
-    ? containerWidth >= 700 ? 0 : Math.min(1000, 130 + daySpan * 12)
-    : 110 + series.length * 100);
-  const left = 90, right = width - 28, top = 36, bottom = 244;
   const y = value => bottom - (value - minimum) / (maximum - minimum) * (bottom - top);
   const zero = y(0);
   const slot = (right - left) / Math.max(1, series.length);
   const dailyX = row => daySpan ? left + (performanceDay(row.label) - firstDay) / daySpan * (right - left) : (left + right) / 2;
   const selectedIndex = series.findIndex(row => row.key === selected?.key);
   const selectedX = daily && selected ? dailyX(selected) : left + slot * (selectedIndex + 0.5);
-  const latestX = daily && hasSeries ? dailyX(series.at(-1)) : left + slot * (series.length - 0.5);
-  useEffect(() => {
-    if (chartRef.current && hasSeries) {
-      // Show the latest record when the view changes, but never move the
-      // tapped point while a phone is dispatching its focus/click events.
-      chartRef.current.scrollLeft = latestX - chartRef.current.clientWidth / 2;
-    }
-  }, [width, containerWidth, latestX, hasSeries, kind, range]);
-  const navigateRecord = row => {
-    setSelectedKey(row.key);
-    if (chartRef.current) chartRef.current.scrollLeft = dailyX(row) - chartRef.current.clientWidth / 2;
+  const navigateRecord = row => { if(row)setSelectedKey(row.key); };
+  const selectAtPointer=event=>{
+    if(!event.detail)return;
+    const rect=event.currentTarget.getBoundingClientRect();
+    const x=(event.clientX-rect.left)/rect.width*width;
+    navigateRecord(nearestPerformanceRecord(series,x,left,right,daily));
   };
   const chooseKind = value => { setKind(value); setSelectedKey(null); if (value !== '일' && metric === 'value_krw') setMetric('return_pct'); };
   const chooseMetric = value => setMetric(value);
   const metricLabel = metric === 'value_krw' ? '평가액' : metric === 'return_pct'
     ? daily ? '기준일부터 누적 금액가중 수익률' : '금액가중 기간 수익률' : daily ? '기준일부터 누적 손익' : '기간 손익';
-  const visibleLeft = Math.max(left, scrollLeft + 86);
-  const visibleRight = Math.min(right, scrollLeft + containerWidth - 8);
-  const tooltipWidth = Math.min(210, Math.max(140, visibleRight - visibleLeft));
-  const tooltipX = Math.max(visibleLeft, Math.min(visibleRight - tooltipWidth, selectedX - tooltipWidth / 2));
+  const tooltipWidth=Math.min(210,right-left);
+  const tooltipX=Math.max(left,Math.min(right-tooltipWidth,selectedX-tooltipWidth/2));
   const segments = daily ? dailyPerformanceSegments(series) : [];
   const ticks = [];
   if (daily && series.length) {
@@ -83,26 +73,22 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         onChange={event => { setYear(event.target.value); setSelectedKey(null); }}>{years.map(item => <option key={item} value={item}>{item}년</option>)}</select></label>}
       {daily && <label>표시 범위 <select aria-label="일별 그래프 표시 범위" className="input-select" value={range}
         onChange={event => { setRange(event.target.value); setSelectedKey(null); }}>
-        <option value="30">최근 기록일 기준 30일</option><option value="90">최근 기록일 기준 90일</option>
+        <option value="auto">기본 · 최근 {compact?30:90}일</option><option value="30">최근 기록일 기준 30일</option><option value="90">최근 기록일 기준 90일</option>
         <option value="365">최근 기록일 기준 1년</option><option value="all">전체 기록</option>
       </select></label>}
     </div>
-    <p className="performance-chart-caption">{metricLabel}
+    <p className="performance-chart-caption">{compact?(metric==='value_krw'?'평가액':daily?metric==='return_pct'?'기준일부터 누적 수익률':'기준일부터 누적 손익':metricLabel):metricLabel}
       {daily && baselineDate && <small className="performance-chart-baseline">기준일 <time dateTime={baselineDate}>{baselineDate}</time></small>}
     </p>
     {!series.length ? <p>표시할 기간 성과 기록이 없습니다. 시작 기준 등록 이후의 평가 기록을 확인해주세요.</p> : <>
       {selected && <p className="performance-chart-value" aria-live="polite" aria-atomic="true">
         <strong>{selected.label} · {performanceValue(selected.value, metric)}</strong>
       </p>}
-      <div ref={chartRef} className="performance-chart-scroll" onScroll={event => setScrollLeft(event.currentTarget.scrollLeft)} role="region" aria-label={`기간 성과 ${daily ? '연결선' : '막대'}그래프, 좁은 화면에서는 좌우로 이동`} tabIndex={0}>
-        <div style={{ width }}>
-        <div className="performance-chart-axis" aria-hidden="true"><svg viewBox="0 0 86 340">
-          {[0, 0.25, 0.5, 0.75, 1].map(factor => <text key={factor} x="80"
-            y={y(minimum + factor * (maximum - minimum)) + 4} textAnchor="end" fill="var(--text-secondary)" fontSize="11">
-            {performanceAxisValue(minimum + factor * (maximum - minimum), metric, maximum - minimum)}</text>)}
-        </svg></div>
-        <svg viewBox={`0 0 ${width} 340`} style={{ minWidth: width }} role="group" aria-label={`${daily ? '일별 누적' : kind === '월' ? `${selectedYear}년 월별` : '연간'} ${metricLabel} 그래프`}>
-          {[0, 0.25, 0.5, 0.75, 1].map(factor => <g key={factor}>
+      <div ref={chartRef} className="performance-chart-scroll" role="region" aria-label={`기간 성과 ${daily ? '연결선' : '막대'}그래프, 선택 기간 전체 표시`} tabIndex={0}>
+        <svg viewBox={`0 0 ${width} ${height}`} style={{height}} onClick={selectAtPointer} role="group" aria-label={`${daily ? '일별 누적' : kind === '월' ? `${selectedYear}년 월별` : '연간'} ${metricLabel} 그래프`}>
+          {(compact?[0,0.5,1]:[0,0.25,0.5,0.75,1]).map(factor=><text key={`axis-${factor}`} x={left-8} y={y(minimum+factor*(maximum-minimum))+4} textAnchor="end" fill="var(--text-secondary)" fontSize={compact?10:11}>{performanceAxisValue(minimum+factor*(maximum-minimum),metric,maximum-minimum).replaceAll(' ','')}</text>)}
+          <rect x={left} y={top} width={right-left} height={bottom-top} fill="transparent"/>
+          {(compact?[0,0.5,1]:[0,0.25,0.5,0.75,1]).map(factor => <g key={factor}>
             <line x1={left} x2={right} y1={y(minimum + factor * (maximum - minimum))} y2={y(minimum + factor * (maximum - minimum))} stroke="var(--border-color)" strokeWidth={factor === 0.5 && metric !== 'value_krw' ? 2 : 1} />
           </g>)}
           {daily ? <>
@@ -125,15 +111,15 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
                   }
                 }}>
                 <title>{`${label}${row.warning ? ` · ${row.warning}` : ''}`}</title>
-                <circle cx={x} cy={pointY} r="22" fill="transparent" pointerEvents="all" />
+                {!compact && <circle cx={x} cy={pointY} r="22" fill="transparent" pointerEvents="all" />}
                 {row.value === null ? <text x={x} y={pointY + 4} textAnchor="middle" fill="var(--text-secondary)" fontSize="12">×</text>
-                  : <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill="var(--accent-primary)" stroke="var(--accent-primary)" strokeWidth="2" />}
+                  : (!compact || series.length<=12 || selected?.key===row.key || index===0 || index===series.length-1) && <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill="var(--accent-primary)" stroke="var(--accent-primary)" strokeWidth="2" />}
               </g>;
             })}
             {ticks.map(row => <text key={row.key} x={dailyX(row)} y={bottom + 35}
               textAnchor={row === series[0] ? 'start' : row === series.at(-1) ? 'end' : 'middle'}
-              fill="var(--text-secondary)" fontSize="11">{row.label.slice(2).replaceAll('-', '/')}</text>)}
-            {selectedKey && selected && <g className="performance-chart-tooltip" pointerEvents="none"
+              fill="var(--text-secondary)" fontSize="11">{(compact?row.label.slice(5):row.label.slice(2)).replaceAll('-', '/')}</text>)}
+            {!compact && selectedKey && selected && <g className="performance-chart-tooltip" pointerEvents="none"
               transform={`translate(${tooltipX},${Math.max(8, (selected.value === null ? top : y(selected.value)) - 66)})`}>
               <rect width={tooltipWidth} height="54" rx="8" fill="var(--bg-surface)" stroke="var(--accent-primary)" />
               <text x={tooltipWidth / 2} y="20" textAnchor="middle" fill="var(--text-secondary)" fontSize="12">{selected.label}</text>
@@ -147,19 +133,18 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
               className="performance-chart-period" onClick={() => setSelectedKey(row.key)} onFocus={() => setSelectedKey(row.key)}
               onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedKey(row.key); } }}>
               <title>{label}</title>
-              <rect x={x - slot / 2 + 4} y={top - 20} width={slot - 8} height={bottom - top + 108} rx="8"
+              <rect x={x - slot / 2 + 4} y={top - 20} width={Math.max(1,slot - 8)} height={bottom - top + 108} rx="8"
                 fill={selected?.key === row.key ? 'var(--bg-surface)' : 'transparent'} stroke={selected?.key === row.key ? 'var(--accent-primary)' : 'transparent'} />
               {row.value === null ? <text x={x} y={zero - 10} textAnchor="middle" fill="var(--text-secondary)" fontSize="12">계산 대기</text>
                 : row.value === 0 ? <line x1={x - 18} x2={x + 18} y1={zero} y2={zero} stroke={color} strokeWidth="3" />
                 : <rect x={x - Math.min(40, slot * 0.4) / 2} y={Math.min(y(row.value), zero)} width={Math.min(40, slot * 0.4)} height={Math.abs(y(row.value) - zero)}
                   fill={color} fillOpacity={0.85} stroke={color} rx="3" />}
-              {row.value !== null && <text x={x} y={row.value >= 0 ? y(row.value) - 9 : y(row.value) + 17} textAnchor="middle" fill={color} fontSize="11">{performanceValue(row.value, metric, true)}</text>}
-              <text x={x} y={bottom + 40} textAnchor="middle" fill="var(--text-primary)" fontSize="12">{row.label}</text>
-              <text x={x} y={bottom + 57} textAnchor="middle" fill="var(--text-secondary)" fontSize="10">{row.ongoing ? `${row.end.slice(5).replace('-', '/')}까지` : row.partial ? '시작 기준 이후' : ''}</text>
+              {!compact && row.value !== null && <text x={x} y={row.value >= 0 ? y(row.value) - 9 : y(row.value) + 17} textAnchor="middle" fill={color} fontSize="11">{performanceValue(row.value, metric, true)}</text>}
+              {(!compact || index%Math.max(1,Math.ceil(series.length/4))===0 || index===series.length-1) && <text x={x} y={bottom + 35} textAnchor="middle" fill="var(--text-primary)" fontSize={compact?10:12}>{compact && kind==='월'?`${row.label.slice(5)}월`:row.label}</text>}
+              {!compact && <text x={x} y={bottom + 57} textAnchor="middle" fill="var(--text-secondary)" fontSize="10">{row.ongoing ? `${row.end.slice(5).replace('-', '/')}까지` : row.partial ? '시작 기준 이후' : ''}</text>}
             </g>;
           })}
         </svg>
-        </div>
       </div>
       {selected && <div className="performance-chart-detail">
         {daily && <div className="performance-chart-controls" role="group" aria-label="일별 기록 선택">
@@ -179,14 +164,15 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
           : selected.fx.collected_at ? ` · 저장 ${new Date(selected.fx.collected_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})}` : ''}</p>}
         {daily && selected.ledger_at && <p>장부 수집 시각 {new Date(selected.ledger_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국 시간)</p>}
         {daily && selected.closes?.length>0 && <details><summary>종가 날짜·출처 확인</summary>{selected.closes.map(c=><p key={c.id}>{c.ticker || '예금'} · {c.price_date} · {c.source}</p>)}</details>}
-        {selected.warning && <p>{selected.warning}</p>}
         </details>
+        {selected.warning && <p role="status">{selected.warning}</p>}
+        {selected.ongoing && <p className="history-muted">진행 중인 기간 · 최근 평가일까지의 성과입니다.</p>}
       </div>}
       <details><summary>그래프 보는 법</summary>
       <p>{daily ? '점을 선택하면 해당 날짜의 값을 확인할 수 있습니다. 수익률·손익은 시작 기준일부터의 누적 성과입니다. 표시 범위를 바꿔도 계산 기준일은 바뀌지 않습니다.' : '양수는 위쪽, 음수는 아래쪽으로 표시합니다. 막대를 선택하면 해당 기간의 상세 값을 확인할 수 있습니다.'}</p>
       <p className="performance-chart-note">{daily ? '종가 기록은 연속된 거래일 사이에 선을 연결합니다. 주말·휴장일은 건너뛰고, 누락된 거래일과 계산 대기 구간은 연결하지 않습니다. 하루만 기록되면 점 하나가 표시됩니다. 평가액은 입출금으로도 변하므로 수익률과 다릅니다. 기존 조회 기록은 날짜별 상세의 평가 기준으로 구분합니다.' : '계산 대기는 0%·0원으로 표시하지 않습니다. 진행 중인 기간은 최근 평가일까지 표시하며, 정확한 금액과 계산 상태는 아래 표에서 확인할 수 있습니다.'}</p>
       {daily && !series.some(row => row.value !== null) && <p>계산 대기 사유는 기록 상세에서 확인할 수 있습니다. 시작일 평가액이 변경된 경우 다음 날짜의 기록부터 수익률을 계산할 수 있습니다.</p>}
-      <p>외부 입출금 기록이 없으면 입출금 없음으로 계산합니다. 실제 입출금이 있을 때만 4번 탭에 기록하면 날짜·금액이 자동 반영됩니다.</p>
+      <p>외부 입출금 기록이 없으면 입출금 없음으로 계산합니다. 실제 입출금이 있을 때만 5번 탭에 기록하면 날짜·금액이 자동 반영됩니다.</p>
       </details>
     </>}
   </section>;

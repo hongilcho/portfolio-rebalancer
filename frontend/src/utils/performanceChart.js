@@ -81,3 +81,17 @@ export function performanceScale(series, metric) {
   const fraction = maximum / magnitude;
   return (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * magnitude;
 }
+
+// Fit all records into the measured viewport; selection never changes the series.
+export function performanceChartLayout(containerWidth){
+  const width=Math.max(1,containerWidth),compact=width<500;
+  return {width,compact,left:compact?82:90,right:Math.max(compact?83:91,width-16),top:28,bottom:compact?198:244,height:compact?260:340};
+}
+export function nearestPerformanceRecord(series,x,left,right,daily){
+  if(!series.length)return null;
+  const first=performanceDay(series[0].label),span=performanceDay(series.at(-1).label)-first;
+  const position=(row,index)=>daily?(span?left+(performanceDay(row.label)-first)/span*(right-left):(left+right)/2):left+(index+.5)/series.length*(right-left);
+  let best=series[0],distance=Infinity;
+  series.forEach((row,index)=>{const candidate=Math.abs(position(row,index)-x);if(candidate<distance){best=row;distance=candidate;}});
+  return best;
+}

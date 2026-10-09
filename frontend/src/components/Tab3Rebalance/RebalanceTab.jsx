@@ -186,7 +186,7 @@ export default function RebalanceTab({ currentPortfolioId = 'default' }) {
                       ))}
                     </div>
 
-                    <p>이체 지시서는 계획입니다. 실제 이체 후 4번 탭에서 입출금·계좌 이체를 기록해주세요.</p>
+                    <p>이체 지시서는 계획입니다. 실제 이체 후 5번 탭에서 입출금·계좌 이체를 기록해주세요.</p>
                   </div>
                 ) : (
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>

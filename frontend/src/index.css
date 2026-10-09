@@ -1044,10 +1044,8 @@ body {
 .performance-chart-controls button[aria-pressed="true"] { background: var(--accent-primary); color: #fff; }
 .performance-chart-controls label { display: flex; align-items: center; gap: 8px; margin: 0; }
 .performance-chart-controls select { width: auto; }
-.performance-chart-scroll { overflow-x: auto; }
-.performance-chart-scroll svg { display: block; width: 100%; height: auto; }
-.performance-chart-axis { position: sticky; left: 0; width: 86px; height: 0; z-index: 1; pointer-events: none; }
-.performance-chart-axis svg { position: absolute; width: 86px; height: 340px; background: var(--bg-surface); }
+.performance-chart-scroll { overflow: hidden; width: 100%; min-width: 0; }
+.performance-chart-scroll svg { display: block; width: 100%; max-width: 100%; height: auto; touch-action: pan-y; }
 .performance-chart-period { cursor: pointer; touch-action: manipulation; }
 .performance-chart-period:focus { outline: none; }
 .performance-chart-period:focus > rect:first-of-type { stroke: var(--accent-primary); stroke-width: 2; }
@@ -1185,3 +1183,50 @@ body {
 }
 
 .ledger-correction-panel [hidden] { display: none !important; }
+
+/* Portfolio navigation and progressive mobile disclosure. */
+.mobile-tab-selector { display: none; }
+.portfolio-dashboard, .accounts-workspace { min-width: 0; }
+.dashboard-calculation-help, .mobile-summary-detail { margin: 12px 0; }
+.dashboard-calculation-help summary, .mobile-summary-detail summary, .period-table-details summary { cursor: pointer; padding: 10px 0; color: var(--text-secondary); }
+.account-summary-toggle { width: 100%; border: 0; font: inherit; text-align: left; color: var(--text-primary); }
+.account-warning { color: var(--color-loss); background: var(--bg-card-subtle); padding: 8px 12px; border-radius: 8px; font-size: .85rem; }
+.account-collapsed-summary { display: grid; gap: 6px; padding: 0 16px 14px; color: var(--text-secondary); font-size: .85rem; overflow-wrap: anywhere; }
+.account-filter { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+.mobile-portfolio-summary { display: grid; gap: 12px; padding: 20px 16px; border-radius: var(--radius-md); background: var(--bg-card); border: 1px solid var(--border-color); }
+.mobile-portfolio-summary>strong { font-size: 1.65rem; }
+.mobile-portfolio-summary>span { color: var(--text-secondary); font-size: .85rem; }
+.mobile-portfolio-summary>div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: .9rem; }
+.asset-disclosure>summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; min-height: 44px; align-items: center; }
+.asset-disclosure>summary::-webkit-details-marker { display: none; }
+.asset-disclosure>summary>span:first-child { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.asset-disclosure>summary>span:last-child { text-align: right; flex-shrink: 0; }
+.asset-disclosure>summary small { display: block; margin-top: 6px; }
+.asset-disclosure>summary::after { content: '＋'; color: var(--text-secondary); }
+.asset-disclosure[open]>summary::after { content: '−'; }
+.asset-disclosure[open]>summary { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); }
+@media (max-width: 768px) {
+  .desktop-tabs { display: none; }
+  .mobile-tab-selector { display: grid; gap: 6px; margin: 12px 0 16px; font-size: .8rem; color: var(--text-secondary); }
+  .mobile-tab-selector select { width: 100%; min-width: 0; min-height: 44px; font-size: .95rem; }
+  .account-identity-secondary { display: none !important; }
+  .account-summary-toggle { align-items: flex-start; gap: 12px; }
+  .account-summary-toggle>div { min-width: 0; flex: 1; }
+  .account-summary-toggle>div:last-child { flex: 0 0 auto; gap: 8px !important; }
+  .account-summary-toggle>div:first-child>span { overflow-wrap: anywhere; }
+  .accounts-workspace .accordion-body { padding: 12px; }
+  .portfolio-dashboard .section-card, .accounts-workspace .section-card { padding: 16px 12px; }
+  .mobile-allocation-chart { overflow: hidden; }
+  .mobile-allocation-chart svg { max-width: 100%; }
+  .mobile-view .mobile-card-row { flex-wrap: wrap; gap: 8px; }
+  .performance-chart { padding: 0; min-width: 0; }
+  .performance-chart-controls { gap: 8px; }
+  .performance-chart-controls [role="group"] { width: 100%; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .performance-chart-controls button { min-height: 44px; padding: 8px 4px; font-size: .8rem; white-space: normal; }
+  .performance-chart-controls label { width: 100%; flex-wrap: wrap; }
+  .performance-chart-controls select { flex: 1; min-width: 0; }
+  .performance-chart-detail { padding: 12px; }
+  .performance-chart-value { font-size: 1rem; overflow-wrap: anywhere; }
+  .performance-chart-caption { font-size: .85rem; }
+  .performance-chart-baseline { display: block; margin: 4px 0 0; }
+}

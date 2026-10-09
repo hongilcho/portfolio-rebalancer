@@ -246,7 +246,7 @@ export default function EditHoldingsModal({
         </div>
 
         {ledgerStatus.error && <p role="alert">달러 추적 상태 조회 실패: {ledgerStatus.error}</p>}
-        {tracked && <p>이 계좌는 원화 예수금만 저장합니다. 달러 잔고·보유 원가는 매매·환전 기록으로 관리하세요. 외부 입금은 4번 탭의 NH 알림 가져오기를 사용하면 입금 기록과 예수금을 함께 반영할 수 있습니다.</p>}
+        {tracked && <p>이 계좌는 원화 예수금만 저장합니다. 달러 잔고·보유 원가는 매매·환전 기록으로 관리하세요. 외부 입금은 5번 탭의 NH 알림 가져오기를 사용하면 입금 기록과 예수금을 함께 반영할 수 있습니다.</p>}
         {/* Deposits Input */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
           <KoreanNumberInput

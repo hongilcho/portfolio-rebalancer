@@ -46,7 +46,7 @@ try {
     assert.match(html, /<details><summary>계산 방식·기록 범위 안내<\/summary>/);
     assert.ok(html.indexOf('기간 성과 그래프') < html.indexOf('기간 성과 표'));
     assert.ok(html.indexOf('기간 성과 표') < html.indexOf('기록 관리·수집 상태'));
-    assert.match(html, /4\. 매매 및 입출금 기록으로 이동/);
+    assert.match(html, /5\. 매매 및 입출금 기록으로 이동/);
     assert.doesNotMatch(html, /aria-label="입출금 금액"|기록 취소|기록 복원/);
   });
   await test('daily chart defaults to cumulative line view, exposes valuation and range, and renders a single zero point', () => {
@@ -92,13 +92,13 @@ try {
     assert.match(html, /aria-label="입출금 금액"/);
     assert.match(html, /외부 입출금 기록 저장/);
     assert.match(html, /기록 취소/);
-    assert.match(html, /6\. 분석 및 확인에서 기간 성과 확인/);
+    assert.match(html, /7\. 분석 및 확인에서 기간 성과 확인/);
     assert.doesNotMatch(html, /기간 입출금 기록 확인 완료/);
   });
   await test('tab 4 directs an unregistered portfolio to the explicit baseline in tab 6', () => {
     const html = renderToStaticMarkup(React.createElement(Flows, { portfolioId: 'default', accounts: [],
       performance: { ...performance, data: { tracking: null } }, onOpenAnalysis: noop }));
-    assert.match(html, /6\. 분석 및 확인으로 이동/);
+    assert.match(html, /7\. 분석 및 확인으로 이동/);
     assert.doesNotMatch(html, /외부 입출금 기록 저장|aria-label="입출금 금액"/);
   });
   await test('analysis keeps all three destinations visible when no assets exist', () => {

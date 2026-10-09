@@ -239,8 +239,8 @@ export default function SettingsTab({
 
     const actionText = currentIsActive ? '비활성화(보관)' : '활성화';
     const confirmMsg = currentIsActive
-      ? `'${name}' 종목을 비활성화(보관)하시겠습니까?\n\n- 과거 매매 기록은 영구 보존됩니다.\n- 1번(대시보드), 2번(목표비중), 3번(리밸런싱) 화면에서 자동으로 숨겨집니다.`
-      : `'${name}' 종목을 다시 활성화하시겠습니까?\n\n- 1~3번 탭(대시보드, 목표비중, 리밸런싱)에 다시 정상 표시됩니다.`;
+      ? `'${name}' 종목을 비활성화(보관)하시겠습니까?\n\n- 과거 매매 기록은 영구 보존됩니다.\n- 1번(대시보드), 3번(목표비중), 4번(리밸런싱) 화면에서 자동으로 숨겨집니다.`
+      : `'${name}' 종목을 다시 활성화하시겠습니까?\n\n- 1·3·4번 탭(대시보드, 목표비중, 리밸런싱)에 다시 정상 표시됩니다.`;
     if (!window.confirm(confirmMsg)) return;
 
     try {
@@ -272,7 +272,7 @@ export default function SettingsTab({
   };
 
   const handleDeleteAsset = async (id, name) => {
-    if (!window.confirm(`⚠️ 주의: 자산 '${name}' 및 과거 모든 매매 기록이 DB에서 완전히 삭제됩니다!\n\n단순히 1~3번 탭에서 숨기려면 [📦 보관] 기능을 이용하세요.\n\n정말 영구 삭제하시겠습니까?`)) return;
+    if (!window.confirm(`⚠️ 주의: 자산 '${name}' 및 과거 모든 매매 기록이 DB에서 완전히 삭제됩니다!\n\n단순히 현황·목표비중·리밸런싱에서 숨기려면 [📦 보관] 기능을 이용하세요.\n\n정말 영구 삭제하시겠습니까?`)) return;
     try {
       await api.deleteAsset(id);
       alert('자산 및 관련 데이터가 삭제되었습니다.');

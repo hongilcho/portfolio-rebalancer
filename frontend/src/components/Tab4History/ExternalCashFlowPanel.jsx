@@ -37,11 +37,11 @@ export default function ExternalCashFlowPanel({ portfolioId, accounts, performan
     <summary className={focused?'history-hidden-summary':''} style={{ cursor: 'pointer', fontWeight: 700 }}>🏦 외부 투자자금 입출금 기록</summary>
     {error && <p role="alert">입출금 기록: {error}</p>}{notice && <p>{notice}</p>}
     {!data ? <p>입출금 기록을 조회 중입니다.</p> : !data.tracking ? <div>
-      <p>입출금 기록을 시작하려면 6번 ‘분석 및 확인’에서 현재 평가액을 기간 성과 시작 기준으로 등록해주세요.</p>
-      <button type="button" className="btn btn-secondary" onClick={onOpenAnalysis}>6. 분석 및 확인으로 이동</button>
+      <p>입출금 기록을 시작하려면 7번 ‘분석 및 확인’에서 현재 평가액을 기간 성과 시작 기준으로 등록해주세요.</p>
+      <button type="button" className="btn btn-secondary" onClick={onOpenAnalysis}>7. 분석 및 확인으로 이동</button>
     </div> : <div>
         <details className="history-help"><summary>입출금 구분·예수금 반영 안내</summary><p>급여·생활비 계좌 등 이 포트폴리오 밖에서 들어온 투자금과 밖으로 인출한 금액만 기록하세요. 같은 포트폴리오 안의 계좌 이동·매수/매도·환전·배당은 제외합니다. 포트폴리오 간 이동은 양쪽에 각각 기록합니다.</p>
-        <p>원화 입출금은 예수금에도 함께 반영할 수 있습니다. 이미 잔고 수정·동기화로 반영했다면 기록만 저장하세요. 달러 입출금은 성과 기록과 4번 탭 달러 관리의 실제 잔고 반영을 함께 확인해주세요.</p></details>
+        <p>원화 입출금은 예수금에도 함께 반영할 수 있습니다. 이미 잔고 수정·동기화로 반영했다면 기록만 저장하세요. 달러 입출금은 성과 기록과 5번 탭 달러 관리의 실제 잔고 반영을 함께 확인해주세요.</p></details>
         <form onSubmit={submit}>
           <fieldset disabled={busy || disabled} className="workflow-form">
             <label>입출금 날짜 <input aria-label="입출금 날짜" className="input-text" type="date" min={data.tracking.baseline_date} max={kstToday()} required value={form.event_date} onChange={e=>change('event_date',e.target.value)} /></label>
@@ -59,7 +59,7 @@ export default function ExternalCashFlowPanel({ portfolioId, accounts, performan
         </form>
         {!focused && <details><summary>입출금 기록 확인 · {data.flows.filter(f=>!f.voided).length}건</summary>{data.flows.map(f=><p key={f.id}>{f.event_date} · {accounts.find(a=>a.id===f.account_id)?.account_alias || '삭제된 계좌'} · {f.amount_krw>0 ? '입금' : '출금'} {formatKRW(Math.abs(f.amount_krw))} · {f.native_amount} {f.currency} · {f.notes} {f.voided && '(취소됨)'} <button className="btn btn-secondary btn-sm" disabled={busy || disabled} onClick={()=>run(()=>api.voidPerformanceFlow(portfolioId,f.id,!f.voided))}>{f.voided ? '기록 복원' : '기록 취소'}</button></p>)}</details>}
         <details className="history-help"><summary>기록 취소·복원 안내</summary><p>성과 기록만 저장한 입출금의 취소·복원은 예수금을 변경하지 않습니다. 예수금과 함께 반영한 입출금은 NH 알림 가져오기의 반영 이력에서 묶음 취소하세요. 잔고 수정·계좌/보유종목 추가/삭제로 외부 자산이 이동했다면 그 금액 역시 입출금으로 기록해야 합니다.</p></details>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenAnalysis}>6. 분석 및 확인에서 기간 성과 확인</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenAnalysis}>7. 분석 및 확인에서 기간 성과 확인</button>
     </div>}
   </details></section>;
 }

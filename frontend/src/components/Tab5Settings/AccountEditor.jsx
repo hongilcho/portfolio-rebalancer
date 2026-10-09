@@ -106,7 +106,7 @@ export default function AccountEditor({
                 </div>
               )}
 
-              <p>예수금·초기 잔고는 4번 탭의 장부 확인 및 정정에서 관리합니다.</p>
+              <p>예수금·초기 잔고는 5번 탭의 장부 확인 및 정정에서 관리합니다.</p>
 
               <div className="form-group">
                 <label className="form-label">메모</label>

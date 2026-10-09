@@ -1,5 +1,5 @@
 /**
- * 탭 4. 매매 및 입출금 기록 관리 컴포넌트 (HistoryTab.jsx)
+ * 탭 5. 매매 및 입출금 기록 관리 컴포넌트 (HistoryTab.jsx)
  * ===============================================
  * 수동 매매 내역(매수/매도)의 일괄 입력 및 체결 기록을 수행하고,
  * 과거 거래 내역의 다차원 필터링 조회 및 일괄 삭제(평단가 자동 롤백)를 지원합니다.
@@ -268,7 +268,7 @@ export default function HistoryTab({
   return (
     <div className="history-workspace">
       <div className="history-heading"><h2>매매 및 입출금 기록</h2><span className="history-muted">입력한 내용은 최종 반영 전까지 장부를 변경하지 않습니다.</span></div>
-      <div className="history-view-tabs" role="tablist" aria-label="4번 탭 작업">
+      <div className="history-view-tabs" role="tablist" aria-label="5번 탭 작업">
         <button id="history-input-tab" type="button" role="tab" aria-selected={view==='input'} aria-controls="history-input-panel" disabled={busy} onClick={()=>setView('input')}>기록 입력</button>
         <button id="history-record-tab" type="button" role="tab" aria-selected={view==='records'} aria-controls="history-record-panel" disabled={busy} onClick={()=>setView('records')}><History size={16}/>기록 조회</button>
       </div>

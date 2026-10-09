@@ -9,13 +9,14 @@
  *    - 포트폴리오 전환 또는 새로고침 시 1회의 API 호출로 전체 현황 일괄 수신
  * 2. 0초 반응성 세션 캐시:
  *    - 브라우저 sessionStorage를 활용하여 포트폴리오 전환 즉시 이전 대시보드를 렌더링
- * 3. 6대 핵심 탭 네비게이션:
+ * 3. 7대 핵심 탭 네비게이션:
  *    - 1. 포트폴리오 현황 (DashboardTab)
- *    - 2. 목표 비중 설정 (WeightsTab)
- *    - 3. 리밸런싱 전략 (RebalanceTab)
- *    - 4. 매매 및 입출금 기록 (HistoryTab)
- *    - 5. 계좌 마스터 관리 (SettingsTab)
- *    - 6. 분석 및 확인 (AnalysisTab)
+ *    - 2. 계좌 현황 및 한도 (AccountsTab)
+ *    - 3. 목표 비중 설정 (WeightsTab)
+ *    - 4. 리밸런싱 전략 (RebalanceTab)
+ *    - 5. 매매 및 입출금 기록 (HistoryTab)
+ *    - 6. 계좌 마스터 관리 (SettingsTab)
+ *    - 7. 분석 및 확인 (AnalysisTab)
  */
 
 import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
@@ -32,6 +33,7 @@ import { useMarketRevalidation } from './utils/useMarketRevalidation';
 import { usePortfolioPerformance } from './utils/usePortfolioPerformance';
 
 // Keep the initial dashboard eager; fetch other screens only when selected.
+const AccountsTab = lazy(() => import('./components/Tab2Accounts/AccountsTab'));
 const WeightsTab = lazy(() => import('./components/Tab2Weights/WeightsTab'));
 const RebalanceTab = lazy(() => import('./components/Tab3Rebalance/RebalanceTab'));
 const HistoryTab = lazy(() => import('./components/Tab4History/HistoryTab'));
@@ -43,11 +45,12 @@ const AllPortfoliosOverview = lazy(() => import('./components/Portfolios/AllPort
 
 const TABS = [
   { id: 'tab1', label: '📊 1. 포트폴리오 현황', icon: BarChart3 },
-  { id: 'tab2', label: '🎯 2. 목표 비중 설정', icon: Target },
-  { id: 'tab3', label: '⚖️ 3. 리밸런싱 전략', icon: Scale },
-  { id: 'tab4', label: '📝 4. 매매 및 입출금 기록', icon: History },
-  { id: 'tab5', label: '⚙️ 5. 계좌 마스터 관리', icon: Settings },
-  { id: 'tab6', label: '🔎 6. 분석 및 확인', icon: BarChart3 },
+  { id: 'accounts', label: '💳 2. 계좌 현황 및 한도', icon: BarChart3 },
+  { id: 'tab2', label: '🎯 3. 목표 비중 설정', icon: Target },
+  { id: 'tab3', label: '⚖️ 4. 리밸런싱 전략', icon: Scale },
+  { id: 'tab4', label: '📝 5. 매매 및 입출금 기록', icon: History },
+  { id: 'tab5', label: '⚙️ 6. 계좌 마스터 관리', icon: Settings },
+  { id: 'tab6', label: '🔎 7. 분석 및 확인', icon: BarChart3 },
 ];
 
 export default function App() {
@@ -255,7 +258,8 @@ export default function App() {
       ) : (
         <>
           {/* Tabs Navigation for individual financial portfolio */}
-          <nav className="tabs-nav">
+          <label className="mobile-tab-selector">화면 선택<select className="input-select" aria-label="포트폴리오 화면 선택" value={activeTab} onChange={e=>setActiveTab(e.target.value)}>{TABS.map(tab=><option value={tab.id} key={tab.id}>{tab.label}</option>)}</select></label>
+          <nav className="tabs-nav desktop-tabs">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -293,6 +297,8 @@ export default function App() {
                     onRefresh={() => loadAllData(true, currentPortfolioId)}
                   />
                 )}
+
+                {activeTab === 'accounts' && <AccountsTab key={currentPortfolioId} dashboardData={dashboardData} currencyMode={currencyMode}/>}
 
                 {activeTab === 'tab2' && (
                   <WeightsTab

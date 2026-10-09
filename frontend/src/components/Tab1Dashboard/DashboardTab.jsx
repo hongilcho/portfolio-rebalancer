@@ -25,7 +25,9 @@ import DashboardSummaryCards from './DashboardSummaryCards';
 import DashboardCharts from './DashboardCharts';
 import InvestmentAssetsSection from './InvestmentAssetsSection';
 import CashAssetsSection from './CashAssetsSection';
-import AccountBreakdown from './AccountBreakdown';
+import {useCompactLayout} from '../../utils/useCompactLayout';
+import {accountIssues} from '../../utils/accountPresentation';
+import {formatKRW,formatPercent,getProfitColor} from '../../utils/formatters';
 
 
 export default function DashboardTab({ 
@@ -33,7 +35,7 @@ export default function DashboardTab({
   assets, 
   currencyMode = 'KRW',
 }) {
-  const [expandedAccs, setExpandedAccs] = useState({});
+  const compact=useCompactLayout();
   const [chartView, setChartView] = useState('both'); // 'both' | 'stocks' | 'accounts'
   const [includeDeposits, setIncludeDeposits] = useState(() => {
     try {
@@ -56,8 +58,7 @@ export default function DashboardTab({
     kpi = {},
     stock_assets = [],
     cash_assets = {},
-    drift_scale_max,
-    usd_krw = 1380
+    drift_scale_max
   } = safeData;
 
   const activeAssetIds = useMemo(() => {
@@ -164,10 +165,6 @@ export default function DashboardTab({
     };
   }, [displayStockAssets, cash_assets, kpi?.usd_summary]);
 
-  const accSummaries = useMemo(() => {
-    return dashboardData?.account_summaries || dashboardData?.accounts || [];
-  }, [dashboardData?.account_summaries, dashboardData?.accounts]);
-
   // '비중 및 괴리율' 표 전용 데이터 (예금형 자산 및 비중 제외 자산은 아예 삭제/제외)
   const weightDriftAssets = useMemo(() => {
     return (displayStockAssets || []).filter((item) => {
@@ -196,49 +193,19 @@ export default function DashboardTab({
     assetClassBreakdown(displayStockAssets, 'eval_amount'),
   [displayStockAssets]);
 
-  // 계좌별 자산 현황 (예금 제외 모드 시 정기예금 계좌 및 각 계좌의 예금 자산 제외)
-  const displayAccSummaries = useMemo(() => {
-    if (includeDeposits) return accSummaries;
-    return (accSummaries || [])
-      .filter((acc) => acc.account_type !== '정기예금')
-      .map((acc) => {
-        const nonDepositHoldings = (acc.holdings || []).filter((h) => !h.is_deposit);
-        const stockEval = nonDepositHoldings.reduce((sum, h) => sum + (Number(h.eval_amount) || 0), 0);
-        const stockBuy = nonDepositHoldings.reduce((sum, h) => sum + (Number(h.avg_price) * Number(h.quantity) || 0), 0);
-        const profitKrw = stockEval - stockBuy;
-        const profitPct = stockBuy > 0 ? (profitKrw / stockBuy * 100) : 0;
-        const totalVal = stockEval + (Number(acc.deposit_krw) || 0) + ((Number(acc.deposit_usd) || 0) * (usd_krw || 1380));
-        return {
-          ...acc,
-          holdings: nonDepositHoldings,
-          stock_eval: stockEval,
-          stock_buy_total: stockBuy,
-          profit_krw: profitKrw,
-          profit_pct: profitPct,
-          total_val: totalVal
-        };
-      });
-  }, [accSummaries, includeDeposits, usd_krw]);
-
   if (!dashboardData) {
     return <div className="section-card">데이터를 불러오는 중입니다...</div>;
   }
 
   const totalStockEval = Number(displayKpi?.total_stock_eval) || 0;
 
-  const toggleAccordion = (accId) => {
-    setExpandedAccs((prev) => ({
-      ...prev,
-      [accId]: prev[accId] === false ? true : false
-    }));
-  };
-
   return (
-    <div>
+    <div className="portfolio-dashboard">
       <MarketStatus status={dashboardData?.market_status} />
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+      <details className="dashboard-calculation-help"><summary>수익률 계산 기준</summary><p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
         보유자산 수익률 = (평가손익 + 세후 배당) ÷ 보유자산 매입원가. 예수금은 총자산에만 포함됩니다.
-      </p>
+      </p></details>
+      {(dashboardData.account_summaries || dashboardData.accounts || []).filter(a=>accountIssues(a).length).map(a=><p role="alert" className="account-warning" key={a.id}>{a.account_alias} · {accountIssues(a).join(' · ')} · 2번 계좌 현황에서 확인</p>)}
       {/* 0. Top Filter & View Toggle Bar (예금 포함/제외 토글 스위치) */}
       <div style={{
         display: 'flex',
@@ -324,12 +291,31 @@ export default function DashboardTab({
         </div>
       </div>
 
+      {compact?<>
+        <section className="mobile-portfolio-summary" aria-label="포트폴리오 핵심 요약">
+          <span>{includeDeposits?'총자산':'예금 제외 총자산'}{currencyMode==='USD'?' (원화 환산)':''} · 예수금 포함</span>
+          <strong>{formatKRW(totalStockEval+(Number(cash_assets.total_cash_krw)||0))}</strong>
+          <div><span>배당 포함 보유자산 손익</span><strong style={{color:getProfitColor(displayKpi.total_stock_profit)}}>{formatKRW(displayKpi.total_stock_profit,true)}</strong></div>
+          <div><span>보유자산 수익률</span><strong style={{color:getProfitColor(displayKpi.total_stock_return)}}>{formatPercent(displayKpi.total_stock_return)}</strong></div>
+        </section>
+        <details className="mobile-summary-detail"><summary>원금·배당·통화별 상세보기</summary>
       <DashboardSummaryCards
         currencyMode={currencyMode}
         displayDualKpi={displayDualKpi}
         includeDeposits={includeDeposits}
         displayKpi={displayKpi}
       />
+
+        </details>
+      </>:<>
+      <DashboardSummaryCards
+        currencyMode={currencyMode}
+        displayDualKpi={displayDualKpi}
+        includeDeposits={includeDeposits}
+        displayKpi={displayKpi}
+      />
+
+      </>}
 
       <DashboardCharts
         setChartView={setChartView}
@@ -351,17 +337,10 @@ export default function DashboardTab({
         drift_scale_max={drift_scale_max}
       />
 
-      <CashAssetsSection cash_assets={cash_assets} />
+      {compact?<details className="mobile-summary-detail"><summary>원화·달러 예수금 상세보기</summary><CashAssetsSection cash_assets={cash_assets}/></details>:<CashAssetsSection cash_assets={cash_assets}/> }
 
 
-      <AccountBreakdown
-        includeDeposits={includeDeposits}
-        displayAccSummaries={displayAccSummaries}
-        expandedAccs={expandedAccs}
-        usd_krw={usd_krw}
-        toggleAccordion={toggleAccordion}
-        currencyMode={currencyMode}
-      />
+
 
 
     </div>

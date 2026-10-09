@@ -1,5 +1,6 @@
 /** AccountBreakdown: presentation only; state and API actions stay in the parent. */
 import React from 'react';
+import {accountIssues,remainingAnnualLimit} from '../../utils/accountPresentation';
 import { ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatKRW, formatUSD, formatQuantity, formatPercent, getProfitColor } from '../../utils/formatters';
 
@@ -10,13 +11,14 @@ export default function AccountBreakdown({
   usd_krw,
   toggleAccordion,
   currencyMode,
+  compact=false,
 }) {
   return (
     <>
       {/* 4. Accounts Breakdown Section */}
       <div className="section-card">
         <div className="section-title">
-          <span>💳 계좌별 자산 현황 & 한도 모니터링</span>
+          <span>💳 계좌 현황 및 한도</span>
 
         </div>
 
@@ -43,8 +45,9 @@ export default function AccountBreakdown({
           </p>
         ) : (
           displayAccSummaries.map((acc) => {
-            const isExpanded = expandedAccs[acc.id] !== false; // default true
+            const isExpanded = expandedAccs[acc.id] ?? !compact;
             const isIrp = acc.account_type === 'IRP';
+            const riskKnown=acc.risk_pct!=null && Number.isFinite(Number(acc.risk_pct));
             const isIrpOverRisk = isIrp && acc.risk_pct > 70.0;
             const accStockProfit = acc.profit_krw || ((acc.stock_eval || 0) - (acc.stock_buy_total || 0));
             const accStockReturn = acc.profit_pct || (acc.stock_buy_total > 0 ? (accStockProfit / acc.stock_buy_total * 100) : 0);
@@ -56,16 +59,16 @@ export default function AccountBreakdown({
             return (
               <div key={acc.id} className="account-accordion">
                 {/* Accordion Header */}
-                <div className="accordion-header" onClick={() => toggleAccordion(acc.id)}>
+                <button type="button" className="accordion-header account-summary-toggle" aria-expanded={isExpanded} aria-controls={`account-panel-${acc.id}`} onClick={() => toggleAccordion(acc.id)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>
                       📌 [{acc.account_type === '정기예금' ? '🏦 정기예금' : acc.account_type}] {acc.account_alias}
                     </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    <span className="account-identity-secondary" style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                       ({acc.account_no})
                     </span>
                     {acc.account_type !== '정기예금' && (
-                      <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)' }}>
+                      <span className="badge account-identity-secondary" style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)' }}>
                         우선순위: {acc.priority || 99}
                       </span>
                     )}
@@ -78,11 +81,14 @@ export default function AccountBreakdown({
                     </div>
                     {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                   </div>
-                </div>
+                </button>
+                {compact && <div className="account-collapsed-summary"><span>원화 예수금 {formatKRW(acc.deposit_krw)}{Number(acc.deposit_usd)!==0 && ` · 달러 ${formatUSD(acc.deposit_usd)}`}</span>{remainingAnnualLimit(acc)!==null && <span>연간 남은 납입한도 {formatKRW(remainingAnnualLimit(acc))}</span>}{acc.is_limit_exhausted && <span>한도 소진 처리 · 추가 입금 차단</span>}</div>}
+                {accountIssues(acc).map(issue=><p role="alert" className="account-warning" key={issue}>{issue}</p>)}
 
                 {/* Accordion Body */}
                 {isExpanded && (
-                  <div className="accordion-body">
+                  <div className="accordion-body" id={`account-panel-${acc.id}`}>
+                    {compact && <p className="account-detail-identity">계좌번호 {acc.account_no} · 우선순위 {acc.priority || 99}</p>}
                     {/* Account Stat Highlight Row */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'var(--bg-surface)', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '16px', border: '1px solid var(--border-color)' }}>
                       <div>
@@ -111,7 +117,7 @@ export default function AccountBreakdown({
                     </div>
 
                     {/* IRP Risk Banner */}
-                    {isIrp && (
+                    {isIrp && riskKnown && (
                       <div className={`alert-banner ${isIrpOverRisk ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '16px' }}>
                         <ShieldAlert size={18} />
                         <span>
@@ -177,13 +183,13 @@ export default function AccountBreakdown({
                         <input
                           type="checkbox"
                           checked={!!acc.is_limit_exhausted}
-                          disabled aria-label="한도 소진 상태 · 5번 탭에서 변경"
+                          disabled aria-label="한도 소진 상태 · 6번 탭에서 변경"
                           style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                         />
                         <span>
                           {acc.is_limit_exhausted
                             ? '🔒 연간 납입한도 소진 완료 (리밸런싱 추가 입금 차단 중)'
-                            : '💡 한도 96% 이상 도달 · 상태 변경은 5번 탭에서 처리'}
+                            : '💡 한도 96% 이상 도달 · 상태 변경은 6번 탭에서 처리'}
                         </span>
                       </label>
                       {acc.is_limit_exhausted && (
@@ -300,7 +306,8 @@ export default function AccountBreakdown({
                         const isHUsdMode = currencyMode === 'USD' && isHUs;
 
                         return (
-                          <div key={h.asset_id} className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>
+                          <details key={h.asset_id} className="mobile-card-item asset-disclosure" style={{ background: 'var(--bg-surface)' }}>
+                            <summary><span>{h.asset_name}</span><span>{isHUsdMode?formatUSD(h.eval_amount_usd):formatKRW(h.eval_amount)}<small>{formatPercent(isHUsdMode?(h.profit_pct_usd ?? h.profit_pct):h.profit_pct)}</small></span></summary>
                             <div className="mobile-card-row">
                               <div className="mobile-card-title">
                                 <span>{h.asset_name}</span>
@@ -365,7 +372,7 @@ export default function AccountBreakdown({
                                 </span>
                               </div>
                             )}
-                          </div>
+                          </details>
                         );
                       })}
                       <div className="mobile-card-item" style={{ background: 'var(--bg-surface)' }}>

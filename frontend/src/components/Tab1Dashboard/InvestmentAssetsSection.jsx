@@ -241,7 +241,8 @@ export default function InvestmentAssetsSection({
             const incRebal = item.include_in_rebalance !== false;
 
             return (
-              <div key={item.asset_id} className="mobile-card-item">
+              <details key={item.asset_id} className="mobile-card-item asset-disclosure">
+                <summary><span>{item.name}</span><span>{isUsdMode?formatUSD(item.eval_amount_usd):formatKRW(item.eval_amount)}<small style={{color:getProfitColor(itemProfit)}}>{formatPercent(isUsdMode?(item.profit_pct_usd ?? item.profit_pct):item.profit_pct)}</small></span></summary>
                 {/* Row 1: Name + Eval Amount */}
                 <div className="mobile-card-row">
                   <div className="mobile-card-title">
@@ -331,7 +332,7 @@ export default function InvestmentAssetsSection({
                     <DriftBar drift={item.drift_pct} scaleMax={drift_scale_max} />
                   </div>
                 )}
-              </div>
+              </details>
             );
           }))}
         </div>

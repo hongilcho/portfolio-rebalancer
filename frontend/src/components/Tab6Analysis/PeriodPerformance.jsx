@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { api } from '../../utils/api';
 import { formatKRW } from '../../utils/formatters';
+import {useCompactLayout} from '../../utils/useCompactLayout';
 import PerformanceChart from './PerformanceChart';
 
 export default function PeriodPerformance({ portfolioId, performance, onOpenHistory }) {
   const { data, busy, error, notice, run, capture, setNotice } = performance;
+  const compact=useCompactLayout();
   const [startChecked, setStartChecked] = useState(false);
   const [open, setOpen] = useState(true);
   return <section className="section-card workflow-panel">
@@ -17,9 +19,9 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
         <button className="btn btn-primary" disabled={busy || !startChecked} onClick={()=>run(async()=>{await api.startPerformance(portfolioId);setNotice('현재 평가액을 시작 기준으로 등록했습니다.');})}>기간 성과 시작 기준 등록</button>
       </div> : <div>
         <PerformanceChart reports={data.reports} dailyReports={data.daily_reports || []} baselineDate={data.tracking.baseline_date} />
-        <div className="table-container"><table className="custom-table" aria-label="기간 성과 표"><thead><tr><th>구분</th><th>기간</th><th>평가 시작/종료</th><th>순입금</th><th>기간 손익</th><th>금액가중 기간 수익률</th></tr></thead><tbody>
+        <details className="period-table-details" open={!compact}><summary>기간 성과 표 보기</summary><div className="table-container"><table className="custom-table" aria-label="기간 성과 표"><thead><tr><th>구분</th><th>기간</th><th>평가 시작/종료</th><th>순입금</th><th>기간 손익</th><th>금액가중 기간 수익률</th></tr></thead><tbody>
           {data.reports.map(r=><tr key={`${r.kind}/${r.label}`}><td>{r.kind}</td><td>{r.label}{r.partial && ' (기준 등록 이후)'}<br />{r.start} ~ {r.end}</td><td>{r.start_value==null ? '미기록' : formatKRW(r.start_value)} / {r.end_value==null ? '미기록' : formatKRW(r.end_value)}</td><td>{r.net_flow==null ? '—' : formatKRW(r.net_flow)}</td><td>{r.profit==null ? '—' : formatKRW(r.profit)}{r.warning && <p>{r.warning}</p>}</td><td>{r.return_pct==null ? '계산 대기' : `${(Math.abs(r.return_pct)<0.005 ? 0 : r.return_pct).toFixed(2)}%`}</td></tr>)}
-        </tbody></table></div>
+        </tbody></table></div></details>
         <details><summary>기록 관리·수집 상태</summary>
           <p>시작 기준 {data.tracking.baseline_date} · {formatKRW(data.tracking.baseline_value)} · 평가 기록 {data.snapshots.length}일</p>
           <p>종가 자동 기록 {data.close_schedule?.enabled ? '사용 중' : data.close_schedule?.error ? '달력 확인 필요' : '꺼짐'}{data.close_schedule?.next_at && ` · ${data.close_schedule.enabled ? '다음 예정' : '다음 거래일 기준'} ${new Date(data.close_schedule.next_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국 시간)`}</p>
@@ -28,11 +30,11 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
           {data.missed_close_count>0 && <p>종가 미기록 {data.missed_close_count}일 · 당시 장부·환율이 없는 날짜는 현재 잔고로 복원하지 않습니다.</p>}
           <button className="btn btn-secondary" disabled={busy} onClick={()=>run(capture)}>오늘 종가 기록 재시도·장부 반영</button>
           <p>당일 종가 기록 시각 이후에 사용합니다. 늦게 입력한 매매·잔고는 이 버튼으로 당일 기록에 반영합니다. 이미 수집한 종가·환율을 유지하며 이전 기록도 보존합니다. 지난 날짜의 장부는 자동 수정하지 않습니다.</p>
-          <p>외부 입출금 기록 {data.flows.filter(f=>!f.voided).length}건 · 기록이 없으면 입출금 없음으로 계산합니다. 실제 입출금이 생겼을 때만 4번 탭에 기록하고 잔고에도 반영해주세요.</p>
-          <button type="button" className="btn btn-secondary" onClick={onOpenHistory}>4. 매매 및 입출금 기록으로 이동</button>
+          <p>외부 입출금 기록 {data.flows.filter(f=>!f.voided).length}건 · 기록이 없으면 입출금 없음으로 계산합니다. 실제 입출금이 생겼을 때만 5번 탭에 기록하고 잔고에도 반영해주세요.</p>
+          <button type="button" className="btn btn-secondary" onClick={onOpenHistory}>5. 매매 및 입출금 기록으로 이동</button>
         </details>
       </div>}
-      {data?.ledger_unconfirmed && <p role="alert">장부 정정의 과거 기록 확인이 남아 있습니다. 해당 기간 손익·수익률은 미확정입니다. 4번 탭의 장부 확인 및 정정에서 확인해주세요.</p>}
+      {data?.ledger_unconfirmed && <p role="alert">장부 정정의 과거 기록 확인이 남아 있습니다. 해당 기간 손익·수익률은 미확정입니다. 5번 탭의 장부 확인 및 정정에서 확인해주세요.</p>}
       <details><summary>계산 방식·기록 범위 안내</summary>
         <p>외부 입출금 기록이 없으면 입출금 없음으로 계산합니다. 기록된 입출금은 날짜·금액을 반영해 수익률과 손익을 자동 계산하며 취소·복원도 즉시 반영합니다. 별도의 확인 버튼을 누를 필요는 없습니다.</p>
         <p>선택한 포트폴리오의 보유자산·예금·원화/달러 예수금 전체를 원화로 평가합니다. 가상자산과 다른 포트폴리오는 제외합니다.</p>

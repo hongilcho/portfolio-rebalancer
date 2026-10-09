@@ -2,6 +2,7 @@
 import React from 'react';
 import { PieChart } from 'lucide-react';
 import { formatKRW } from '../../utils/formatters';
+import {useCompactLayout} from '../../utils/useCompactLayout';
 import DonutChart from '../common/DonutChart';
 
 export default function DashboardCharts({
@@ -12,6 +13,11 @@ export default function DashboardCharts({
   totalStockEval,
   assetTypeDonutData,
 }) {
+  const compact=useCompactLayout();
+  if(compact)return <section className="section-card mobile-allocation-chart"><h3>자산군별 비중</h3>
+    <DonutChart data={assetTypeDonutData} centerLabel={includeDeposits?'투자자산 평가액':'예금 제외 평가액'} centerValue={formatKRW(totalStockEval)} size={190}/>
+    <details><summary>종목별 비중 상세보기</summary><DonutChart data={stockDonutData} centerLabel="투자자산 평가액" centerValue={formatKRW(totalStockEval)} size={190}/></details>
+  </section>;
   return (
     <>
       {/* 2. Interactive Donut Charts Section (개별 종목별 / 종목 유형별 비중) */}
@@ -77,7 +83,7 @@ export default function DashboardCharts({
         {/* Charts Container */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: chartView === 'both' ? 'repeat(auto-fit, minmax(360px, 1fr))' : '1fr',
+          gridTemplateColumns: chartView === 'both' ? 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))' : '1fr',
           gap: '24px',
           marginTop: '12px'
         }}>
