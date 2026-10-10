@@ -1,0 +1,19 @@
+.preview-frame { max-width:960px; margin:0 auto; padding:20px; }
+.preview-banner { display:flex; flex-wrap:wrap; gap:8px 18px; padding:12px 16px; margin-bottom:22px; border:1px solid var(--color-warning); border-radius:10px; font-size:.8rem; color:var(--color-warning); }
+.preview-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:22px; }
+.preview-header h1 { font-size:1.2rem; }
+.preview-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+.preview-controls label { font-size:.8rem; display:flex; gap:8px; align-items:center; }
+.preview-controls select { background:var(--bg-surface); border:1px solid var(--border-color); border-radius:8px; padding:8px; color:var(--text-primary); }
+.preview-section-label { color:var(--accent-primary); font-size:.9rem; font-weight:700; margin-bottom:12px; }
+.preview-notice label { display:block; font-size:.85rem; margin:16px 0 8px; }
+.preview-notice textarea { width:100%; resize:vertical; border:1px solid var(--border-color); border-radius:10px; padding:12px; background:var(--bg-card-subtle); color:var(--text-primary); font:inherit; font-size:.88rem; }
+.preview-notice-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.preview-confirm { display:flex; gap:10px; align-items:flex-start; font-size:.86rem; line-height:1.6; margin:20px 0; }
+.preview-confirm input { margin-top:5px; }
+.preview-shared-input .history-inline-choice button { min-height:42px; }
+.preview-shared-input .history-inline-choice button[aria-pressed="true"] { color:var(--accent-primary); }
+.preview-shared-input .section-title { flex-wrap:wrap; }
+.preview-shared-input .history-inline-choice button:nth-child(2) { pointer-events:auto; }
+.preview-shared-input .history-single-trade .history-inline-choice { display:none; }
+@media(max-width:600px) { .preview-frame { padding:12px; } .preview-header h1 { font-size:1rem; } .preview-controls { gap:8px; } .preview-controls button { font-size:.75rem; } .preview-banner { font-size:.72rem; margin-bottom:16px; } }
