@@ -78,7 +78,7 @@ try{
  await wait("Boolean(window.qaVisible('[aria-label=\"투자 실행 계획\"]'))",'start form');
  const before=await stat();
  check(await evaljs("window.qaVisible('[aria-label=\"추가 투자 입금액\"]').value==='0'"),'Existing CMA cash counted as new income');
- await value('[aria-label="투자 대표 계좌"]','qa_cma');await click('필요한 작업 미리 확인');
+ await value('[aria-label="투자 대표 계좌"]','qa_cma');await value('[aria-label="추가 투자 입금액"]','1000000');await click('필요한 작업 미리 확인');
  await wait("Boolean(window.qaVisible('.execution-start-review'))",'preview');
  check(JSON.stringify(await stat())===JSON.stringify(before),'Preparing workflow changed journal');
  await tick('자금 사용 범위와 목표');await click('확인한 계획으로 투자 시작');
@@ -87,6 +87,22 @@ try{
  check((await stat()).trades===before.trades,'Start changed trades');
  await rpc('Page.reload');await wait("Boolean(window.qaVisible('[aria-label=\"포트폴리오 화면 선택\"]'))",'reload dashboard');await tab('tab8');await wait("Boolean(window.qaVisible('.execution-current'))",'resumed cycle');
  summary.push('Plan handoff, preview/start no journal change, reload resumes one cycle');
+ await click('새 실행 내역 입력');await click('직접 입력');
+ await delay(500);
+ // The synthetic quote fixture can need one metadata refresh after parallel reads.
+ if(await evaljs("document.body.innerText.includes('입출금 기록을 조회 중') && Boolean(window.qaVisible('.execution-journal-input [role=alert]'))"))await evaljs("window.qaVisible('header button[title=\"새로고침\"]')?.click()");
+ await wait("Boolean(window.qaVisible('[aria-label=\"입출금 금액\"]'))",'manual investment funding form');
+ const fundingBefore=await stat();
+ await value('[aria-label="입출금 금액"]','1000000');
+ await tick('외부 입출금이며');await click('외부 입출금 기록 저장');
+ await wait("!window.qaVisible('#execution-input-panel')",'manual investment funding returns to progress');
+ await wait("!window.qaVisible('[aria-label=\"포트폴리오 화면 선택\"]').disabled",'manual funding releases navigation lock');
+ const funded=await stat();
+ check(funded.cash.find(a=>a.id==='qa_cma').deposit_krw===fundingBefore.cash.find(a=>a.id==='qa_cma').deposit_krw+1000000,'Manual funding cash mismatch');
+ check(funded.trades===fundingBefore.trades,'Manual funding created a trade');
+ await tab('tab4');await tab('tab8');await wait("window.qaVisible('.execution-current h3')?.textContent.includes('자금 이동')",'funding advances to transfer');
+ summary.push('Manual external deposit records once, advances to transfer, releases performance/navigation locks and returns to investment progress');
+
  const box=await evaljs("(()=>{const e=window.qaVisible('.execution-record');e.scrollIntoView({block:'center'});const b=e.getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};})()");
  await rpc('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[box]});await rpc('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
  await wait("Boolean(window.qaVisible('#execution-input-panel'))",'touch input');

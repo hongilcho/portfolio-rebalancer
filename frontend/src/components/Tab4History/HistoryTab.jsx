@@ -145,10 +145,12 @@ export default function HistoryTab({
   }, [accounts, currentPortfolioId,active]);
 
   const loadTrades=useCallback(async()=>{setRecordRevision(n=>n+1);},[]);
-  const changed=async()=>{await refreshBookkeeping({
+  // A manual cash flow already runs inside the performance queue.
+  // Do not enqueue and await another job behind that same running job.
+  const changed=async({performanceManaged=false}={})=>{await refreshBookkeeping({
     '달러 원가':refreshLedgers,'기록 목록':loadTrades,'자산 현황':onSaved,
     '투자 진행':onExecutionChanged,
-    '기간 성과':performance?()=>performance.run(performance.capture):undefined,
+    '기간 성과':performance && !performanceManaged?()=>performance.run(performance.capture):undefined,
   });onRecorded?.();};
   // Add/Remove Buy Row
   const addBuyRow = () => {
@@ -357,7 +359,7 @@ export default function HistoryTab({
           </div>}
           {(!embedded || manualKind==='funds') && <div hidden={manualKind!=='funds'}>{performance && <ExternalCashFlowPanel key={currentPortfolioId}
             portfolioId={currentPortfolioId} accounts={accounts} performance={performance} onOpenAnalysis={onOpenAnalysis}
-            disabled={busy && !performance?.busy && !childBusy.funds} onBusyChange={fundsBusy} executionContext={executionContext} inputScope={inputScope} focused onCashChanged={changed}/>}</div>}
+            disabled={busy && !performance?.busy && !childBusy.funds} onBusyChange={fundsBusy} executionContext={executionContext} inputScope={inputScope} focused onCashChanged={()=>changed({performanceManaged:true})}/>}</div>}
           {(!embedded || manualKind==='transfers') && <div hidden={manualKind!=='transfers'}><InternalTransferForm portfolioId={currentPortfolioId} accounts={accounts} onChanged={changed} onBusyChange={transfersBusy} disabled={busy && !childBusy.transfers} executionContext={executionContext} inputScope={inputScope}/></div>}
           {!embedded && <div hidden={manualKind!=='deposits'}>{<DepositLedgerPanel active={active && effectiveView==='input' && method==='manual' && manualKind==='deposits'} key={currentPortfolioId} portfolioId={currentPortfolioId} assets={assets} onChanged={changed} onBusyChange={depositsBusy} disabled={busy && !childBusy.deposits}/>}</div>}
         </div>
