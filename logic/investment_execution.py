@@ -82,3 +82,45 @@ def build_steps(plan, accounts, assets, setup, existing_quantities=None):
             line['depends_on']=[fx_steps[aid]['key']] if line['currency']=='USD' and aid in fx_steps else deps
             steps.append(line)
     return steps
+
+
+def closing_progress(cycle):
+    """Describe unfinished work from saved journal facts, never from UI claims."""
+    from decimal import InvalidOperation
+    remaining, excluded = [], []
+    for step in cycle.get('steps', []):
+        if step.get('status') == 'EXCLUDED':
+            excluded.append(step['id'])
+            continue
+        trade = step['kind'] in ('BUY', 'SELL')
+        field = 'target_quantity' if trade else 'target_amount'
+        try:
+            target = positive(step.get(field))
+        except (ValueError, TypeError, InvalidOperation):
+            target = Decimal(0)
+        value, seen = Decimal(0), set()
+        review = target <= 0 or bool(step.get('review_required'))
+        for result in cycle.get('results', []):
+            ident = result.get('id')
+            if (not ident or ident in seen or result.get('voided')
+                    or result.get('step_id') != step['id']
+                    or any(result.get(key) != step.get(key)
+                           for key in ('kind', 'account_id', 'currency'))
+                    or (trade and result.get('asset_id') != step.get('asset_id'))):
+                continue
+            seen.add(ident)
+            if result.get('ledger_status') != 'RECORDED':
+                review = True
+                continue
+            try:
+                value += positive(result.get('quantity' if trade else 'amount'))
+            except (ValueError, TypeError, InvalidOperation):
+                review = True
+        complete = not review and (step.get('satisfied_by_existing_cash') is True
+                                    or value >= target - Decimal('0.0000001'))
+        if not complete:
+            remaining.append(dict(step_id=step['id'], title=step.get('title', ''),
+                kind=step['kind'], currency=step['currency'],
+                target=str(target), recorded=str(value),
+                remaining=str(max(Decimal(0), target-value)), review_required=review))
+    return dict(remaining_steps=remaining, excluded_step_ids=excluded)

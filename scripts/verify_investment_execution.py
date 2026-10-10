@@ -60,9 +60,21 @@ try:
     before=cash();preview=investments.prepare(ctx,'default',req)
     req['preview_token']=preview['preview_token']
     assert cash()==before and scalar('SELECT count(*) FROM portfolio_execution.cycles')==0
+    # The same transfer instructions can survive a changed CMA balance. Review
+    # must still be invalidated instead of assuming the incoming cash is future.
+    with connect() as conn,conn.cursor() as c:
+        c.execute("UPDATE accounts SET deposit_krw=deposit_krw+1 WHERE id='cma'");conn.commit()
+    fail(lambda:investments.create(ctx,'default',req),'변경')
+    assert scalar('SELECT count(*) FROM portfolio_execution.cycles')==0
+    with connect() as conn,conn.cursor() as c:
+        c.execute("UPDATE accounts SET deposit_krw=deposit_krw-1 WHERE id='cma'");conn.commit()
     with ThreadPoolExecutor(2) as pool:created=list(pool.map(lambda _:investments.create(ctx,'default',req),range(2)))
     assert created[0]==created[1] and cash()==before
     cycle_id=created[0]['id'];cycle=investments.read(ctx,'default',cycle_id)
+    fail(lambda:investments.set_status(ctx,'default',cycle_id,'CLOSED'),'남은')
+    fail(lambda:investments.set_status(ctx,'default',cycle_id,'CLOSED','   '),'남은')
+    assert cash()==before and scalar('SELECT report FROM portfolio_execution.cycles WHERE id=%s',(cycle_id,)) is None
+    assert plans.read(ctx,'default')['plans'][0]['execution']['id']==cycle_id
     assert not any(s['kind']=='DEPOSIT' for s in cycle['steps'])
     fail(lambda:investments.create(ctx,'default',{**req,'request_id':'qa-second-cycle'}),'진행 중')
     step_by={s['key']:s for s in cycle['steps']}
@@ -172,6 +184,7 @@ try:
     assert cash()==journal
     investments.set_status(ctx,'default',cycle_id,'CLOSED','Synthetic partial close')
     report=scalar('SELECT report FROM portfolio_execution.cycles WHERE id=%s',(cycle_id,))
+    assert report['remaining_steps'] and any(s['kind']=='BUY' for s in report['remaining_steps'])
     investments.set_status(ctx,'default',cycle_id,'CLOSED');assert scalar('SELECT report FROM portfolio_execution.cycles WHERE id=%s',(cycle_id,))==report
     fail(lambda:investments.set_status(ctx,'default',cycle_id,'ACTIVE'),'재개')
     plans.archive(ctx,'default',pid,True)
@@ -218,6 +231,12 @@ try:
             execution=dict(cycle_id=owner_cycle['id'],step_id=owner_step['id'],revision=1))]).model_dump(mode='json')
     owner_receipt=trades.execute_batch(owner_ctx,owner_buy)
     assert len(investments.read(owner_ctx,'default',owner_cycle['id'])['results'])==1
+    before_excluded=cash()
+    excluded=dict(request_id='qa-owner-exclude',revision=1,reason='Synthetic exclusion',changes=[dict(step_id=owner_step['id'],status='EXCLUDED')])
+    investments.revise(owner_ctx,'default',owner_cycle['id'],excluded)
+    extra_buy={**owner_buy,'request_id':'qa-owner-excluded-buy','trades':[{**owner_buy['trades'][0],'execution':{**owner_buy['trades'][0]['execution'],'revision':2}}]}
+    fail(lambda:trades.execute_batch(owner_ctx,extra_buy),'제외')
+    assert cash()==before_excluded and scalar("SELECT count(*) FROM bookkeeping_requests WHERE request_id='qa-owner-excluded-buy'")==0
     ok,message=trades.delete_trades(owner_ctx,owner_receipt['trade_ids']);assert ok,message
     assert investments.read(owner_ctx,'default',owner_cycle['id'])['results'][0]['voided']
     print('PASS: start/retry, funding/transfers, atomic posting, partial fills, goal revision/recalculation, mock confirmation/failure recovery, identified cross-source duplicate blocking, FX cost, cancellation, scope/auth/private RLS, report')

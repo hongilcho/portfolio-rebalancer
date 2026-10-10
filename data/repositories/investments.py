@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from psycopg2.extras import Json, RealDictCursor
-from logic.investment_execution import build_steps
+from logic.investment_execution import build_steps, closing_progress
 from data.repositories.bookkeeping import plain
 from data.repositories.nh_notices import lock_scope
 S = 'portfolio_execution.'
@@ -67,7 +67,10 @@ def attach(c,db,pid,link,kind,ident,channel='MANUAL'):
     c.execute('SELECT payload FROM '+S+'steps WHERE id=%s AND cycle_id=%s',(link['step_id'],cycle['id']))
     row=c.fetchone()
     if not row: raise ValueError('선택한 투자 작업을 찾을 수 없습니다.')
-    step=row['payload'];kind,ident,fact=source(c,kind,ident)
+    step=row['payload']
+    if step.get('status')=='EXCLUDED':
+        raise ValueError('제외한 투자 작업입니다. 목표를 다시 확인하거나 5번에서 연결 없이 기록해주세요.')
+    kind,ident,fact=source(c,kind,ident)
     if not matches(step,fact,pid): raise ValueError('실제 기록의 계좌·종목·통화·방향이 투자 작업과 다릅니다. 연결 대상을 확인해주세요.')
     c.execute('''SELECT r.step_id,r.id AS result_id FROM portfolio_execution.record_links l
       JOIN portfolio_execution.results r ON r.id=l.result_id
@@ -121,14 +124,17 @@ def _setup(c,pid,request):
     c.execute('SELECT * FROM assets WHERE portfolio_id=%s',(pid,));assets=[dict(a) for a in c.fetchall()]
     c.execute('''SELECT l.line_no,t.quantity,t.id FROM rebalance_plan_links l JOIN trade_history t ON t.id=l.trade_id
       WHERE l.plan_id=%s''',(plan['id'],))
-    existing=c.fetchall();quantities={}
+    existing=sorted(c.fetchall(),key=lambda r:(r['line_no'],r['id']));quantities={}
     for row in existing: quantities[row['line_no']]=quantities.get(row['line_no'],0)+float(row['quantity'])
     steps=build_steps(plan['payload'],accounts,assets,request,quantities)
     budget=sum(float(line['qty'])*float(line['price']) for line in plan['payload']['trade_plan'])
-    return plan,steps,budget,existing
+    snapshot=dict(accounts=[{key:a.get(key) for key in ('id','deposit_krw','deposit_usd')} for a in accounts],
+        plan=dict(id=plan['id'],payload=plan['payload'],cutoff=plan['cutoff']),linked_trades=existing)
+    return plan,steps,budget,existing,snapshot
 
-def preview_token(steps):
-    return hashlib.sha256(json.dumps(plain(steps),sort_keys=True,separators=(',',':')).encode()).hexdigest()
+def preview_token(steps,snapshot=None):
+    basis=steps if snapshot is None else dict(steps=steps,snapshot=snapshot)
+    return hashlib.sha256(json.dumps(plain(basis),sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 def start_plans(db,pid):
     with db.connect() as conn,conn.cursor(cursor_factory=RealDictCursor) as c:
@@ -138,8 +144,8 @@ def start_plans(db,pid):
 def prepare(db,pid,request):
     with db.connect() as conn,conn.cursor(cursor_factory=RealDictCursor) as c:
         c.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-        plan,steps,budget,_=_setup(c,pid,request)
-        return {'plan_id':plan['id'],'name':plan['name'],'budget_krw':budget,'steps':steps,'setup':request,'preview_token':preview_token(steps)}
+        plan,steps,budget,_,snapshot=_setup(c,pid,request)
+        return {'plan_id':plan['id'],'name':plan['name'],'budget_krw':budget,'steps':steps,'setup':request,'preview_token':preview_token(steps,snapshot)}
 
 def create(db,pid,request):
     request=plain(request)
@@ -156,8 +162,8 @@ def create(db,pid,request):
         c.execute('SELECT id FROM '+S+'cycles WHERE plan_id=%s',(request['plan_id'],))
         if c.fetchone(): raise ValueError('이미 투자에 사용한 계획입니다. 새 계획을 저장해주세요.')
         c.execute('SELECT id FROM rebalance_plans WHERE id=%s AND portfolio_id=%s FOR UPDATE',(request['plan_id'],pid))
-        plan,steps,_,existing=_setup(c,pid,request)
-        if not request.get('preview_token') or request['preview_token']!=preview_token(steps):
+        plan,steps,_,existing,snapshot=_setup(c,pid,request)
+        if not request.get('preview_token') or request['preview_token']!=preview_token(steps,snapshot):
             raise ValueError('시작 안내가 없거나 잔고·계획이 변경되었습니다. 실행 안내를 다시 확인해주세요.')
         ident=db.new_id()
         c.execute('INSERT INTO '+S+'cycles(id,portfolio_id,plan_id,name,request_id,payload) VALUES(%s,%s,%s,%s,%s,%s)',
@@ -225,7 +231,11 @@ def set_status(db,pid,cycle_id,status,reason=''):
         if cycle['status']=='CLOSED' and status=='CLOSED': return {'success':True}
         if cycle['status']=='CLOSED' and status!='CLOSED': raise ValueError('종료한 투자는 재개하지 않습니다. 새 계획으로 시작해주세요.')
         if status=='CLOSED':
-            report=plain({'cycle':_read(c,pid,cycle_id),'reason':reason,'closed_at':datetime.now(timezone.utc).isoformat()})
+            current=_read(c,pid,cycle_id)
+            progress=closing_progress(current)
+            if progress['remaining_steps'] and not reason.strip():
+                raise ValueError('남은 작업이나 확인 대기 기록이 있습니다. 미실행 종료 이유를 입력해주세요.')
+            report=plain({'cycle':current,**progress,'reason':reason,'closed_at':datetime.now(timezone.utc).isoformat()})
             c.execute('UPDATE '+S+'cycles SET status=%s,report=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s',(status,Json(report),cycle_id))
         else: c.execute('UPDATE '+S+'cycles SET status=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s',(status,cycle_id))
         conn.commit();return {'success':True}

@@ -21,7 +21,7 @@ export default function InvestmentWorkspace({portfolioId,model,accounts,usdKrw,s
     catch(e){setError(e.message);}finally{setBusy(false);onBusyChange(false);}
   };
   const recording=inputContext && cycle && inputContext.cycle_id===cycle.id?inputContext.step.id:null;
-  const progress=investmentProgress(cycle),actionBusy=busy || writing || loadingPast;
+  const progress=investmentProgress(cycle),actionBusy=busy || writing || loadingPast || model.loading;
   const unlink=async result=>{
     if(!window.confirm('투자 작업과의 연결만 해제할까요? 실제 거래와 잔고는 유지됩니다.'))return;
     setBusy(true);onBusyChange(true);

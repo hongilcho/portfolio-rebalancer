@@ -102,3 +102,58 @@ def test_execution_schema_does_not_extend_legacy_public_security_inventory():
 def test_browser_cannot_supply_internal_confirmation_metadata():
     with pytest.raises(ValidationError):
         ExecutionLink(cycle_id="cycle",step_id="step",revision=1,confirmation_id="forged")
+
+
+def test_closing_progress_uses_only_valid_posted_facts():
+    from logic.investment_execution import closing_progress
+    step = dict(id='buy', kind='BUY', account_id='isa', asset_id='bond',
+        currency='KRW', target_quantity='20', title='Bond purchase')
+    def fill(ident, quantity, **extra):
+        return dict(id=ident, step_id='buy', kind='BUY', account_id='isa',
+            asset_id='bond', currency='KRW', quantity=quantity,
+            ledger_status='RECORDED', **extra)
+    cycle = dict(steps=[step], results=[fill('a',7), fill('a',7),
+        fill('b',13,voided=True), {**fill('c',20),'account_id':'other'}])
+    progress = closing_progress(cycle)
+    assert progress['remaining_steps'][0]['recorded']=='7'
+    assert progress['remaining_steps'][0]['remaining']=='13'
+    cycle['results'].append(fill('d',13))
+    assert closing_progress(cycle)['remaining_steps']==[]
+    cycle['results'].append({**fill('e',1),'ledger_status':'UNCERTAIN'})
+    assert closing_progress(cycle)['remaining_steps'][0]['review_required']
+
+
+@pytest.mark.parametrize('target', [0,None,float('nan'),''])
+def test_invalid_target_cannot_close_as_completed(target):
+    from logic.investment_execution import closing_progress
+    progress=closing_progress(dict(steps=[dict(id='s',kind='DEPOSIT',
+        account_id='cma',currency='KRW',target_amount=target)],results=[]))
+    assert progress['remaining_steps'][0]['review_required']
+
+
+def test_excluded_and_existing_cash_are_distinct_in_closing_report():
+    from logic.investment_execution import closing_progress
+    base=dict(kind='TRANSFER',account_id='cma',currency='KRW',target_amount=100)
+    progress=closing_progress(dict(steps=[dict(base,id='excluded',status='EXCLUDED'),
+        dict(base,id='cash',satisfied_by_existing_cash=True)],results=[]))
+    assert progress==dict(remaining_steps=[],excluded_step_ids=['excluded'])
+
+
+def test_multiple_us_assets_share_one_conversion_and_preserve_existing_cash(inputs):
+    plan,accounts,assets,setup=deepcopy(inputs)
+    assets.append(dict(id='pdbc',name='PDBC',market='US',allowed_accounts=['us']))
+    plan['trade_plan'].append(dict(account_id='us',asset_id='pdbc',type='BUY',qty=10,price=14000))
+    steps=build_steps(plan,accounts,assets,setup)
+    conversions=[s for s in steps if s['kind']=='EXCHANGE_IN']
+    assert len(conversions)==1 and float(conversions[0]['target_amount'])==500
+    buys=[s for s in steps if s['kind']=='BUY' and s['currency']=='USD']
+    assert len(buys)==2 and all(s['depends_on']==[conversions[0]['key']] for s in buys)
+    assert float(next(s for s in steps if s['key']=='transfer:cma:us')['target_amount'])==700000
+
+
+def test_start_review_detects_cash_changes_even_when_instructions_are_identical():
+    from data.repositories.investments import preview_token
+    steps=[{'kind':'TRANSFER','target_amount':'180000'}]
+    before={'accounts':[{'id':'cma','deposit_krw':1150000,'deposit_usd':0}]}
+    after={'accounts':[{'id':'cma','deposit_krw':1150001,'deposit_usd':0}]}
+    assert preview_token(steps,before)!=preview_token(steps,after)

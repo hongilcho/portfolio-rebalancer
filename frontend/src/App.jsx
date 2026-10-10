@@ -352,18 +352,18 @@ export default function App() {
                   />
                 )}
 
-                {activeTab==='tab8' && <InvestmentWorkspace key={currentPortfolioId} portfolioId={currentPortfolioId}
+                {activeTab==='tab8' && (loadedBundle?.portfolioId!==currentPortfolioId?<ViewLoading/>:<InvestmentWorkspace key={currentPortfolioId} portfolioId={currentPortfolioId}
                   model={investment} accounts={accounts} usdKrw={usdKrw} selection={executionSelection} inputContext={executionInput}
                   writing={writing} onBusyChange={executionBusy} onCloseInput={closeExecutionInput}
                   onOpenPlans={()=>setActiveTab('tab3')} onOpenHistory={()=>setActiveTab('tab4')}
-                  onRecord={(cycle,step)=>setExecutionInput({portfolio_id:currentPortfolioId,cycle_id:cycle.id,revision:cycle.revision,name:cycle.name,step,steps:cycle.steps})}/>
+                  onRecord={(cycle,step)=>setExecutionInput({portfolio_id:currentPortfolioId,cycle_id:cycle.id,revision:cycle.revision,name:cycle.name,step,steps:cycle.steps})}/>)
                 }
                 {(historyMounted || activeTab==='tab4' || executionInput) && <div hidden={activeTab!=='tab4' && !(activeTab==='tab8' && executionInput)}>
                   <HistoryTab key={currentPortfolioId} assets={assets} accounts={accounts} priceMap={priceMap} usdKrw={usdKrw}
                     pricesData={pricesData} currentPortfolioId={currentPortfolioId} performance={performance}
                     onOpenAnalysis={()=>setActiveTab('tab6')} onSaved={reloadAfterSave} onBusyChange={historyBusy}
                     embedded={activeTab==='tab8'} active={activeTab==='tab4' || (activeTab==='tab8' && Boolean(executionInput))}
-                    executionContext={executionInput} onExecutionChanged={investment.refresh} onRecorded={closeExecutionInput}
+                    executionContext={executionInput} onExecutionChanged={executionInput || investment.available===true?investment.refresh:undefined} onRecorded={closeExecutionInput}
                     onExitExecution={()=>{setExecutionInput(null);setActiveTab('tab4');}}/>
                 </div>}
 
