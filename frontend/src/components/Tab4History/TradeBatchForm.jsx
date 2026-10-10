@@ -50,6 +50,7 @@ export default function TradeBatchForm({
           </div>
         </div>
 
+        {executionStep && <p className="history-muted">단가는 참고 시세로 미리 채웁니다. 시세가 없으면 계획 단가를 사용합니다. 실제 거래를 기록할 때는 체결 단가로 수정해주세요.</p>}
         {buyRows.some(r => r.importSource) && <p>가져온 거래는 선택한 체결일에 고정됩니다. 날짜를 바꾸려면 가져온 행을 먼저 삭제해주세요.</p>}
         {focused && !executionStep && <div className="history-inline-choice"><button type="button" aria-pressed={direction==='BUY'} disabled={locked} onClick={()=>setDirection('BUY')}>매수 입력</button><button type="button" aria-pressed={direction==='SELL'} disabled={locked} onClick={()=>setDirection('SELL')}>매도 입력</button><span className="history-muted">매수·매도 대기 행은 함께 저장됩니다.</span></div>}
         <div className={focused?'trade-forms-grid history-single-trade':'trade-forms-grid'} inert={locked || undefined}>

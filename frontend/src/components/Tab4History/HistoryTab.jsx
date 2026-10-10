@@ -22,7 +22,7 @@ import NamuhMessageImport from './NamuhMessageImport';
 import LedgerCorrectionPanel from './LedgerCorrectionPanel';
 import ExternalCashFlowPanel from './ExternalCashFlowPanel';
 import InternalTransferForm from './InternalTransferForm';
-import {executionRows} from '../../utils/investmentInput';
+import {executionRows,executionReferencePrice,seedExecutionPrice} from '../../utils/investmentInput';
 import { readTradeDraft, writeTradeDraft, remainingTradeRows, draftStorage } from '../../utils/tradeDraft';
 
 export default function HistoryTab({
@@ -40,14 +40,15 @@ export default function HistoryTab({
   const storage=useMemo(()=>draftStorage(inputScope),[inputScope]);
   const task=executionContext?.step;
   const manualTaskKind=task?.kind==='TRANSFER'?'transfers':task?.kind==='DEPOSIT'?'funds':'trades';
+  const referencePrice=executionReferencePrice(task,priceMap,pricesData?.prices,usdKrw);
   const blankTrade=direction=>({id:crypto.randomUUID(),accountId:String(task?.account_id || accounts[0]?.id || ''),
-    assetId:task?.kind===direction?String(task.asset_id || ''):'',quantity:0,price:0,exchangeRate:usdKrw});
+    assetId:task?.kind===direction?String(task.asset_id || ''):'',quantity:0,price:task?.kind===direction?referencePrice:0,exchangeRate:usdKrw});
   // Batch Trade Form State
   const submitLock=useRef(false);
   const [initialDraft] = useState(() => readTradeDraft(storage, currentPortfolioId));
   const [tradeDate, setTradeDate] = useState(initialDraft?.tradeDate || new Date(Date.now() + 9 * 3600000).toISOString().split('T')[0]);
-  const [buyRows, setBuyRows] = useState(initialDraft?.buyRows.length ? initialDraft.buyRows : [blankTrade('BUY')]);
-  const [sellRows, setSellRows] = useState(initialDraft?.sellRows.length ? initialDraft.sellRows : [blankTrade('SELL')]);
+  const [buyRows, setBuyRows] = useState(()=>seedExecutionPrice(initialDraft?.buyRows.length ? initialDraft.buyRows : [blankTrade('BUY')],task?.kind==='BUY'?task:null,referencePrice,{pending:Boolean(initialDraft?.pendingSubmission || initialDraft?.uncertainSubmission)}));
+  const [sellRows, setSellRows] = useState(()=>seedExecutionPrice(initialDraft?.sellRows.length ? initialDraft.sellRows : [blankTrade('SELL')],task?.kind==='SELL'?task:null,referencePrice,{pending:Boolean(initialDraft?.pendingSubmission || initialDraft?.uncertainSubmission)}));
   const restoredAmounts=Boolean(initialDraft && [...initialDraft.buyRows,...initialDraft.sellRows].some(row=>Number(row.quantity) || Number(row.price)));
   const [draftReviewed, setDraftReviewed] = useState(!restoredAmounts || Boolean(initialDraft?.pendingSubmission));
   const [pendingSubmission,setPendingSubmission]=useState(initialDraft?.pendingSubmission || null);

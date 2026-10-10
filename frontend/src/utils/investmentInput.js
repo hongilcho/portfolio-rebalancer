@@ -38,3 +38,23 @@ export async function requireInvestmentProtocol(client,payload) {
   try {if ((await client.getInvestmentCapabilities()).investment_protocol===1) return;} catch { /* Keep exact pending request. */ }
   throw new Error('백엔드의 투자 실행 지원 버전이 필요합니다. Render 배포 후 같은 요청으로 확인해주세요. 장부 요청은 보내지 않았습니다.');
 }
+
+// Reference price only; the user still records the actual fill price.
+export function executionReferencePrice(step,priceMap={},prices=[],usdKrw=0) {
+  if(!step || !['BUY','SELL'].includes(step.kind))return 0;
+  const positive=value=>Number.isFinite(Number(value)) && Number(value)>0;
+  const krw=priceMap[String(step.asset_id)];
+  if(step.currency==='USD'){
+    const native=prices.find(p=>String(p.id)===String(step.asset_id))?.price_usd;
+    if(positive(native))return Number(native);
+    if(positive(krw) && positive(usdKrw))return Number((Number(krw)/Number(usdKrw)).toFixed(2));
+  }else if(positive(krw))return Number(krw);
+  return positive(step.estimated_price)?Number(step.estimated_price):0;
+}
+
+export function seedExecutionPrice(rows,step,referencePrice,{pending=false}={}) {
+  if(pending || !step || !Number.isFinite(referencePrice) || referencePrice<=0)return rows;
+  return rows.map(row=>!row.importSource && Number(row.price)===0
+    && same(row.accountId,step.account_id) && same(row.assetId,step.asset_id)
+    ? {...row,price:referencePrice}:row);
+}

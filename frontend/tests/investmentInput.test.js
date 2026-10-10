@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchingExecution,executionRows,executionNotices,requireInvestmentProtocol,canTransferOut} from '../src/utils/investmentInput.js';
+import {matchingExecution,executionRows,executionNotices,requireInvestmentProtocol,canTransferOut,executionReferencePrice,seedExecutionPrice} from '../src/utils/investmentInput.js';
 const buy={id:'buy',kind:'BUY',account_id:'isa',asset_id:'bond',currency:'KRW'};
 const transfer={id:'move',kind:'TRANSFER',account_id:'cma',destination_account_id:'isa',currency:'KRW'};
 const fx={id:'fx',kind:'EXCHANGE_IN',account_id:'us',currency:'USD'};
@@ -45,4 +45,29 @@ test('old backend gates linked requests and preserves the exact frozen metadata'
 test('tax accounts are never suggested as outgoing funding sources',()=>{
  for(const type of ['ISA','IRP','연금저축','퇴직연금','PENSION'])assert.equal(canTransferOut({account_type:type}),false);
  assert.equal(canTransferOut({account_type:'CMA'}),true);
+});
+
+test('execution default prices use native USD or matching KRW quotes, then plan price',()=>{
+ const us={...buy,asset_id:'vt',currency:'USD',estimated_price:'90'};
+ assert.equal(executionReferencePrice(us,{vt:140000},[{id:'vt',price_usd:101.25}],1400),101.25);
+ assert.equal(executionReferencePrice(us,{vt:140000},[],1400),100);
+ assert.equal(executionReferencePrice(us,{vt:140000},[],0),90);
+ assert.equal(executionReferencePrice(buy,{bond:9320},[],1400),9320);
+ assert.equal(executionReferencePrice({...buy,estimated_price:'9000'},{bond:NaN}),9000);
+ assert.equal(executionReferencePrice({...buy,estimated_price:Infinity},{}),0);
+ assert.equal(executionReferencePrice(fx,{us:100}),0);
+});
+
+test('execution price seeding preserves edited/imported/unrelated and uncertain drafts',()=>{
+ const empty={accountId:'isa',assetId:'bond',quantity:3,price:0};
+ const edited={...empty,price:9300};
+ const imported={...empty,importSource:'NAMUH_KAKAO'};
+ const unrelated={...empty,assetId:'other'};
+ const rows=[empty,edited,imported,unrelated];
+ const seeded=seedExecutionPrice(rows,buy,9320);
+ assert.equal(seeded[0].price,9320);assert.equal(seeded[0].quantity,3);
+ assert.equal(empty.price,0);
+ assert.equal(seeded[1],edited);assert.equal(seeded[2],imported);assert.equal(seeded[3],unrelated);
+ assert.equal(seedExecutionPrice(rows,buy,9320,{pending:true}),rows);
+ assert.equal(seedExecutionPrice(rows,buy,0),rows);
 });
