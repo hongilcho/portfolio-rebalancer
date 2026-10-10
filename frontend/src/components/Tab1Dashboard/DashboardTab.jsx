@@ -24,6 +24,7 @@ import { sortInvestmentAssets, assetClassBreakdown } from '../../utils/assetClas
 import DashboardSummaryCards from './DashboardSummaryCards';
 import DashboardCharts from './DashboardCharts';
 import InvestmentAssetsSection from './InvestmentAssetsSection';
+import WeightDriftOverview from './WeightDriftOverview';
 import CashAssetsSection from './CashAssetsSection';
 import {useCompactLayout} from '../../utils/useCompactLayout';
 import {accountIssues} from '../../utils/accountPresentation';
@@ -298,6 +299,7 @@ export default function DashboardTab({
           <div><span>배당 포함 보유자산 손익</span><strong style={{color:getProfitColor(displayKpi.total_stock_profit)}}>{formatKRW(displayKpi.total_stock_profit,true)}</strong></div>
           <div><span>보유자산 수익률</span><strong style={{color:getProfitColor(displayKpi.total_stock_return)}}>{formatPercent(displayKpi.total_stock_return)}</strong></div>
         </section>
+        <WeightDriftOverview items={weightDriftAssets} scaleMax={drift_scale_max} />
         <details className="mobile-summary-detail"><summary>원금·배당·통화별 상세보기</summary>
       <DashboardSummaryCards
         currencyMode={currencyMode}

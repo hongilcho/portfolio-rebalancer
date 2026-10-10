@@ -1230,3 +1230,36 @@ body {
   .performance-chart-caption { font-size: .85rem; }
   .performance-chart-baseline { display: block; margin: 4px 0 0; }
 }
+
+/* Always-visible mobile allocation comparison; every row shares one scale. */
+.weight-drift-overview { --weight-label-width: 142px; --weight-chart-gap: 12px; margin: 16px 0; min-width: 0; }
+.weight-drift-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.weight-drift-heading h3 { margin: 0; font-size: 1rem; }
+.weight-drift-unit { color: var(--text-muted); font-size: .75rem; }
+.weight-drift-legend { display: flex; justify-content: space-between; margin: 12px 0 4px; font-size: .75rem; color: var(--text-secondary); }
+.weight-drift-legend>span:first-child { color: var(--color-loss); }
+.weight-drift-legend>span:last-child { color: var(--color-warning); }
+.weight-drift-list { list-style: none; padding: 0; margin: 0; }
+.weight-drift-row { padding: 12px 0; border-bottom: 1px solid var(--border-color); }
+.weight-drift-row-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.weight-drift-name { min-width: 0; overflow-wrap: anywhere; font-size: .85rem; font-weight: 600; line-height: 1.45; }
+.weight-drift-difference { flex-shrink: 0; font-size: .79rem; font-variant-numeric: tabular-nums; }
+.weight-drift-row-chart { display: grid; grid-template-columns: var(--weight-label-width) minmax(0,1fr); align-items: center; gap: var(--weight-chart-gap); margin-top: 7px; }
+.weight-drift-weights { color: var(--text-secondary); white-space: nowrap; font-size: .72rem; font-variant-numeric: tabular-nums; }
+.weight-drift-weights b { font-weight: 600; color: var(--text-primary); }
+.weight-drift-track { position: relative; height: 10px; border-radius: 4px; background: var(--bg-card-subtle); }
+.weight-drift-center { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--text-muted); opacity: .8; }
+.weight-drift-fill { position: absolute; top: 0; height: 100%; border-radius: 3px; background: currentColor; }
+.is-under .weight-drift-difference, .is-under .weight-drift-fill { color: var(--color-loss); }
+.is-over .weight-drift-difference, .is-over .weight-drift-fill { color: var(--color-warning); }
+.is-balanced .weight-drift-difference, .is-unknown .weight-drift-difference { color: var(--text-muted); }
+.weight-drift-dot { position: absolute; top: 2px; left: calc(50% - 3px); width: 6px; height: 6px; border-radius: 50%; background: var(--text-secondary); }
+.weight-drift-scale { margin-left: calc(var(--weight-label-width) + var(--weight-chart-gap)); display: flex; justify-content: space-between; gap: 8px; padding-top: 8px; color: var(--text-muted); font-size: .68rem; font-variant-numeric: tabular-nums; }
+.weight-drift-empty { color: var(--text-secondary); font-size: .85rem; margin-top: 16px; }
+@media (max-width: 360px) {
+  .weight-drift-overview { --weight-label-width: 132px; --weight-chart-gap: 8px; }
+  .weight-drift-row-heading { gap: 8px; }
+  .weight-drift-difference { font-size: .73rem; }
+  .weight-drift-row-chart { gap: 8px; }
+  .weight-drift-weights { font-size: .68rem; }
+}
