@@ -59,11 +59,20 @@
 .execution-start-review {margin-top:20px;}
 .execution-start-review ul {padding-left:20px;line-height:1.8;}
 .execution-start-review button {margin-top:14px;}
-.execution-connection {display:grid;gap:10px;margin-top:16px;}
-.execution-connection p {margin:0;}
 .execution-records {list-style:none;padding:0;}
 .execution-records li {display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--border-color);overflow-wrap:anywhere;}
-.execution-workspace input,.execution-workspace select,.execution-connection {max-width:100%;box-sizing:border-box;}
+.execution-workspace input,.execution-workspace select {max-width:100%;box-sizing:border-box;}
 .execution-workspace fieldset {border:0;padding:0;margin:14px 0;}
 .execution-workspace label {min-width:0;overflow-wrap:anywhere;}
 @media(max-width:600px){.execution-workspace{gap:12px;}.execution-workspace .workflow-form{grid-template-columns:minmax(0,1fr);}.execution-workspace .btn{min-height:44px;white-space:normal;}.execution-source input{width:100%;}.execution-workspace .input-select{width:100%;}}
+
+.execution-entry-hint,.execution-cycle-caption,.execution-save-note {color:var(--text-secondary);font-size:.88rem;line-height:1.6;}
+.execution-save-note {padding:12px 14px;background:var(--bg-card-subtle);border-radius:var(--radius-md);margin:0 0 14px;}
+.execution-journal-input {min-width:0;}
+.execution-candidate {display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--border-color);border-radius:var(--radius-md);margin:10px 0;cursor:pointer;}
+.execution-candidate:has(input:checked) {border-color:var(--accent-primary);background:var(--bg-card-subtle);}
+.execution-candidate input {flex-shrink:0;}
+.execution-candidate span {display:grid;gap:6px;min-width:0;}
+.execution-candidate small {color:var(--text-secondary);overflow-wrap:anywhere;}
+.execution-journal-input .history-methods {grid-template-columns:repeat(2,minmax(0,1fr));}
+@media(max-width:600px){.execution-input>header button{width:100%;}.execution-input>header{margin-bottom:8px;}.execution-journal-input .btn{white-space:normal;min-height:44px;}}

@@ -1,3 +1,4 @@
+import {draftStorage} from '../../utils/tradeDraft';
 import {executionRows} from '../../utils/investmentInput';
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../../utils/api';
@@ -11,15 +12,16 @@ const names = { OPENING: '시작 기준 등록', EXCHANGE_IN: '원화 → 달러
 const localNow = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 16);
 const rateText = rate => Number(rate || 0).toLocaleString('ko-KR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
-export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], onChanged, portfolioId, focused=false,active=true,onBusyChange,disabled=false,executionContext=null,executionConfirmed=false }) {
+export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], onChanged, portfolioId, focused=false,active=true,onBusyChange,disabled=false,executionContext=null,inputScope='' }) {
+  const storage=draftStorage(inputScope);
   const pendingKey=`manual-forex/v1/${portfolioId}`;
   const submitLock=useRef(false);
-  const [pending,setPending]=useState(()=>readPendingRequest(pendingKey));
+  const [pending,setPending]=useState(()=>readPendingRequest(pendingKey,storage));
   const [flowMode,setFlowMode]=useState('EXTERNAL');
   const [flowId,setFlowId]=useState('');
   const [duplicateConfirmed,setDuplicateConfirmed]=useState(false);
   const [open, setOpen] = useState(focused);
-  const [accountId, setAccountId] = useState(String(accounts.find(a => Number(a.deposit_usd) > 0)?.id || accounts[0]?.id || ''));
+  const [accountId, setAccountId] = useState(String(executionContext?.step.account_id || accounts.find(a => Number(a.deposit_usd) > 0)?.id || accounts[0]?.id || ''));
   const [kind, setKind] = useState('EXCHANGE_IN');
   const [occurredAt, setOccurredAt] = useState(localNow);
   const [usd, setUsd] = useState('');
@@ -73,18 +75,18 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
       try{row=pending || {account_id:activeAccountId,payload:{request_id:crypto.randomUUID(),portfolio_id:portfolioId,
         kind:effectiveKind,occurred_at:`${occurredAt}:00+09:00`,usd_amount:Number(usd),
         krw_amount:Number(krw),rate:Number(rate),notes,flow_mode:flowMode,existing_flow_id:flowId || null,duplicate_confirmed:duplicateConfirmed}};
-      if(!pending && executionContext){const [linked]=executionRows([{...row.payload,account_id:row.account_id,currency:'USD'}],executionContext,executionConfirmed);if(linked.execution)row.payload.execution=linked.execution;}
+      if(!pending && executionContext){const [linked]=executionRows([{...row.payload,account_id:row.account_id,currency:'USD'}],executionContext);if(linked.execution)row.payload.execution=linked.execution;}
       }catch(error){setMessage(error.message);return;}
-      try {persistPendingRequest(pendingKey,row);}catch(error){setMessage(error.message);return;}
+      try {persistPendingRequest(pendingKey,row,storage);}catch(error){setMessage(error.message);return;}
       setPending(row);setSaving(true);setMessage('');let recorded=false;
       try {
         const result=await api.recordUsdEvent(row.account_id,row.payload);recorded=true;
-        clearPendingRequest(pendingKey);setPending(null);
+        clearPendingRequest(pendingKey,storage);setPending(null);
         setUsd('');setKrw('');setRate('');setNotes('');setFlowId('');setDuplicateConfirmed(false);
         await onChanged();setMessage(result.message);
       } catch(error) {
         if(recorded)setMessage('저장은 완료됐지만 화면 갱신에 실패했습니다. 다시 등록하지 말고 새로고침해주세요. '+error.message);
-        else if(error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(pendingKey);setPending(null);setMessage(error.message);}
+        else if(error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(pendingKey,storage);setPending(null);setMessage(error.message);}
         else setMessage('저장 결과를 확인하지 못했습니다. 같은 요청의 결과를 다시 확인해주세요. '+error.message);
       } finally {setSaving(false);}
     });
@@ -118,7 +120,7 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
       </div> : <p>시작 달러 잔액: <b>{formatUSD(account?.deposit_usd || 0)}</b>. 마지막 환전환율을 시작 기준환율로 입력해주세요.</p>}
       <form onSubmit={submit}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-          {ledger && <label>기록 종류<br /><select className="input-select" value={kind} disabled={locked} onChange={e => setKind(e.target.value)}>
+          {ledger && !executionContext && <label>기록 종류<br /><select className="input-select" value={kind} disabled={locked} onChange={e => setKind(e.target.value)}>
             {Object.entries(names).filter(([key]) => !['OPENING', 'BUY', 'SELL', 'RECONCILE'].includes(key)).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
           </select></label>}
           <label>실제 일시 (한국시간)<br /><input aria-label="환전 기록 일시" className="input-text" type="datetime-local" required value={occurredAt} disabled={locked} onChange={e => {setOccurredAt(e.target.value);setFlowId('');setDuplicateConfirmed(false);}} /></label>
@@ -132,7 +134,7 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
         {effectiveKind === 'RECONCILE' && <p>현재 계좌 달러 전체의 확인한 평균 취득환율을 등록합니다. 현금 잔액과 종목 원가는 바꾸지 않습니다.</p>}
         {effectiveKind === 'DEPOSIT' && <p>실제 입금 달러 금액이 확인된 경우에만 등록하세요. 배당 추정값은 현금에 자동 반영하지 않습니다. 이미 잔고에 반영된 입금은 중복 등록하지 말고 장부 확인 및 정정을 이용하세요.</p>}
         <details className="history-help"><summary>입력 방법·달러 이체 안내</summary><p style={{ color: 'var(--text-secondary)' }}>같은 날짜는 등록 순서대로 계산합니다. 과거 기록을 고치려면 이후 기록부터 취소하세요. 계좌 간 달러 이동을 외부 입출금이나 배당으로 임의 등록하지 마세요. 양쪽 계좌의 원가와 성과 구분을 함께 확인해야 합니다.</p></details>
-        <button className="btn btn-primary" type="submit" disabled={locked || !activeAccountId || (ledger?.needs_reconciliation && kind !== 'RECONCILE')}>{saving ? '저장 중…' : names[effectiveKind]}</button>
+        <button className="btn btn-primary" type="submit" disabled={locked || !activeAccountId || (ledger?.needs_reconciliation && kind !== 'RECONCILE')}>{saving ? '저장 중…' : executionContext?'환전 내역 저장':names[effectiveKind]}</button>
       </form>
       {message && <p role="status">{message}</p>}
       {!focused && <>{eventsError && <p role="alert">기록 조회 실패: {eventsError}</p>}

@@ -12,24 +12,24 @@ export function matchingExecution(row,context) {
   const step=chosen || (candidates.length===1?candidates[0]:null);
   if (step) return {cycle_id:context.cycle_id,step_id:step.id,revision:context.revision};
 }
-export function executionRows(rows,context,confirmed) {
+export function executionRows(rows,context) {
   if (!context) return rows;
-  if (!confirmed) throw new Error('이번 투자에 연결할 입력임을 먼저 확인해주세요.');
-  const linked=rows.map(row=>{
-    const execution=matchingExecution(row,context);
-    return execution?{...row,execution}:row;
+  // An input opened for one task must not quietly save a different trade.
+  const selected = {...context, steps:[context.step]};
+  return rows.map(row=>{
+    const execution=matchingExecution(row,selected);
+    if (!execution) throw new Error('선택한 작업의 계좌·종목·통화·방향과 다릅니다. 내용을 수정하거나 5번에서 별도 거래로 기록해주세요.');
+    return {...row,execution};
   });
-  if (!linked.some(row=>row.execution)) throw new Error('현재 입력의 계좌·종목·통화·방향이 투자 작업과 다릅니다. 확인하거나 5번에서 연결 없이 기록해주세요.');
-  return linked;
 }
-export function executionNotices(rows,context,confirmed) {
+export function executionNotices(rows,context) {
   const facts=rows.map(row=>{
     const transfer=['DEPOSIT','WITHDRAW'].includes(row.kind) && row.external===false && !row.cross_portfolio;
     return {...row,kind:transfer?'TRANSFER':row.kind,currency:row.kind==='EXCHANGE_IN'?'USD':'KRW',
       account_id:transfer && row.kind==='DEPOSIT'?row.source_account_id:row.account_id,
       destination_account_id:transfer && row.kind==='DEPOSIT'?row.account_id:row.destination_account_id};
   });
-  const linked=executionRows(facts,context,confirmed);
+  const linked=executionRows(facts,context);
   return rows.map((row,i)=>linked[i].execution?{...row,execution:linked[i].execution}:row);
 }
 export async function requireInvestmentProtocol(client,payload) {

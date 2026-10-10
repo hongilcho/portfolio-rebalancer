@@ -22,8 +22,8 @@ import NamuhMessageImport from './NamuhMessageImport';
 import LedgerCorrectionPanel from './LedgerCorrectionPanel';
 import ExternalCashFlowPanel from './ExternalCashFlowPanel';
 import InternalTransferForm from './InternalTransferForm';
-import {executionRows,executionContextKey} from '../../utils/investmentInput';
-import { readTradeDraft, writeTradeDraft, remainingTradeRows, draftStorage, hasDraftRows } from '../../utils/tradeDraft';
+import {executionRows} from '../../utils/investmentInput';
+import { readTradeDraft, writeTradeDraft, remainingTradeRows, draftStorage } from '../../utils/tradeDraft';
 
 export default function HistoryTab({
   assets,
@@ -35,29 +35,32 @@ export default function HistoryTab({
   currentPortfolioId = 'default',
   performance,
   onOpenAnalysis,
-  executionContext=null, embedded=false, active=true, onExecutionChanged, onExitExecution, onBusyChange, onRecorded,
+  executionContext=null, embedded=false, active=true, onExecutionChanged, onExitExecution, onBusyChange, onRecorded, inputScope='', refreshRevision=0,
 }) {
-  const [executionConfirmed,setExecutionConfirmed]=useState(false);
-  const connectionKey=executionContextKey(executionContext);
-  useEffect(()=>{setExecutionConfirmed(false);},[connectionKey]);
+  const storage=useMemo(()=>draftStorage(inputScope),[inputScope]);
+  const task=executionContext?.step;
+  const manualTaskKind=task?.kind==='TRANSFER'?'transfers':task?.kind==='DEPOSIT'?'funds':'trades';
+  const blankTrade=direction=>({id:crypto.randomUUID(),accountId:String(task?.account_id || accounts[0]?.id || ''),
+    assetId:task?.kind===direction?String(task.asset_id || ''):'',quantity:0,price:0,exchangeRate:usdKrw});
   // Batch Trade Form State
   const submitLock=useRef(false);
-  const [initialDraft] = useState(() => readTradeDraft(draftStorage(), currentPortfolioId));
+  const [initialDraft] = useState(() => readTradeDraft(storage, currentPortfolioId));
   const [tradeDate, setTradeDate] = useState(initialDraft?.tradeDate || new Date(Date.now() + 9 * 3600000).toISOString().split('T')[0]);
-  const [buyRows, setBuyRows] = useState(initialDraft?.buyRows.length ? initialDraft.buyRows : [{ id: '1', accountId: String(accounts[0]?.id || ''), assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
-  const [sellRows, setSellRows] = useState(initialDraft?.sellRows.length ? initialDraft.sellRows : [{ id: '1', accountId: String(accounts[0]?.id || ''), assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }]);
-  const [draftReviewed, setDraftReviewed] = useState(!initialDraft || Boolean(initialDraft?.pendingSubmission));
+  const [buyRows, setBuyRows] = useState(initialDraft?.buyRows.length ? initialDraft.buyRows : [blankTrade('BUY')]);
+  const [sellRows, setSellRows] = useState(initialDraft?.sellRows.length ? initialDraft.sellRows : [blankTrade('SELL')]);
+  const restoredAmounts=Boolean(initialDraft && [...initialDraft.buyRows,...initialDraft.sellRows].some(row=>Number(row.quantity) || Number(row.price)));
+  const [draftReviewed, setDraftReviewed] = useState(!restoredAmounts || Boolean(initialDraft?.pendingSubmission));
   const [pendingSubmission,setPendingSubmission]=useState(initialDraft?.pendingSubmission || null);
   const [uncertainSubmission, setUncertainSubmission] = useState(Boolean(initialDraft?.uncertainSubmission));
   const [draftStorageError, setDraftStorageError] = useState(false);
   const [savingBatch, setSavingBatch] = useState(false);
   useEffect(() => {
-    if (!savingBatch) setDraftStorageError(!writeTradeDraft(draftStorage(), currentPortfolioId, { tradeDate, buyRows, sellRows, uncertainSubmission, pendingSubmission }));
-  }, [currentPortfolioId, tradeDate, buyRows, sellRows, savingBatch, uncertainSubmission, pendingSubmission]);
+    if (!savingBatch) setDraftStorageError(!writeTradeDraft(storage, currentPortfolioId, { tradeDate, buyRows, sellRows, uncertainSubmission, pendingSubmission }));
+  }, [currentPortfolioId, tradeDate, buyRows, sellRows, savingBatch, uncertainSubmission, pendingSubmission, storage]);
   const clearDraft = () => {
     if (!window.confirm('입력 중인 매수·매도 행을 모두 비울까요? 저장된 장부는 변경되지 않습니다.')) return;
     const blank = () => ({ id: crypto.randomUUID(), accountId: String(accounts[0]?.id || ''), assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw });
-    setBuyRows([blank()]); setSellRows([blank()]); setDraftReviewed(true); setUncertainSubmission(false);
+    setBuyRows([embedded?blankTrade('BUY'):blank()]); setSellRows([embedded?blankTrade('SELL'):blank()]); setDraftReviewed(true); setUncertainSubmission(false);
   };
   const [usdLedgers, setUsdLedgers] = useState(null);
   const [ledgerError, setLedgerError] = useState('');
@@ -102,11 +105,18 @@ export default function HistoryTab({
   const [correctionResult,setCorrectionResult]=useState(null);
   const [correctionReset,setCorrectionReset]=useState(null);
   const correctionCompleted=useCallback(result=>{setCorrectionResult(result);setNoticeCorrection(null);},[]);
-  const [method,setMethod]=useState(()=>pendingSubmission || readPendingRequest(`manual-transfer/v1/${currentPortfolioId}`) || readPendingRequest(`manual-funds/v1/${currentPortfolioId}`) || readPendingRequest(`manual-deposit/v1/${currentPortfolioId}`)?'manual':readPendingRequest(`manual-forex/v1/${currentPortfolioId}`)?'usd':'nh');
-  const [manualKind,setManualKind]=useState(()=>readPendingRequest(`manual-transfer/v1/${currentPortfolioId}`)?'transfers':readPendingRequest(`manual-funds/v1/${currentPortfolioId}`)?'funds':readPendingRequest(`manual-deposit/v1/${currentPortfolioId}`)?'deposits':'trades');
-  const previousConnection=useRef('');
-  useEffect(()=>{if(previousConnection.current===connectionKey)return;previousConnection.current=connectionKey;if(!executionContext || pendingSubmission)return;if(executionContext.step.kind==='BUY' && executionContext.step.currency==='USD'){setMethod('manual');setManualKind('trades');}else setMethod('nh');},[connectionKey,pendingSubmission,executionContext]);
+  const [method,setMethod]=useState(()=>{
+    if(embedded && pendingSubmission)return 'manual';
+    if(embedded && readPendingRequest(`manual-forex/v1/${currentPortfolioId}`,storage))return 'usd';
+    if(embedded && (readPendingRequest(`manual-transfer/v1/${currentPortfolioId}`,storage) || readPendingRequest(`manual-funds/v1/${currentPortfolioId}`,storage)))return 'manual';
+    if(embedded)return task?.currency==='USD' && ['BUY','SELL'].includes(task.kind)?'manual':'nh';
+    return pendingSubmission || readPendingRequest(`manual-transfer/v1/${currentPortfolioId}`,storage) || readPendingRequest(`manual-funds/v1/${currentPortfolioId}`,storage) || readPendingRequest(`manual-deposit/v1/${currentPortfolioId}`,storage)?'manual':readPendingRequest(`manual-forex/v1/${currentPortfolioId}`,storage)?'usd':'nh';
+  });
+  const [manualKind,setManualKind]=useState(()=>embedded?manualTaskKind:readPendingRequest(`manual-transfer/v1/${currentPortfolioId}`,storage)?'transfers':readPendingRequest(`manual-funds/v1/${currentPortfolioId}`,storage)?'funds':readPendingRequest(`manual-deposit/v1/${currentPortfolioId}`,storage)?'deposits':'trades');
+  const manualMode=()=>{setMethod(embedded && task?.kind==='EXCHANGE_IN'?'usd':'manual');if(embedded)setManualKind(manualTaskKind);};
   const [recordRevision,setRecordRevision]=useState(0);
+  useEffect(()=>{setRecordRevision(n=>n+1);},[refreshRevision]);
+  useEffect(()=>()=>onBusyChange?.(false),[onBusyChange]);
   const [childBusy,setChildBusy]=useState({nh:false,usd:false,history:false,correction:false,funds:false,deposits:false});
   const [childWriting,setChildWriting]=useState({});
   const nhBusy=useCallback((value,writing=value)=>{setChildBusy(old=>({...old,nh:value}));setChildWriting(old=>({...old,nh:writing}));},[]);
@@ -144,7 +154,7 @@ export default function HistoryTab({
   const addBuyRow = () => {
     setBuyRows((prev) => [
       ...prev,
-      { id: Date.now().toString(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }
+      blankTrade('BUY')
     ]);
   };
 
@@ -180,7 +190,7 @@ export default function HistoryTab({
   const addSellRow = () => {
     setSellRows((prev) => [
       ...prev,
-      { id: Date.now().toString(), accountId: accounts[0]?.id || '', assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw }
+      blankTrade('SELL')
     ]);
   };
 
@@ -261,7 +271,7 @@ export default function HistoryTab({
       });
 
     let allTrades = [...validBuys, ...validSells];
-    try{allTrades=executionRows(allTrades.map(row=>({...row,kind:row.trade_type})),executionContext,executionConfirmed).map(({kind:_kind,...row})=>row);}catch(error){alert(error.message);return;}
+    try{allTrades=executionRows(allTrades.map(row=>({...row,kind:row.trade_type})),executionContext).map(({kind:_kind,...row})=>row);}catch(error){alert(error.message);return;}
     if (allTrades.length === 0) {
       alert('유효한 매수/매도 내역이 없습니다.');
       return;
@@ -275,7 +285,7 @@ export default function HistoryTab({
     return singleSubmission(submitLock,async()=>{
       try{await requireBookkeepingProtocol(api);}catch(error){alert(error.message);return;}
       const draft={tradeDate,buyRows,sellRows,uncertainSubmission:true,pendingSubmission:payload};
-      if (!writeTradeDraft(draftStorage(),currentPortfolioId,draft)) {
+      if (!writeTradeDraft(storage,currentPortfolioId,draft)) {
         setDraftStorageError(true);alert('임시 저장을 사용할 수 없어 요청을 보내지 않았습니다. 브라우저 저장소를 허용해주세요.');return;
       }
       setPendingSubmission(payload);setSavingBatch(true);
@@ -285,7 +295,7 @@ export default function HistoryTab({
         const submitted=[...buyRows.filter(r=>r.accountId && r.assetId && r.quantity>0 && r.price>0),
           ...sellRows.filter(r=>r.accountId && r.assetId && r.quantity>0 && r.price>0)];
         const remaining=remainingTradeRows(buyRows,sellRows,submitted,res.results);
-        writeTradeDraft(draftStorage(),currentPortfolioId,{tradeDate,...remaining,uncertainSubmission:false,pendingSubmission:null});
+        writeTradeDraft(storage,currentPortfolioId,{tradeDate,...remaining,uncertainSubmission:false,pendingSubmission:null});
         const blank=()=>({id:crypto.randomUUID(),accountId:String(accounts[0]?.id || ''),assetId:'',quantity:0,price:0,exchangeRate:usdKrw});
         setBuyRows(remaining.buyRows.length?remaining.buyRows:[blank()]);
         setSellRows(remaining.sellRows.length?remaining.sellRows:[blank()]);
@@ -295,7 +305,7 @@ export default function HistoryTab({
         if(recorded) alert(`저장은 완료됐지만 ${error.message}`);
         else if(error.status && error.status<500 && ![401,403,429].includes(error.status)) {
           setPendingSubmission(null);setUncertainSubmission(false);setDraftReviewed(true);
-          writeTradeDraft(draftStorage(),currentPortfolioId,{tradeDate,buyRows,sellRows,uncertainSubmission:false,pendingSubmission:null});
+          writeTradeDraft(storage,currentPortfolioId,{tradeDate,buyRows,sellRows,uncertainSubmission:false,pendingSubmission:null});
           alert(error.message);
         } else {setUncertainSubmission(true);alert('저장 결과를 확인하지 못했습니다. 같은 요청의 결과 다시 확인 버튼을 사용해주세요. '+error.message);}
       } finally {setSavingBatch(false);}
@@ -310,62 +320,61 @@ export default function HistoryTab({
         <button id="history-input-tab" type="button" role="tab" aria-selected={effectiveView==='input'} aria-controls="history-input-panel" disabled={navigationBusy} onClick={()=>setView('input')}>기록 입력</button>
         <button id="history-record-tab" type="button" role="tab" aria-selected={effectiveView==='records'} aria-controls="history-record-panel" disabled={navigationBusy} onClick={()=>setView('records')}><History size={16}/>기록 조회</button>
       </div>}
-      {executionContext && <section className="section-card execution-connection"><p><strong>{executionContext.name}</strong> · {executionContext.step.title}</p><p className="history-muted">해당 계획의 계좌·종목·방향이 맞는 기록만 투자 진행에 연결합니다. 기존 초안은 아래 확인 후 연결됩니다.</p><label><input type="checkbox" disabled={navigationBusy} checked={executionConfirmed} onChange={e=>setExecutionConfirmed(e.target.checked)}/>현재 입력을 이 투자에 연결함을 확인했습니다.</label><button type="button" className="btn btn-secondary btn-sm" disabled={navigationBusy} onClick={onExitExecution}>연결 없이 5번에서 기록</button></section>}
-      <div id="history-input-panel" role="tabpanel" aria-labelledby="history-input-tab" hidden={effectiveView!=='input'}>
+      {embedded && <p className="execution-save-note">저장하면 5번 장부에 기록되고 이번 투자 회차의 실행 실적에 함께 반영됩니다.</p>}
+      <div id={embedded?'execution-input-panel':'history-input-panel'} role={embedded?undefined:'tabpanel'} aria-labelledby={embedded?undefined:'history-input-tab'} hidden={effectiveView!=='input'}>
         <div className="history-methods" aria-label="입력 방법">
-          {[['nh','NH 알림 가져오기',ClipboardPaste],['manual','직접 입력',PenLine],['usd','달러 관리',Wallet]].map(([id,label,Icon])=><button key={id} className="btn btn-secondary" type="button" aria-pressed={method===id} disabled={navigationBusy} onClick={()=>{if(id==='manual' && executionContext){setMethod(executionContext.step.kind==='EXCHANGE_IN'?'usd':'manual');setManualKind(executionContext.step.kind==='TRANSFER'?'transfers':executionContext.step.kind==='DEPOSIT'?'funds':'trades');}else setMethod(id);}}><Icon size={16}/>{label}</button>)}
+          {(embedded?[['nh','체결 알림 붙여넣기',ClipboardPaste],['manual','직접 입력',PenLine]]:[['nh','NH 알림 가져오기',ClipboardPaste],['manual','직접 입력',PenLine],['usd','달러 관리',Wallet]]).filter(([id])=>!(embedded && id==='nh' && task?.currency==='USD' && ['BUY','SELL'].includes(task.kind))).map(([id,label,Icon])=><button key={id} className="btn btn-secondary" type="button" aria-pressed={method===id || (embedded && method==='usd' && id==='manual')} disabled={navigationBusy} onClick={()=>id==='manual'?manualMode():setMethod(id)}><Icon size={16}/>{embedded && !['BUY','SELL'].includes(task?.kind) && id==='nh'?'NH 알림 붙여넣기':label}</button>)}
         </div>
         {ledgerError && method!=='usd' && <p role="alert">달러 원가 조회 실패: {ledgerError}</p>}
         <div hidden={method!=='nh'}>
           <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
             tradeDate={tradeDate} buyRows={buyRows} disabled={busy && !childBusy.nh} ledgers={usdLedgers} focused
-            onDraftCleared={()=>{setNoticeCorrection(null);setCorrectionResult(null);setCorrectionReset(crypto.randomUUID());}} correctionResult={correctionResult?.source?.portfolioId===currentPortfolioId?correctionResult:null} onCorrectionRequest={draft=>{setReviewCorrection(null);setNoticeCorrection({...draft,key:crypto.randomUUID()});if(embedded)onExitExecution?.();}} active={active && effectiveView==='input' && method==='nh'} onBusyChange={nhBusy} executionContext={executionContext} executionConfirmed={executionConfirmed} onChanged={changed}/>
+            onDraftCleared={()=>{setNoticeCorrection(null);setCorrectionResult(null);setCorrectionReset(crypto.randomUUID());}} correctionResult={correctionResult?.source?.portfolioId===currentPortfolioId?correctionResult:null} onCorrectionRequest={draft=>{setReviewCorrection(null);setNoticeCorrection({...draft,key:crypto.randomUUID()});if(embedded)onExitExecution?.();}} active={active && effectiveView==='input' && method==='nh'} onBusyChange={nhBusy} executionContext={executionContext} inputScope={inputScope} onChanged={changed}/>
         </div>
         <div hidden={method!=='manual'}>
-          <div className="history-inline-choice" aria-label="직접 입력 종류">
+          {!embedded && <div className="history-inline-choice" aria-label="직접 입력 종류">
             <button type="button" aria-pressed={manualKind==='trades'} disabled={navigationBusy} onClick={()=>setManualKind('trades')}>매수·매도</button>
             <button type="button" aria-pressed={manualKind==='funds'} disabled={navigationBusy} onClick={()=>setManualKind('funds')}>외부 입출금</button>
             <button type="button" aria-pressed={manualKind==='transfers'} disabled={navigationBusy} onClick={()=>setManualKind('transfers')}>계좌 이체</button>
             <button type="button" aria-pressed={manualKind==='deposits'} disabled={navigationBusy} onClick={()=>setManualKind('deposits')}>예금 장부</button>
-          </div>
-          <div hidden={manualKind!=='trades'}>
+          </div>}
+          {(!embedded || manualKind==='trades') && <div hidden={manualKind!=='trades'}>
             <div className="history-draft-strip">
               <span className="history-muted">매매 입력은 이 기기에 30일간 임시 저장됩니다.</span>
               <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={clearDraft}>임시 입력 비우기</button>
               {draftStorageError && <p role="alert">임시 저장을 사용할 수 없습니다. 화면을 닫으면 입력이 사라질 수 있습니다.</p>}
-              {(initialDraft || uncertainSubmission) && <label className="history-check"><input type="checkbox" checked={draftReviewed} disabled={busy} onChange={e=>setDraftReviewed(e.target.checked)}/>복원된 날짜·계좌·입력 내용과 장부 중복 여부를 확인했습니다.</label>}
+              {(restoredAmounts || uncertainSubmission) && <label className="history-check"><input type="checkbox" checked={draftReviewed} disabled={busy} onChange={e=>setDraftReviewed(e.target.checked)}/>복원된 날짜·계좌·입력 내용과 장부 중복 여부를 확인했습니다.</label>}
               {uncertainSubmission && !pendingSubmission && <p role="alert">직전 저장 결과가 불확실합니다. 기록 조회에서 이미 반영된 거래를 확인해주세요.</p>}
               {pendingSubmission && <div role="alert"><p>저장 확인 중인 매매는 내용을 변경하지 않고 같은 요청으로 확인합니다.</p><button type="button" className="btn btn-primary" disabled={savingBatch} onClick={()=>submitManual(pendingSubmission)}>같은 요청의 결과 다시 확인</button></div>}
             </div>
-            {executionContext?.step.kind==='BUY' && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>{const row={id:crypto.randomUUID(),accountId:executionContext.step.account_id,assetId:executionContext.step.asset_id,quantity:0,price:0,exchangeRate:usdKrw};setBuyRows(previous=>hasDraftRows(previous)?[...previous,row]:[row]);}}>이번 작업의 계좌·종목 채우기</button>}
-            <TradeBatchForm tradeDate={tradeDate} setTradeDate={setTradeDate} buyRows={buyRows} assets={assets}
-              updateBuyRow={updateBuyRow} accounts={accounts} removeBuyRow={removeBuyRow} usdKrw={usdKrw} addBuyRow={addBuyRow}
+            <TradeBatchForm tradeDate={tradeDate} setTradeDate={setTradeDate} buyRows={buyRows} assets={embedded?assets.filter(a=>String(a.id)===String(task?.asset_id)):assets}
+              updateBuyRow={updateBuyRow} accounts={embedded?accounts.filter(a=>String(a.id)===String(task?.account_id)):accounts} removeBuyRow={removeBuyRow} usdKrw={usdKrw} addBuyRow={addBuyRow}
               sellRows={sellRows} holdingsError={holdingsError} accountHoldingsMap={accountHoldingsMap} updateSellRow={updateSellRow}
               removeSellRow={removeSellRow} addSellRow={addSellRow} handleSaveBatchTrades={handleSaveBatchTrades}
-              savingBatch={savingBatch} disabled={busy && !savingBatch} usdLedgers={usdLedgers || []} focused/>
-            <PriceReference setIsPriceRefOpen={setIsPriceRefOpen} isPriceRefOpen={isPriceRefOpen}
-              assets={assets} usdPriceMap={usdPriceMap} priceMap={priceMap} usdKrw={usdKrw}/>
-          </div>
-          <div hidden={manualKind!=='funds'}>{performance && <ExternalCashFlowPanel key={currentPortfolioId}
+              savingBatch={savingBatch} disabled={busy && !savingBatch} usdLedgers={usdLedgers || []} executionStep={task} focused/>
+            {!embedded && <PriceReference setIsPriceRefOpen={setIsPriceRefOpen} isPriceRefOpen={isPriceRefOpen}
+              assets={assets} usdPriceMap={usdPriceMap} priceMap={priceMap} usdKrw={usdKrw}/>}
+          </div>}
+          {(!embedded || manualKind==='funds') && <div hidden={manualKind!=='funds'}>{performance && <ExternalCashFlowPanel key={currentPortfolioId}
             portfolioId={currentPortfolioId} accounts={accounts} performance={performance} onOpenAnalysis={onOpenAnalysis}
-            disabled={busy && !performance?.busy && !childBusy.funds} onBusyChange={fundsBusy} executionContext={executionContext} executionConfirmed={executionConfirmed} focused onCashChanged={changed}/>}</div>
-          <div hidden={manualKind!=='transfers'}><InternalTransferForm portfolioId={currentPortfolioId} accounts={accounts} onChanged={changed} onBusyChange={transfersBusy} disabled={busy && !childBusy.transfers} executionContext={executionContext} executionConfirmed={executionConfirmed}/></div>
-          <div hidden={manualKind!=='deposits'}>{<DepositLedgerPanel active={active && effectiveView==='input' && method==='manual' && manualKind==='deposits'} key={currentPortfolioId} portfolioId={currentPortfolioId} assets={assets} onChanged={changed} onBusyChange={depositsBusy} disabled={busy && !childBusy.deposits}/>}</div>
+            disabled={busy && !performance?.busy && !childBusy.funds} onBusyChange={fundsBusy} executionContext={executionContext} inputScope={inputScope} focused onCashChanged={changed}/>}</div>}
+          {(!embedded || manualKind==='transfers') && <div hidden={manualKind!=='transfers'}><InternalTransferForm portfolioId={currentPortfolioId} accounts={accounts} onChanged={changed} onBusyChange={transfersBusy} disabled={busy && !childBusy.transfers} executionContext={executionContext} inputScope={inputScope}/></div>}
+          {!embedded && <div hidden={manualKind!=='deposits'}>{<DepositLedgerPanel active={active && effectiveView==='input' && method==='manual' && manualKind==='deposits'} key={currentPortfolioId} portfolioId={currentPortfolioId} assets={assets} onChanged={changed} onBusyChange={depositsBusy} disabled={busy && !childBusy.deposits}/>}</div>}
         </div>
-        <div hidden={method!=='usd'}>
+        {(!embedded || task?.kind==='EXCHANGE_IN') && <div hidden={method!=='usd'}>
           {usdLedgers!==null?<UsdLedgerPanel key={currentPortfolioId} accounts={accounts} assets={assets} flows={performance?.data?.flows || []} ledgers={usdLedgers}
-            portfolioId={currentPortfolioId} disabled={busy && !childBusy.usd} focused active={active && effectiveView==='input' && method==='usd'} onBusyChange={usdBusy} executionContext={executionContext} executionConfirmed={executionConfirmed} onChanged={changed}/>:<p>달러 원가 조회 중…</p>}
+            portfolioId={currentPortfolioId} disabled={busy && !childBusy.usd} focused active={active && effectiveView==='input' && method==='usd'} onBusyChange={usdBusy} executionContext={executionContext} inputScope={inputScope} onChanged={changed}/>:<p>달러 원가 조회 중…</p>}
           {ledgerError && <p role="alert">{ledgerError}</p>}
-        </div>
-        {embedded && <button className="btn btn-secondary btn-sm" disabled={navigationBusy} onClick={onExitExecution}>과거 누락·잔고 정정은 5번에서 처리</button>}
-        <LedgerCorrectionPanel hidden={embedded} key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
+        </div>}
+
+        {!embedded && <LedgerCorrectionPanel hidden={embedded} key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
           resetRequest={correctionReset} noticeRequest={noticeCorrection?.source?.portfolioId===currentPortfolioId?noticeCorrection:null} onNoticeSettled={correctionCompleted}
-          reviewRequest={reviewCorrection?.portfolioId===currentPortfolioId?reviewCorrection:null} active={active && !embedded && effectiveView==='input'} disabled={busy && !childBusy.correction} onBusyChange={correctionBusy} onChanged={changed}/>
+          reviewRequest={reviewCorrection?.portfolioId===currentPortfolioId?reviewCorrection:null} active={active && !embedded && effectiveView==='input'} disabled={busy && !childBusy.correction} onBusyChange={correctionBusy} onChanged={changed}/>}
       </div>
-      <div id="history-record-panel" role="tabpanel" aria-labelledby="history-record-tab" hidden={effectiveView!=='records'}>
+      {!embedded && <div id="history-record-panel" role="tabpanel" aria-labelledby="history-record-tab" hidden={effectiveView!=='records'}>
         <ActivityHistory key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
           onReviewCorrection={id=>{setNoticeCorrection(null);setReviewCorrection({id,portfolioId:currentPortfolioId});setView('input');}} active={active && effectiveView==='records'} revision={recordRevision} onBusyChange={historyBusy} onChanged={changed}/>
-      </div>
+      </div>}
     </div>
   );
 }

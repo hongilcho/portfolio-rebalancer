@@ -1,12 +1,14 @@
+import {draftStorage} from '../../utils/tradeDraft';
 import React,{useRef,useState,useEffect} from 'react';
 import {api} from '../../utils/api';
 import {kstToday} from '../../utils/depositMaturities';
 import {executionNotices,canTransferOut} from '../../utils/investmentInput';
 import {readPendingRequest,persistPendingRequest,clearPendingRequest,singleSubmission} from '../../utils/bookkeepingRequest';
-export default function InternalTransferForm({portfolioId,accounts,onChanged,onBusyChange,disabled,executionContext,executionConfirmed}) {
+export default function InternalTransferForm({portfolioId,accounts,onChanged,onBusyChange,disabled,executionContext,inputScope=''}) {
+  const storage=draftStorage(inputScope);
   const key='manual-transfer/v1/'+portfolioId,lock=useRef(false);
-  const [pending,setPending]=useState(()=>readPendingRequest(key));
-  const [form,setForm]=useState({source:'',destination:'',amount:'',date:kstToday()});
+  const [pending,setPending]=useState(()=>readPendingRequest(key,storage));
+  const [form,setForm]=useState({source:String(executionContext?.step.account_id || ''),destination:String(executionContext?.step.destination_account_id || ''),amount:'',date:kstToday()});
   const [busy,setBusy]=useState(false),[checked,setChecked]=useState(false),[message,setMessage]=useState('');
   useEffect(()=>{onBusyChange?.(busy || Boolean(pending),busy);},[busy,pending,onBusyChange]);
   const edit=(field,value)=>{setForm(old=>({...old,[field]:value}));setChecked(false);};
@@ -20,21 +22,20 @@ export default function InternalTransferForm({portfolioId,accounts,onChanged,onB
           const context=await api.getNhNoticeContext(portfolioId,form.date);
           const ids=[form.source,form.destination];
           const expected=Object.fromEntries(ids.map(id=>{const account=context.accounts.find(a=>String(a.id)===id);if(!account)throw new Error('이체 계좌를 다시 확인해주세요.');return [id,{deposit_krw:Number(account.deposit_krw),deposit_usd:Number(account.deposit_usd)}];}));
-          const rows=executionNotices([{kind:'WITHDRAW',account_id:form.source,destination_account_id:form.destination,external:false,event_date:form.date,krw_amount:Number(form.amount),notes:'직접 입력 · 계좌 이체'}],executionContext,executionConfirmed);
+          const rows=executionNotices([{kind:'WITHDRAW',account_id:form.source,destination_account_id:form.destination,external:false,event_date:form.date,krw_amount:Number(form.amount),notes:'직접 입력 · 계좌 이체'}],executionContext);
           row={payload:{request_id:crypto.randomUUID(),confirmed:true,expected_cash:expected,rows}};
-          persistPendingRequest(key,row);setPending(row);
+          persistPendingRequest(key,row,storage);setPending(row);
         }
         await api.commitNhNotices(portfolioId,row.payload);recorded=true;
-        clearPendingRequest(key);setPending(null);setForm(old=>({...old,amount:''}));setChecked(false);
+        clearPendingRequest(key,storage);setPending(null);setForm(old=>({...old,amount:''}));setChecked(false);
         await onChanged();setMessage('양쪽 예수금에 이체를 기록했습니다.');
       } catch(error) {
-        if(!recorded && error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(key);setPending(null);}
+        if(!recorded && error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(key,storage);setPending(null);}
         setMessage(recorded?'이체는 저장됐지만 화면 갱신에 실패했습니다. 다시 입력하지 말고 새로고침해주세요.':error.message);
       }finally{setBusy(false);}
     });
   };
   return <section className="section-card history-focused"><h3>원화 계좌 이체 직접 입력</h3><p>같은 포트폴리오 안의 두 계좌에 함께 반영합니다.</p>
-    {executionContext?.step.kind==='TRANSFER' && <button type="button" className="btn btn-secondary btn-sm" disabled={busy || disabled || Boolean(pending)} onClick={()=>{setForm(old=>({...old,source:executionContext.step.account_id,destination:executionContext.step.destination_account_id}));setChecked(false);}}>이번 이체의 계좌 채우기</button>}
     {message && <p role="status">{message}</p>}
     <form onSubmit={submit}><fieldset className="workflow-form" disabled={busy || disabled || Boolean(pending)}>
       <label>출금 계좌<select aria-label="이체 출금 계좌" className="input-select" required value={form.source} onChange={e=>edit('source',e.target.value)}><option value="">선택</option>{accounts.filter(canTransferOut).map(a=><option key={a.id} value={a.id}>{a.account_alias}</option>)}</select></label>

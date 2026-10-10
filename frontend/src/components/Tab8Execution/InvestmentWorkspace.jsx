@@ -1,3 +1,4 @@
+import {pendingInvestmentSteps} from '../../utils/investmentDrafts';
 import React,{useEffect,useState,useRef,useCallback} from 'react';
 import ExecutionTab from './ExecutionTab';
 import StartInvestment from './StartInvestment';
@@ -7,7 +8,7 @@ import {api} from '../../utils/api';
 import {formatKRW,formatUSD,formatQuantity} from '../../utils/formatters';
 import {investmentProgress} from '../../utils/investmentProgress';
 export default function InvestmentWorkspace({portfolioId,model,accounts,usdKrw,selection,inputContext,onRecord,onCloseInput,onOpenPlans,onOpenHistory,onBusyChange,writing}) {
-  const [past,setPast]=useState(null),[selected,setSelected]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[reason,setReason]=useState('');
+  const [past,setPast]=useState(null),[selected,setSelected]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[reason,setReason]=useState(''),[pickingExisting,setPickingExisting]=useState(false);
   const chooseSequence=useRef(0);
   const [loadingPast,setLoadingPast]=useState(false);
   const cycle=past || model.cycle;
@@ -21,6 +22,7 @@ export default function InvestmentWorkspace({portfolioId,model,accounts,usdKrw,s
     catch(e){setError(e.message);}finally{setBusy(false);onBusyChange(false);}
   };
   const recording=inputContext && cycle && inputContext.cycle_id===cycle.id?inputContext.step.id:null;
+  const pendingSteps=pendingInvestmentSteps(cycle,portfolioId);
   const progress=investmentProgress(cycle),actionBusy=busy || writing || loadingPast || model.loading;
   const unlink=async result=>{
     if(!window.confirm('투자 작업과의 연결만 해제할까요? 실제 거래와 잔고는 유지됩니다.'))return;
@@ -29,12 +31,16 @@ export default function InvestmentWorkspace({portfolioId,model,accounts,usdKrw,s
   };
   if(model.available===false)return <section className="section-card"><h2>8. 투자 실행</h2><p role="status">{model.error}</p><button className="btn btn-secondary" onClick={()=>model.refresh().catch(()=>{})}>지원 여부 다시 확인</button></section>;
   return <div className="execution-workspace">
+    {cycle && !recording && pendingSteps.length>0 && <section className="section-card execution-pending" aria-label="저장 결과 확인">
+      <h3>저장 결과를 확인할 기록이 있습니다</h3><p>이미 장부에 반영됐을 수 있습니다. 새로 입력하지 않고 같은 요청으로 결과를 확인합니다.</p>
+      {pendingSteps.map(step=><button key={step.id} className="btn btn-primary btn-block" disabled={actionBusy} onClick={()=>onRecord(cycle,step)}>{step.title} · 저장 결과 확인</button>)}
+    </section>}
     {(model.error || error) && <p role="alert">{error || model.error}</p>}
     {model.loading && !cycle?<p>투자 과정 조회 중…</p>:!cycle?<><StartInvestment portfolioId={portfolioId} plans={model.plans || []} accounts={accounts} usdKrw={usdKrw} selection={selection} onStarted={async()=>{await model.refresh();setPast(null);setSelected('');}} onBusyChange={onBusyChange}/><button className="btn btn-secondary" onClick={onOpenPlans}>4. 리밸런싱 계획 만들기</button></>:
-    <ExecutionTab cycle={cycle} recordingStepId={recording} onInputClosed={onCloseInput} compactWhileInput disabled={actionBusy} onRecord={step=>onRecord(cycle,step)} renderInput={()=>null}
+    <ExecutionTab key={cycle.id+'/'+(recording || 'progress')} cycle={cycle} recordingStepId={recording} onInputClosed={()=>{setPickingExisting(false);onCloseInput();}} onExistingOpened={()=>setPickingExisting(true)} compactWhileInput disabled={actionBusy} onRecord={step=>onRecord(cycle,step)} renderInput={()=>null}
       renderExistingRecords={(step,close)=><ExistingRecords portfolioId={portfolioId} cycle={cycle} step={step} onUpdated={refresh} onClose={close} onBusyChange={onBusyChange}/>}
       onReview={onOpenHistory} onCloseCycle={()=>state('CLOSED')}/>}
-    {cycle && !recording && <>
+    {cycle && !recording && !pickingExisting && <>
       {cycle.status!=='CLOSED' && <div className="section-card execution-controls"><button className="btn btn-secondary" disabled={actionBusy} onClick={()=>state(cycle.status==='PAUSED'?'ACTIVE':'PAUSED')}>{cycle.status==='PAUSED'?'투자 이어가기':'잠시 중단'}</button>
         <details className="execution-help"><summary>미실행 작업을 남기고 종료</summary><label>종료 이유<input aria-label="투자 종료 이유" className="input-text" maxLength={2000} value={reason} disabled={actionBusy} onChange={e=>setReason(e.target.value)}/></label><p>남은 작업 {progress.remaining.length}건. 종료해도 잔고나 거래를 취소하지 않습니다.</p><button className="btn btn-secondary" disabled={actionBusy || !reason.trim()} onClick={()=>state('CLOSED')}>이유를 남기고 투자 종료</button></details></div>}
       {cycle.status!=='CLOSED' && <GoalEditor key={cycle.id+'/'+cycle.revision} portfolioId={portfolioId} cycle={cycle} onUpdated={refresh} onBusyChange={onBusyChange} disabled={actionBusy}/>}
@@ -44,6 +50,6 @@ export default function InvestmentWorkspace({portfolioId,model,accounts,usdKrw,s
         {cycle.report && <p>종료 당시 기록 {(cycle.report.cycle?.results || []).filter(r=>!r.voided && r.ledger_status==='RECORDED').length}건 · 종료 이유 {cycle.report.reason || '전체 작업 완료'}. 이후 취소는 위 현재 기록에 표시됩니다.</p>}
       </details>
     </>}
-    {!recording && <details className="section-card execution-help"><summary>지난 투자 보기</summary><select aria-label="지난 투자 선택" className="input-select" value={selected} disabled={actionBusy} onChange={e=>choose(e.target.value)}><option value="">현재 투자 / 새 투자 준비</option>{(model.history || []).map(c=><option key={c.id} value={c.id}>{c.name} · {new Date(c.created_at).toLocaleDateString('ko-KR')} · {c.status==='CLOSED'?'종료':c.status==='PAUSED'?'중단':'진행'}</option>)}</select><button className="btn btn-secondary btn-sm" disabled={actionBusy} onClick={()=>refresh().catch(e=>setError(e.message))}>투자 기록 새로고침</button></details>}
+    {!recording && !pickingExisting && <details className="section-card execution-help"><summary>지난 투자 보기</summary><select aria-label="지난 투자 선택" className="input-select" value={selected} disabled={actionBusy} onChange={e=>choose(e.target.value)}><option value="">현재 투자 / 새 투자 준비</option>{(model.history || []).map(c=><option key={c.id} value={c.id}>{c.name} · {new Date(c.created_at).toLocaleDateString('ko-KR')} · {c.status==='CLOSED'?'종료':c.status==='PAUSED'?'중단':'진행'}</option>)}</select><button className="btn btn-secondary btn-sm" disabled={actionBusy} onClick={()=>refresh().catch(e=>setError(e.message))}>투자 기록 새로고침</button></details>}
   </div>;
 }

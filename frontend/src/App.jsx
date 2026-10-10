@@ -94,6 +94,7 @@ export default function App() {
   const writing=Object.values(writers).some(Boolean);
   const historyBusy=useCallback(value=>setWriters(old=>({...old,history:value})),[]);
   const executionBusy=useCallback(value=>setWriters(old=>({...old,execution:value})),[]);
+  const executionHistoryBusy=useCallback(value=>setWriters(old=>({...old,executionHistory:value})),[]);
   useEffect(()=>{if(activeTab==='tab4' || executionInput)setHistoryMounted(true);},[activeTab,executionInput]);
   const [isManagePortfoliosOpen, setIsManagePortfoliosOpen] = useState(false);
 
@@ -358,12 +359,20 @@ export default function App() {
                   onOpenPlans={()=>setActiveTab('tab3')} onOpenHistory={()=>setActiveTab('tab4')}
                   onRecord={(cycle,step)=>setExecutionInput({portfolio_id:currentPortfolioId,cycle_id:cycle.id,revision:cycle.revision,name:cycle.name,step,steps:cycle.steps})}/>)
                 }
-                {(historyMounted || activeTab==='tab4' || executionInput) && <div hidden={activeTab!=='tab4' && !(activeTab==='tab8' && executionInput)}>
+                {(historyMounted || activeTab==='tab4') && <div hidden={activeTab!=='tab4'}>
                   <HistoryTab key={currentPortfolioId} assets={assets} accounts={accounts} priceMap={priceMap} usdKrw={usdKrw}
                     pricesData={pricesData} currentPortfolioId={currentPortfolioId} performance={performance}
                     onOpenAnalysis={()=>setActiveTab('tab6')} onSaved={reloadAfterSave} onBusyChange={historyBusy}
-                    embedded={activeTab==='tab8'} active={activeTab==='tab4' || (activeTab==='tab8' && Boolean(executionInput))}
-                    executionContext={executionInput} onExecutionChanged={executionInput || investment.available===true?investment.refresh:undefined} onRecorded={closeExecutionInput}
+                    active={activeTab==='tab4'} refreshRevision={childRefreshKey}
+                    onExecutionChanged={investment.available===true?investment.refresh:undefined}/>
+                </div>}
+                {executionInput && <div hidden={activeTab!=='tab8'} className="execution-journal-input">
+                  <HistoryTab key={currentPortfolioId+'/'+executionInput.cycle_id+'/'+executionInput.step.id}
+                    assets={assets} accounts={accounts} priceMap={priceMap} usdKrw={usdKrw} pricesData={pricesData}
+                    currentPortfolioId={currentPortfolioId} performance={performance} onSaved={reloadAfterSave}
+                    onBusyChange={executionHistoryBusy} embedded active={activeTab==='tab8'}
+                    inputScope={'execution/'+executionInput.cycle_id+'/'+executionInput.step.id}
+                    executionContext={executionInput} onExecutionChanged={investment.refresh} onRecorded={closeExecutionInput}
                     onExitExecution={()=>{setExecutionInput(null);setActiveTab('tab4');}}/>
                 </div>}
 

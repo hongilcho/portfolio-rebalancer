@@ -2,7 +2,19 @@
 export const draftKey = portfolioId => `portfolio_trade_draft_v1_${portfolioId}`;
 export const hasDraftRows = rows => rows.some(r => r.assetId || Number(r.quantity) || Number(r.price));
 const validDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0,10) === s;
-export function draftStorage() { try { return globalThis.localStorage; } catch { return undefined; } }
+// Isolate input drafts; every saved record still uses the same portfolio journal.
+export function draftStorage(scope = '') {
+  try {
+    const storage = globalThis.localStorage;
+    if (!scope) return storage;
+    const prefix = `portfolio_input_${scope}/`;
+    return {
+      getItem: key => storage.getItem(prefix + key),
+      setItem: (key, value) => storage.setItem(prefix + key, value),
+      removeItem: key => storage.removeItem(prefix + key),
+    };
+  } catch { return undefined; }
+}
 const validRow = r => r && typeof r.id === 'string' && typeof r.accountId === 'string'
   && typeof r.assetId === 'string' && [r.quantity, r.price, r.exchangeRate].every(v => Number.isFinite(Number(v)) && Number(v) >= 0)
   && (!r.importSource || (r.importSource === 'NAMUH_KAKAO' && /^\d{1,10}$/.test(r.brokerOrderNo || '') && validDate(r.importDate)));

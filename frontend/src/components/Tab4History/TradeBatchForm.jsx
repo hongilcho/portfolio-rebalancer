@@ -24,9 +24,10 @@ export default function TradeBatchForm({
   disabled=false,
   usdLedgers = [],
   focused=false,
+  executionStep=null,
 }) {
   const locked=savingBatch || disabled;
-  const [direction,setDirection]=useState('BUY');
+  const [direction,setDirection]=useState(executionStep?.kind==='SELL'?'SELL':'BUY');
   const pendingBuys=buyRows.filter(r=>r.assetId || r.quantity>0);
   const pendingSells=sellRows.filter(r=>r.assetId || r.quantity>0);
   return (
@@ -34,7 +35,7 @@ export default function TradeBatchForm({
       {/* 2. Batch Trade Input Form */}
       <div className={`section-card ${focused?'history-focused':''}`}>
         <div className="section-title">
-          <span>{focused?'매매 직접 입력':'📝 실제 매매 기록 (일괄 입력)'}</span>
+          <span>{executionStep?'실제 체결 내용':focused?'매매 직접 입력':'📝 실제 매매 기록 (일괄 입력)'}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>체결 일자:</span>
             <input
@@ -50,7 +51,7 @@ export default function TradeBatchForm({
         </div>
 
         {buyRows.some(r => r.importSource) && <p>가져온 거래는 선택한 체결일에 고정됩니다. 날짜를 바꾸려면 가져온 행을 먼저 삭제해주세요.</p>}
-        {focused && <div className="history-inline-choice"><button type="button" aria-pressed={direction==='BUY'} disabled={locked} onClick={()=>setDirection('BUY')}>매수 입력</button><button type="button" aria-pressed={direction==='SELL'} disabled={locked} onClick={()=>setDirection('SELL')}>매도 입력</button><span className="history-muted">매수·매도 대기 행은 함께 저장됩니다.</span></div>}
+        {focused && !executionStep && <div className="history-inline-choice"><button type="button" aria-pressed={direction==='BUY'} disabled={locked} onClick={()=>setDirection('BUY')}>매수 입력</button><button type="button" aria-pressed={direction==='SELL'} disabled={locked} onClick={()=>setDirection('SELL')}>매도 입력</button><span className="history-muted">매수·매도 대기 행은 함께 저장됩니다.</span></div>}
         <div className={focused?'trade-forms-grid history-single-trade':'trade-forms-grid'} inert={locked || undefined}>
           {/* 🔴 BUY Column */}
           <div hidden={focused && direction!=='BUY'} style={{ background: 'var(--bg-card-subtle)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(248, 113, 113, 0.2)' }}>
@@ -422,12 +423,17 @@ export default function TradeBatchForm({
           </div>
         </div>
 
-        {focused && <details className="history-trade-preview"><summary>전체 반영 내역 확인 · 매수 {pendingBuys.length}건 / 매도 {pendingSells.length}건</summary>
+        {focused && <details open={executionStep?true:undefined} className="history-trade-preview"><summary>전체 반영 내역 확인 · 매수 {pendingBuys.length}건 / 매도 {pendingSells.length}건</summary>
           {[...pendingBuys.map(r=>({...r,direction:'매수'})),...pendingSells.map(r=>({...r,direction:'매도'}))].map(r=>{
             const asset=assets.find(a=>String(a.id)===String(r.assetId));
             return <p key={r.direction+r.id}>{r.direction} · {accounts.find(a=>String(a.id)===String(r.accountId))?.account_alias || '계좌 확인 필요'} · {asset?.name || '종목 확인 필요'} · {r.quantity}주 × {asset?.market==='US'?formatUSD(r.price):formatKRW(r.price)}</p>;
           })}
         </details>}
+        {executionStep && [...pendingBuys,...pendingSells].some(r=>r.quantity>0 && r.price>0) && <p className="execution-save-note">{accounts.map(account=>{
+          const change=pendingSells.filter(r=>String(r.accountId)===String(account.id)).reduce((sum,r)=>sum+Number(r.quantity)*Number(r.price),0)-pendingBuys.filter(r=>String(r.accountId)===String(account.id)).reduce((sum,r)=>sum+Number(r.quantity)*Number(r.price),0);
+          const usd=executionStep.currency==='USD',balance=Number(usd?account.deposit_usd:account.deposit_krw)||0,format=usd?formatUSD:formatKRW;
+          return <span key={account.id}>{account.account_alias} · {usd?'달러':'원화'} 예수금 {format(balance)} → {format(balance+change)}</span>;
+        })}</p>}
         {/* Batch Save Button */}
         <button
           className="btn btn-primary btn-block"
@@ -436,7 +442,7 @@ export default function TradeBatchForm({
           disabled={locked || (focused && pendingBuys.length+pendingSells.length===0)}
         >
           <Save size={18} />
-          {savingBatch ? '일괄 매매 저장 중...' : '💾 위 내역 전체 일괄 저장'}
+          {savingBatch ? '저장 중…' : executionStep?'체결 내역 저장':'💾 위 내역 전체 일괄 저장'}
         </button>
       </div>
     </>

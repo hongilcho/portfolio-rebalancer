@@ -10,15 +10,15 @@ const amount = (step, value) => trade(step) ? formatQuantity(value, step.unit ||
 const stateName = item => item.review ? '확인 필요' : item.complete ? '완료' : item.excluded ? '제외'
   : item.partial ? '일부 기록됨' : item.ready ? '진행 가능' : '준비 대기';
 
-export default function ExecutionTab({cycle, onOpenPlans, onRecord, onReview, onCloseCycle, renderInput, renderExistingRecords, recordingStepId, onInputClosed, compactWhileInput=false, disabled=false}) {
+export default function ExecutionTab({cycle, onOpenPlans, onRecord, onReview, onCloseCycle, renderInput, renderExistingRecords, recordingStepId, onInputClosed, onExistingOpened, compactWhileInput=false, disabled=false}) {
   const [inputStepId, setInputStepId] = useState(null);
   const [inputMode, setInputMode] = useState('record');
   const progress = investmentProgress(cycle);
   const effectiveInputId=inputMode==='existing' || recordingStepId===undefined?inputStepId:recordingStepId;
   const inputStep = progress.steps.find(item => item.step.id === effectiveInputId)?.step;
   const openInput = step => {setInputMode('record');setInputStepId(step.id); onRecord?.(step);};
-  const openExisting = step => {setInputMode('existing');setInputStepId(step.id);};
-  const closeInput = () => {setInputStepId(null);onInputClosed?.();};
+  const openExisting = step => {setInputMode('existing');setInputStepId(step.id);onExistingOpened?.();};
+  const closeInput = () => {setInputStepId(null);setInputMode('record');onInputClosed?.();};
   if (!cycle) return <section className="section-card execution-empty">
     <ListChecks size={32} aria-hidden="true"/><h2>이번 투자를 함께 진행하세요</h2>
     <p>계획에 따라 입금·이체·매수·환전을 기록하고, 다음 접속에서 이어갈 수 있습니다.</p>
@@ -27,19 +27,21 @@ export default function ExecutionTab({cycle, onOpenPlans, onRecord, onReview, on
 
   const current = progress.current;
   return <div className="execution-tab">
-    <section className="section-card execution-heading">
-      <div className="execution-title"><span className="execution-eyebrow">이번 투자</span><h2>{cycle.name}</h2>
+    {(!compactWhileInput || !inputStep) && <section className="section-card execution-heading">
+      <div className="execution-title"><span className="execution-eyebrow">투자 회차</span><h2>{cycle.name}</h2>
         <p>{cycle.portfolio_name} · {cycle.status==='CLOSED' ? '종료됨' : cycle.status==='PAUSED' ? '일시 중단' : '진행 중'}</p></div>
       <div className="execution-budget"><span>계획 예산</span><strong>{formatKRW(cycle.budget_krw)}</strong></div>
       <div className="execution-overall"><span>작업 {progress.complete.length} / {progress.total} 완료</span>
         <progress value={progress.complete.length} max={Math.max(1,progress.total)} aria-label="투자 작업 진행률"/>
         <span>{progress.remaining.length ? `남은 작업 ${progress.remaining.length}건` : '모든 작업이 기록되었습니다'}</span></div>
-    </section>
+    </section>}
 
     {inputStep && (inputMode==='record' ? renderInput : renderExistingRecords) ? <section className="section-card execution-input" aria-label="투자 결과 입력">
-      <header><div><span className="execution-eyebrow">이번 작업 기록</span><h3>{inputStep.title}</h3>
+      <header><div><span className="execution-eyebrow">{inputMode==='existing'?'기록한 거래 가져오기':trade(inputStep)?'새 체결 내역 입력':'새 실행 내역 입력'}</span><h3>{inputStep.title}</h3>
         <p>{inputStep.account_alias}{inputStep.asset_name && ` · ${inputStep.asset_name}`}</p></div>
-        <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={closeInput}>진행 화면으로</button></header>
+        <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={closeInput}>투자 진행으로 돌아가기</button></header>
+      <p className="execution-cycle-caption">투자 회차 · {cycle.name}</p>
+      <div className="execution-quantities">{progress.steps.filter(item=>item.step.id===inputStep.id).map(item=><React.Fragment key={item.step.id}><div><span>계획</span><strong>{amount(inputStep,item.target)}</strong></div><div><span>기록됨</span><strong>{amount(inputStep,item.value)}</strong></div><div><span>남음</span><strong>{amount(inputStep,item.remaining)}</strong></div></React.Fragment>)}</div>
       {inputMode==='existing' ? renderExistingRecords(inputStep, closeInput) : renderInput(inputStep, closeInput)}
     </section> : <section className="section-card execution-current" aria-label="지금 할 일">
       <div className="execution-eyebrow">지금 할 일</div>
@@ -52,9 +54,10 @@ export default function ExecutionTab({cycle, onOpenPlans, onRecord, onReview, on
             <div><span>기록됨</span><strong>{amount(current.step,current.value)}</strong></div>
             <div><span>남음</span><strong>{amount(current.step,current.remaining)}</strong></div></div>
           <p className="execution-guidance">{current.step.instruction || '실제 실행한 내역을 확인한 뒤 기록해주세요.'}</p>
+          <p className="execution-entry-hint">증권사에서 실행한 내역을 기록하세요. 5번에 이미 기록했다면 가져오기만 하면 됩니다.</p>
           <button className="btn btn-primary btn-block execution-record" onClick={()=>openInput(current.step)} disabled={disabled || (!renderInput && !onRecord)}>
-            <ClipboardPaste size={18}/> {trade(current.step) ? '체결 결과 입력' : '실행 결과 입력'}</button>
-          {renderExistingRecords && <button className="btn btn-secondary btn-block execution-existing" disabled={disabled} onClick={()=>openExisting(current.step)}>이미 입력한 기록 연결</button>}
+            <ClipboardPaste size={18}/> {trade(current.step) ? '새 체결 내역 입력' : '새 실행 내역 입력'}</button>
+          {renderExistingRecords && <button className="btn btn-secondary btn-block execution-existing" disabled={disabled} onClick={()=>openExisting(current.step)}>기록한 거래 가져오기</button>}
         </> : progress.review.length ? <><h3>기록을 먼저 확인해주세요</h3><p>실행 결과와 장부 반영 여부를 확인해야 다음 단계를 안내할 수 있습니다.</p>
           <button className="btn btn-secondary" onClick={()=>onReview?.(progress.review[0].step)} disabled={!onReview}>기록 확인</button></>
         : progress.remaining.length ? <><h3>앞선 작업의 기록을 기다리고 있습니다</h3><p>남은 작업을 펼쳐 필요한 입금·이체·환전 기록을 확인해주세요.</p></>
@@ -67,7 +70,7 @@ export default function ExecutionTab({cycle, onOpenPlans, onRecord, onReview, on
       {progress.remaining.length === 0 ? <p>남은 작업이 없습니다.</p> : <ol>{progress.remaining.map(item=><li key={item.step.id}>
         <div><strong>{item.step.title}</strong><p>{item.step.account_alias}{item.step.asset_name && ` · ${item.step.asset_name}`}</p>
           <small>{amount(item.step,item.remaining)} 남음</small></div><span className={`execution-state ${item.review?'needs-review':''}`}>{stateName(item)}</span>
-        {item.ready && <button className="btn btn-secondary btn-sm" disabled={disabled || (!renderInput && !onRecord)} onClick={()=>openInput(item.step)}>기록 입력</button>}
+        {item.ready && <button className="btn btn-secondary btn-sm" disabled={disabled || (!renderInput && !onRecord)} onClick={()=>openInput(item.step)}>{trade(item.step)?'새 체결 내역 입력':'새 실행 내역 입력'}</button>}{renderExistingRecords && item.ready && <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={()=>openExisting(item.step)}>기록한 거래 가져오기</button>}
         {item.review && <button className="btn btn-secondary btn-sm" disabled={!onReview} onClick={()=>onReview?.(item.step)}>확인</button>}
       </li>)}</ol>}
     </details>

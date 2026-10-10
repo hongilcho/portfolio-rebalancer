@@ -1,5 +1,6 @@
+import {draftStorage} from '../../utils/tradeDraft';
 import {executionNotices,executionContextKey} from '../../utils/investmentInput';
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useState,useMemo} from 'react';
 import {api} from '../../utils/api';
 import {isHistoricalWithdrawal,withdrawalCorrectionDraft,settleCorrectionRows} from '../../utils/withdrawalCorrection';
 import {kstToday} from '../../utils/depositMaturities';
@@ -8,10 +9,11 @@ import {parseNhNotifications,noticeFingerprint,resolveNhNotice,flowCandidates,ch
   noticeApiRow,previewNhNotices,readNoticeDraft,writeNoticeDraft,validNoticeDate,isCashNotice,peerAccount} from '../../utils/nhNotices';
 
 const names={BUY:'매수 체결',DEPOSIT:'원화 입금',WITHDRAW:'원화 출금',EXCHANGE_IN:'원화 → 달러 환전'};
-export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange,onCorrectionRequest,correctionResult=null,onDraftCleared,executionContext=null,executionConfirmed=false}) {
+export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange,onCorrectionRequest,correctionResult=null,onDraftCleared,executionContext=null,inputScope=''}) {
+  const storage=useMemo(()=>draftStorage(inputScope),[inputScope]);
   const connectionKey=executionContextKey(executionContext);
   useEffect(()=>{setConfirmed(false);},[connectionKey]);
-  const [initial]=useState(()=>readNoticeDraft(portfolioId));
+  const [initial]=useState(()=>readNoticeDraft(portfolioId,storage));
   const [open,setOpen]=useState(focused || Boolean(initial?.rows.length));
   const [text,setText]=useState('');
   const [rows,setRows]=useState(initial?.rows || []);
@@ -30,7 +32,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
   const allAccounts=[...accounts,...Object.values(contexts).flatMap(c=>c.transfer_accounts || []).filter(a=>!accounts.some(original=>String(original.id)===String(a.id)))].filter((a,i,all)=>all.findIndex(b=>String(b.id)===String(a.id))===i);
   const dates=[...new Set([tradeDate,...rows.map(r=>r.eventDate)])].filter(validNoticeDate).sort();
   const dateKey=dates.join('/');
-  useEffect(()=>{setStorageError(!writeNoticeDraft(portfolioId,{rows,requestId,pendingPayload}));},[portfolioId,rows,requestId,pendingPayload]);
+  useEffect(()=>{setStorageError(!writeNoticeDraft(portfolioId,{rows,requestId,pendingPayload},storage));},[portfolioId,rows,requestId,pendingPayload,storage]);
   useEffect(()=>{
     let cancelled=false;
     if (!open || !active) return;
@@ -64,6 +66,8 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
         const resolved=resolveNhNotice(row,accounts,assets,portfolioId,[...rows,...added]);
         const {raw,...data}=resolved;
         const step=executionContext?.step;
+        if(step && !(step.kind==='TRANSFER'?isCashNotice(data):data.kind===step.kind))
+          throw new Error('선택한 작업과 다른 종류의 알림입니다. 이 작업의 알림을 붙여넣거나 5번에서 별도 기록해주세요.');
         if(!data.accountId && step && data.kind===step.kind && (data.kind!=='BUY' || data.assetId===step.asset_id)){data.accountId=step.account_id;data.accountWarning='알림에 계좌가 없어 선택한 투자 작업의 계좌를 채웠습니다. 실제 계좌를 확인해주세요.';}
         const pastCash=isCashNotice(data) && data.eventDate<kstToday();
         added.push({...data,...(pastCash?{applyCash:false}:{}),id:crypto.randomUUID(),fingerprint:await noticeFingerprint(raw)});
@@ -87,11 +91,11 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
   };
   const preview=previewNhNotices(ordinaryRows,contexts,ledgers || []);
   const ready=rows.length>0 && confirmed && !loading && !contextError && !checks.some(c=>c.errors.length) && !preview.errors.length;
-  const persist=(data)=>setStorageError(!writeNoticeDraft(portfolioId,data));
+  const persist=(data)=>setStorageError(!writeNoticeDraft(portfolioId,data,storage));
   const save=async()=>{
     if(!confirmed || (!pendingPayload && !ready))return;
     let payload=pendingPayload;
-    try{payload=payload || {request_id:requestId,confirmed:true,expected_cash:preview.expected,rows:executionNotices(ordinaryRows.map(row=>noticeApiRow(row,contexts[row.eventDate])),executionContext,executionConfirmed)};}catch(error){setMessage(error.message);return;}
+    try{payload=payload || {request_id:requestId,confirmed:true,expected_cash:preview.expected,rows:executionNotices(ordinaryRows.map(row=>noticeApiRow(row,contexts[row.eventDate])),executionContext)};}catch(error){setMessage(error.message);return;}
     setSaving(true);setMessage('');setPendingPayload(payload);persist({rows,requestId,pendingPayload:payload});
     let recorded=false;
     try{
@@ -118,7 +122,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
     if(saving || disabled || pendingPayload)return;
     if(!window.confirm('붙여넣은 문자와 미반영 알림·연결된 누락 보정 입력을 비울까요? 저장된 장부는 변경되지 않습니다.'))return;
     const nextId=crypto.randomUUID();
-    if(!writeNoticeDraft(portfolioId,{rows:[],requestId:nextId,pendingPayload:null})){setStorageError(true);return;}
+    if(!writeNoticeDraft(portfolioId,{rows:[],requestId:nextId,pendingPayload:null},storage)){setStorageError(true);return;}
     setRows([]);setText('');setRequestId(nextId);setConfirmed(false);setMessage('미반영 입력을 비웠습니다.');onDraftCleared?.();
   };
   const move=(index,delta)=>{setRows(previous=>{const next=[...previous];[next[index],next[index+delta]]=[next[index+delta],next[index]];return next;});setConfirmed(false);};
@@ -176,11 +180,11 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
       </fieldset>
       {rows.length>0 && <>
         <div className="history-balance-preview"><h4>반영 후 예상 잔고</h4>
-        {Object.entries(preview.balances).map(([id,cash])=><p key={id}>{allAccounts.find(a=>String(a.id)===id)?.account_alias} · 원화 {formatKRW(cash.deposit_krw)} · 달러 {formatUSD(cash.deposit_usd)}{preview.costs[id]?.balance>0 && ` · 달러 평균 취득환율 ${(preview.costs[id].cost/preview.costs[id].balance).toFixed(4)}`}</p>)}
+        {Object.entries(preview.balances).filter(([id])=>!executionContext || [executionContext.step.account_id,executionContext.step.destination_account_id].map(String).includes(String(id))).map(([id,cash])=><p key={id}>{allAccounts.find(a=>String(a.id)===id)?.account_alias} · 원화 {formatKRW(cash.deposit_krw)} · 달러 {formatUSD(cash.deposit_usd)}{preview.costs[id]?.balance>0 && ` · 달러 평균 취득환율 ${(preview.costs[id].cost/preview.costs[id].balance).toFixed(4)}`}</p>)}
         </div>
         {preview.errors.map(error=><p role="alert" key={error}>{error}</p>)}
         <div className="history-confirm-footer"><label className="history-check"><input type="checkbox" disabled={saving || disabled} checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} />계좌·날짜·순서·금액과 예상 잔고를 확인했습니다.</label>
-        <button type="button" className="btn btn-primary" disabled={saving || disabled || !confirmed || (!pendingPayload && !ready)} onClick={save}>{saving?'반영 중…':pendingPayload?'동일 요청의 저장 결과 다시 확인':`확인한 알림 ${rows.length}건 장부에 일괄 반영`}</button></div>
+        <button type="button" className="btn btn-primary" disabled={saving || disabled || !confirmed || (!pendingPayload && !ready)} onClick={save}>{saving?'반영 중…':pendingPayload?'동일 요청의 저장 결과 다시 확인':executionContext?`${['BUY','SELL'].includes(executionContext.step.kind)?'체결 내역':'실행 내역'} 저장 (${rows.length}건)`:`확인한 알림 ${rows.length}건 장부에 일괄 반영`}</button></div>
         {!pendingPayload && !ready && <p>위의 확인 항목을 해결하고 최종 확인을 체크하면 반영할 수 있습니다.</p>}
       </>}
       {loading && <p>기존 기록·계좌 잔고 확인 중…</p>}

@@ -1,3 +1,4 @@
+import {draftStorage} from '../../utils/tradeDraft';
 import {executionNotices,executionRows} from '../../utils/investmentInput';
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../../utils/api';
@@ -5,16 +6,17 @@ import {readPendingRequest,persistPendingRequest,clearPendingRequest,requireBook
 import { formatKRW } from '../../utils/formatters';
 import { kstToday } from '../../utils/depositMaturities';
 
-export default function ExternalCashFlowPanel({ portfolioId, accounts, performance, onOpenAnalysis, onCashChanged,onBusyChange,focused=false,disabled=false,executionContext=null,executionConfirmed=false }) {
+export default function ExternalCashFlowPanel({ portfolioId, accounts, performance, onOpenAnalysis, onCashChanged,onBusyChange,focused=false,disabled=false,executionContext=null,inputScope='' }) {
+  const storage=draftStorage(inputScope);
   const { data, busy, error, notice, run, capture } = performance;
   const pendingKey=`manual-funds/v1/${portfolioId}`;
   const submitLock=useRef(false);
-  const [pending,setPending]=useState(()=>readPendingRequest(pendingKey));
+  const [pending,setPending]=useState(()=>readPendingRequest(pendingKey,storage));
   useEffect(()=>{onBusyChange?.(busy || Boolean(pending),busy);},[busy,pending,onBusyChange]);
   const [applyCash,setApplyCash]=useState(true);
   const [flowChecked, setFlowChecked] = useState(false);
   useEffect(() => { setFlowChecked(false); }, [data]);
-  const [form, setForm] = useState(() => ({ request_id: crypto.randomUUID(), account_id: '', event_date: kstToday(), direction: 'DEPOSIT', currency: 'KRW', native_amount: '', exchange_rate: 1400, notes: '' }));
+  const [form, setForm] = useState(() => ({ request_id: crypto.randomUUID(), account_id: String(executionContext?.step.account_id || ''), event_date: kstToday(), direction: 'DEPOSIT', currency: 'KRW', native_amount: '', exchange_rate: 1400, notes: '' }));
   const change = (key, value) => { setForm(f => ({ ...f, [key]: value })); setFlowChecked(false); };
   const submit = async e => {
     e?.preventDefault();
@@ -37,23 +39,23 @@ export default function ExternalCashFlowPanel({ portfolioId, accounts, performan
               krw_amount:0,rate:Number(form.exchange_rate),notes:form.notes,flow_mode:'EXTERNAL',existing_flow_id:null}};
           }else row={kind:'FLOW',payload:{...form,native_amount:Number(form.native_amount),exchange_rate:form.currency==='KRW'?1:Number(form.exchange_rate)}};
           if(executionContext){
-            if(row.kind==='CASH')row.payload.rows=executionNotices(row.payload.rows,executionContext,executionConfirmed);
-            else if(row.kind==='USD'){const [linked]=executionRows([{...row.payload,account_id:row.account_id,currency:'USD'}],executionContext,executionConfirmed);row.payload.execution=linked.execution;}
+            if(row.kind==='CASH')row.payload.rows=executionNotices(row.payload.rows,executionContext);
+            else if(row.kind==='USD'){const [linked]=executionRows([{...row.payload,account_id:row.account_id,currency:'USD'}],executionContext);row.payload.execution=linked.execution;}
             else throw new Error('이력만 저장하는 입출금은 투자 자금 준비로 연결하지 않습니다. 잔고 반영을 선택하거나 5번에서 연결 없이 기록해주세요.');
           }
-          persistPendingRequest(pendingKey,row);setPending(row);
+          persistPendingRequest(pendingKey,row,storage);setPending(row);
         }
         let recorded=false;
         try{
           if(row.kind==='CASH')await api.commitNhNotices(portfolioId,row.payload);
           else if(row.kind==='USD')await api.recordUsdEvent(row.account_id,row.payload);
           else await api.addPerformanceFlow(portfolioId,row.payload);
-          recorded=true;clearPendingRequest(pendingKey);setPending(null);
+          recorded=true;clearPendingRequest(pendingKey,storage);setPending(null);
           setForm(f=>({...f,request_id:crypto.randomUUID(),native_amount:'',notes:''}));setFlowChecked(false);
           await onCashChanged?.();await capture();
         }catch(error){
           if(recorded)throw new Error('입출금은 저장됐지만 화면 갱신에 실패했습니다. 다시 입력하지 말고 새로고침해주세요.');
-          if(error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(pendingKey);setPending(null);setFlowChecked(false);setForm(f=>({...f,request_id:crypto.randomUUID()}));}
+          if(error.status && error.status<500 && ![401,403,429].includes(error.status)){clearPendingRequest(pendingKey,storage);setPending(null);setFlowChecked(false);setForm(f=>({...f,request_id:crypto.randomUUID()}));}
           throw error;
         }
     });
