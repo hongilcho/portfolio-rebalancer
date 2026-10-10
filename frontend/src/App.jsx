@@ -9,7 +9,7 @@
  *    - 포트폴리오 전환 또는 새로고침 시 1회의 API 호출로 전체 현황 일괄 수신
  * 2. 0초 반응성 세션 캐시:
  *    - 브라우저 sessionStorage를 활용하여 포트폴리오 전환 즉시 이전 대시보드를 렌더링
- * 3. 7대 핵심 탭 네비게이션:
+ * 3. 8대 핵심 탭 네비게이션:
  *    - 1. 포트폴리오 현황 (DashboardTab)
  *    - 2. 계좌 현황 및 한도 (AccountsTab)
  *    - 3. 목표 비중 설정 (WeightsTab)
@@ -17,11 +17,12 @@
  *    - 5. 매매 및 입출금 기록 (HistoryTab)
  *    - 6. 계좌 마스터 관리 (SettingsTab)
  *    - 7. 분석 및 확인 (AnalysisTab)
+ *    - 8. 투자 실행 (InvestmentWorkspace)
  */
 
 import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  BarChart3, Target, Scale, History, Settings, RefreshCw 
+  BarChart3, Target, Scale, History, Settings, RefreshCw, ListChecks
 } from 'lucide-react';
 import { api } from './utils/api';
 import { getAuthSession, clearAuthSession, onAuthExpired } from './utils/authSession';
@@ -32,11 +33,13 @@ import ViewLoading from './components/common/ViewLoading';
 import DeferredDialog from './components/common/DeferredDialog';
 import { useMarketRevalidation } from './utils/useMarketRevalidation';
 import { usePortfolioPerformance } from './utils/usePortfolioPerformance';
+import {useInvestmentExecution} from './utils/useInvestmentExecution';
 
 // Keep the initial dashboard eager; fetch other screens only when selected.
 const AccountsTab = lazy(() => import('./components/Tab2Accounts/AccountsTab'));
 const WeightsTab = lazy(() => import('./components/Tab2Weights/WeightsTab'));
 const RebalanceTab = lazy(() => import('./components/Tab3Rebalance/RebalanceTab'));
+const InvestmentWorkspace=lazy(()=>import('./components/Tab8Execution/InvestmentWorkspace'));
 const HistoryTab = lazy(() => import('./components/Tab4History/HistoryTab'));
 const CryptoTab = lazy(() => import('./components/Tab5Crypto/CryptoTab'));
 const SettingsTab = lazy(() => import('./components/Tab5Settings/SettingsTab'));
@@ -52,6 +55,7 @@ const TABS = [
   { id: 'tab4', label: '📝 5. 매매 및 입출금 기록', icon: History },
   { id: 'tab5', label: '⚙️ 6. 계좌 마스터 관리', icon: Settings },
   { id: 'tab6', label: '🔎 7. 분석 및 확인', icon: BarChart3 },
+  { id: 'tab8', label: '🧭 8. 투자 실행', icon: ListChecks },
 ];
 
 export default function App() {
@@ -83,6 +87,14 @@ export default function App() {
   const [currentPortfolioId, setCurrentPortfolioId] = useState(() => {
     return localStorage.getItem('active_portfolio_id') || 'default';
   });
+  const [executionInput,setExecutionInput]=useState(null);
+  const [executionSelection,setExecutionSelection]=useState(null);
+  const [historyMounted,setHistoryMounted]=useState(false);
+  const [writers,setWriters]=useState({});
+  const writing=Object.values(writers).some(Boolean);
+  const historyBusy=useCallback(value=>setWriters(old=>({...old,history:value})),[]);
+  const executionBusy=useCallback(value=>setWriters(old=>({...old,execution:value})),[]);
+  useEffect(()=>{if(activeTab==='tab4' || executionInput)setHistoryMounted(true);},[activeTab,executionInput]);
   const [isManagePortfoliosOpen, setIsManagePortfoliosOpen] = useState(false);
 
   // Global Data
@@ -114,6 +126,8 @@ export default function App() {
   }, [theme]);
 
   const handleSelectPortfolio = (pid) => {
+    if(writing){alert('저장 중인 요청이 끝난 뒤 포트폴리오를 변경해주세요.');return;}
+    setExecutionInput(null);setExecutionSelection(null);setHistoryMounted(false);
     setChildRefreshKey(0);
     setLoadedBundle(null);
     setCurrentPortfolioId(pid);
@@ -132,6 +146,9 @@ export default function App() {
   dashboardDataRef.current = dashboardData;
 
   const [childRefreshKey, setChildRefreshKey] = useState(0);
+  const investment=useInvestmentExecution(currentPortfolioId,activeTab==='tab8',isAuthenticated,childRefreshKey);
+  const closeExecutionInput=()=>setExecutionInput(null);
+  const openInvestment=selection=>{setExecutionInput(null);setExecutionSelection(selection);setActiveTab('tab8');};
   const requestSequence = useRef(0);
   useEffect(() => onAuthExpired(() => {
     requestSequence.current++;
@@ -276,7 +293,7 @@ export default function App() {
       ) : (
         <>
           {/* Tabs Navigation for individual financial portfolio */}
-          <label className="mobile-tab-selector">화면 선택<select className="input-select" aria-label="포트폴리오 화면 선택" value={activeTab} onChange={e=>setActiveTab(e.target.value)}>{TABS.map(tab=><option value={tab.id} key={tab.id}>{tab.label}</option>)}</select></label>
+          <label className="mobile-tab-selector">화면 선택<select className="input-select" aria-label="포트폴리오 화면 선택" value={activeTab} disabled={writing} onChange={e=>setActiveTab(e.target.value)}>{TABS.map(tab=><option value={tab.id} key={tab.id}>{tab.label}</option>)}</select></label>
           <nav className="tabs-nav desktop-tabs">
             {TABS.map((tab) => {
               const Icon = tab.icon;
@@ -286,7 +303,7 @@ export default function App() {
                   key={tab.id}
                   className={`tab-btn ${isActive ? 'active' : ''}`}
                   aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setActiveTab(tab.id)}
+                  disabled={writing} onClick={() => setActiveTab(tab.id)}
                 >
                   <Icon size={18} />
                   <span>{tab.label}</span>
@@ -331,23 +348,24 @@ export default function App() {
                     key={currentPortfolioId}
                     onRefresh={() => loadAllData(true, currentPortfolioId)}
                     currentPortfolioId={currentPortfolioId}
+                    onStartInvestment={openInvestment}
                   />
                 )}
 
-                {activeTab === 'tab4' && (
-                  <HistoryTab
-                    key={currentPortfolioId}
-                    assets={assets}
-                    accounts={accounts}
-                    priceMap={priceMap}
-                    usdKrw={usdKrw}
-                    pricesData={pricesData}
-                    currentPortfolioId={currentPortfolioId}
-                    performance={performance}
-                    onOpenAnalysis={() => setActiveTab('tab6')}
-                    onSaved={reloadAfterSave}
-                  />
-                )}
+                {activeTab==='tab8' && <InvestmentWorkspace key={currentPortfolioId} portfolioId={currentPortfolioId}
+                  model={investment} accounts={accounts} usdKrw={usdKrw} selection={executionSelection} inputContext={executionInput}
+                  writing={writing} onBusyChange={executionBusy} onCloseInput={closeExecutionInput}
+                  onOpenPlans={()=>setActiveTab('tab3')} onOpenHistory={()=>setActiveTab('tab4')}
+                  onRecord={(cycle,step)=>setExecutionInput({portfolio_id:currentPortfolioId,cycle_id:cycle.id,revision:cycle.revision,name:cycle.name,step,steps:cycle.steps})}/>
+                }
+                {(historyMounted || activeTab==='tab4' || executionInput) && <div hidden={activeTab!=='tab4' && !(activeTab==='tab8' && executionInput)}>
+                  <HistoryTab key={currentPortfolioId} assets={assets} accounts={accounts} priceMap={priceMap} usdKrw={usdKrw}
+                    pricesData={pricesData} currentPortfolioId={currentPortfolioId} performance={performance}
+                    onOpenAnalysis={()=>setActiveTab('tab6')} onSaved={reloadAfterSave} onBusyChange={historyBusy}
+                    embedded={activeTab==='tab8'} active={activeTab==='tab4' || (activeTab==='tab8' && Boolean(executionInput))}
+                    executionContext={executionInput} onExecutionChanged={investment.refresh} onRecorded={closeExecutionInput}
+                    onExitExecution={()=>{setExecutionInput(null);setActiveTab('tab4');}}/>
+                </div>}
 
                 {activeTab === 'tab5' && (
                   <SettingsTab

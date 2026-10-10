@@ -13,6 +13,7 @@ import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--trust-local-port',type=int,choices=[55438],help='New isolated loopback QA cluster; no private connection file is read')
+parser.add_argument('--investment-execution',action='store_true',help='Synthetic investment workflow with CMA, ISA and existing USD')
 parser.add_argument('--ledger-corrections',action='store_true',help='Synthetic historical cash errors for audited correction')
 parser.add_argument('--port', type=int, default=8547)
 parser.add_argument('--simulate-refresh', action='store_true')
@@ -23,7 +24,7 @@ parser.add_argument('--closing', action='store_true', help='Add synthetic regula
 parser.add_argument('--nh-notices', action='store_true', help='Synthetic NH deposit/FX/ISA fixtures, including an existing contribution')
 parser.add_argument('--cash-transfers', action='store_true', help='Synthetic CMA and liquidity-pool transfer accounts')
 args = parser.parse_args()
-if args.ledger_corrections:args.cash_transfers=True
+if args.ledger_corrections or args.investment_execution:args.cash_transfers=True
 if args.cash_transfers: args.nh_notices=True
 if args.nh_notices:
     args.usd_ledger = args.message_import = args.workflow = True
@@ -34,7 +35,10 @@ from psycopg2.extensions import make_dsn, parse_dsn
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-settings = dict(host="127.0.0.1",port=args.trust_local_port,dbname="postgres",user="ledger_qa") if args.trust_local_port else json.loads((ROOT / "backups/local_validation/local_connection.json").read_text())
+if args.trust_local_port:
+    for env_key in list(os.environ):
+        if env_key.startswith("PG"):os.environ.pop(env_key,None)
+settings = dict(host="127.0.0.1",port=args.trust_local_port,dbname="postgres",user="ledger_qa",password="",passfile="NUL",sslmode="disable",connect_timeout=3) if args.trust_local_port else json.loads((ROOT / "backups/local_validation/local_connection.json").read_text())
 if settings.get("host") != "127.0.0.1" or settings.get("port") not in (55437,55438):
     raise RuntimeError("Only the dedicated loopback PostgreSQL is allowed")
 name = "portfolio_ui_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -200,11 +204,35 @@ if __name__ == '__main__':
                     ('qa_pool_cash','123-45-679992','검증 유동성 계좌','GENERAL','qa_pool',1000000)''')
                 conn.commit()
             performance.capture(context(),'qa_pool',1000000,{},start=True)
+        if args.investment_execution:
+            with dm.get_connection() as conn,conn.cursor() as c:
+                c.execute("UPDATE portfolios SET name='투자 실행 · 합성 검증' WHERE id='default'")
+                c.execute("UPDATE accounts SET account_type='CMA',deposit_krw=1150000 WHERE id='qa_cma'")
+                c.execute("UPDATE accounts SET deposit_krw=0,deposit_usd=100 WHERE id='qa_acc'")
+                c.execute("UPDATE accounts SET deposit_krw=0 WHERE id='qa_isa'")
+                conn.commit()
         assert dm.record_usd_event('qa_acc','OPENING',str(today)+'T09:00:00+09:00',rate=1300)[0]
         performance.capture(context(),'default',current_nav(dm.get_rebalance_batch_data('default'),
             {q['id']:q['price_krw'] for q in quotes},1400),{'source':'QA synthetic baseline'},start=True)
         performance.add_flow(context(),'default',dict(request_id='QA-existing-deposit',account_id='qa_acc',
             event_date=today,direction='DEPOSIT',currency='KRW',native_amount=960000,exchange_rate=1,notes='이미 기록된 합성 입금'))
+    if args.investment_execution:
+        from data.repositories import plans
+        plans.save(dm._context(),'default','10월 적립 투자 · 검증',dict(scenario='NEW_CASH',new_cash_krw=0,drift_threshold=5,transfer_plan=[],trade_plan=[
+            dict(account_id='qa_isa',account_alias='검증 ISA',asset_id='qa_nh_bond',asset_name='ACE 미국10년국채액티브',type='BUY',qty=20,price=9000,total_krw=180000),
+            dict(account_id='qa_acc',account_alias='검증 VT 계좌',asset_id='qa_vt',asset_name='VT',type='BUY',qty=5,price=140000,total_krw=700000)]))
+        @main.app.get('/qa/investment-ledger')
+        def investment_qa_status():
+            from psycopg2.extras import RealDictCursor
+            with dm.get_connection() as conn,conn.cursor(cursor_factory=RealDictCursor) as c:
+                c.execute("SELECT id,deposit_krw,deposit_usd FROM accounts WHERE portfolio_id='default' ORDER BY id")
+                cash=c.fetchall()
+                c.execute("SELECT account_id,asset_id,quantity,buy_fx_rate FROM holdings ORDER BY account_id,asset_id")
+                holdings=c.fetchall()
+                c.execute('SELECT COUNT(*) AS count FROM trade_history')
+                trades=c.fetchone()['count']
+                c.execute('SELECT COUNT(*) AS count FROM portfolio_execution.cycles')
+                return dict(cash=cash,holdings=holdings,trades=trades,cycles=c.fetchone()['count'])
     if args.ledger_corrections:
         from psycopg2.extras import Json
         from datetime import date

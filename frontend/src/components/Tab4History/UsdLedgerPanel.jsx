@@ -1,3 +1,4 @@
+import {executionRows} from '../../utils/investmentInput';
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../../utils/api';
 import {readPendingRequest,persistPendingRequest,clearPendingRequest,requireBookkeepingProtocol,singleSubmission} from '../../utils/bookkeepingRequest';
@@ -10,7 +11,7 @@ const names = { OPENING: '시작 기준 등록', EXCHANGE_IN: '원화 → 달러
 const localNow = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 16);
 const rateText = rate => Number(rate || 0).toLocaleString('ko-KR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
-export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], onChanged, portfolioId, focused=false,active=true,onBusyChange,disabled=false }) {
+export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], onChanged, portfolioId, focused=false,active=true,onBusyChange,disabled=false,executionContext=null,executionConfirmed=false }) {
   const pendingKey=`manual-forex/v1/${portfolioId}`;
   const submitLock=useRef(false);
   const [pending,setPending]=useState(()=>readPendingRequest(pendingKey));
@@ -68,9 +69,12 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
 
       if (!activeAccountId && !pending) return;
       try{await requireBookkeepingProtocol(api);}catch(error){setMessage(error.message);return;}
-      const row=pending || {account_id:activeAccountId,payload:{request_id:crypto.randomUUID(),portfolio_id:portfolioId,
+      let row;
+      try{row=pending || {account_id:activeAccountId,payload:{request_id:crypto.randomUUID(),portfolio_id:portfolioId,
         kind:effectiveKind,occurred_at:`${occurredAt}:00+09:00`,usd_amount:Number(usd),
         krw_amount:Number(krw),rate:Number(rate),notes,flow_mode:flowMode,existing_flow_id:flowId || null,duplicate_confirmed:duplicateConfirmed}};
+      if(!pending && executionContext){const [linked]=executionRows([{...row.payload,account_id:row.account_id,currency:'USD'}],executionContext,executionConfirmed);if(linked.execution)row.payload.execution=linked.execution;}
+      }catch(error){setMessage(error.message);return;}
       try {persistPendingRequest(pendingKey,row);}catch(error){setMessage(error.message);return;}
       setPending(row);setSaving(true);setMessage('');let recorded=false;
       try {

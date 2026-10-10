@@ -293,4 +293,4 @@ flowchart TD
 
 ## 14 개발 진행 기록
 
-1단계 화면 방향은 사용자 확인을 받았다. 2단계 저장·공통 장부 접점의 실제 구현과 합성 검증 결과는 [investment-execution-stage2.md](investment-execution-stage2.md)에 기록한다. 3단계 실제 화면 연결과 4단계 최종 검증·배포 준비는 아직 남아 있다.
+1단계 화면 방향은 사용자 확인을 받았다. 2단계 저장·공통 장부 접점의 실제 구현과 합성 검증 결과는 [investment-execution-stage2.md](investment-execution-stage2.md)에 기록한다. 3단계 실제 화면 연결과 합성 검증을 완료했으며 결과는 [investment-execution-stage3.md](investment-execution-stage3.md)에 기록한다. 4단계 최종 검증·배포 준비와 사용자 검토는 아직 남아 있다.

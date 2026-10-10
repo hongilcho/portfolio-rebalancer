@@ -43,7 +43,10 @@ def read(ctx, pid):
             AND NOT EXISTS(SELECT 1 FROM rebalance_plan_links l WHERE l.trade_id=t.id)
             ORDER BY t.trade_sequence DESC''', (pid,pid))
         candidates = [dict(r) for r in c.fetchall()]
+        c.execute('SELECT id,plan_id,status FROM portfolio_execution.cycles WHERE portfolio_id=%s',(pid,))
+        executions={r['plan_id']:dict(r) for r in c.fetchall()}
         for p in plans:
+            p['execution']=executions.get(p['id'])
             p['links'] = [r for r in links if r['plan_id']==p['id']]
         return {'plans':plans, 'candidates':candidates}
 

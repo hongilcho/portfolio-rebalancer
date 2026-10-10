@@ -1,3 +1,4 @@
+import {requireInvestmentProtocol} from './investmentInput';
 import { authHeaders, saveAuthSession, clearAuthSession } from './authSession';
 
 /**
@@ -53,6 +54,17 @@ async function request(endpoint, options = {}, format = 'json') {
 }
 
 export const api = {
+  getInvestmentCapabilities:()=>request('/api/investments/capabilities'),
+  getInvestments:pid=>request(`/api/investments/${encodeURIComponent(pid)}`),
+  getInvestmentPlans:pid=>request(`/api/investments/${encodeURIComponent(pid)}/plans`),
+  prepareInvestment:(pid,body)=>request(`/api/investments/${encodeURIComponent(pid)}/prepare`,{method:'POST',body:JSON.stringify(body)}),
+  createInvestment:(pid,body)=>request(`/api/investments/${encodeURIComponent(pid)}`,{method:'POST',body:JSON.stringify(body)}),
+  getInvestment:(pid,id)=>request(`/api/investments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}`),
+  setInvestmentState:(pid,id,body)=>request(`/api/investments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(body)}),
+  reviseInvestment:(pid,id,body)=>request(`/api/investments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}/goals`,{method:'PATCH',body:JSON.stringify(body)}),
+  getInvestmentCandidates:(pid,id,step)=>request(`/api/investments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}/steps/${encodeURIComponent(step)}/candidates`),
+  linkInvestmentRecord:(pid,id,body)=>request(`/api/investments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}/links`,{method:'POST',body:JSON.stringify(body)}),
+  unlinkInvestmentRecord:(pid,id,result)=>request(`/api/investments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}/links/${encodeURIComponent(result)}`,{method:'DELETE'}),
   getBookkeepingCapabilities:()=>request('/api/trades/capabilities'),
   saveDepositEntry:(pid,body)=>request(`/api/deposit-ledger/${encodeURIComponent(pid)}`,{method:'POST',body:JSON.stringify(body)}),
   getDepositEntries:pid=>request(`/api/deposit-ledger/${encodeURIComponent(pid)}`),
@@ -68,13 +80,11 @@ export const api = {
 
   getActivity: (pid,params) => request(`/api/activity/${encodeURIComponent(pid)}?${new URLSearchParams(params)}`),
   getNhNoticeContext: (pid,day) => request(`/api/nh-notices/${encodeURIComponent(pid)}/context?day=${encodeURIComponent(day)}`),
-  commitNhNotices: (pid,data) => request(`/api/nh-notices/${encodeURIComponent(pid)}/batch`, {method:'POST',body:JSON.stringify(data)}),
+  commitNhNotices: async (pid,data) => {await requireInvestmentProtocol(api,data);return request(`/api/nh-notices/${encodeURIComponent(pid)}/batch`, {method:'POST',body:JSON.stringify(data)});},
   undoNhNotices: (pid,id) => request(`/api/nh-notices/${encodeURIComponent(pid)}/batch/${encodeURIComponent(id)}`, {method:'DELETE'}),
   getUsdLedgers: (portfolioId) => request(`/api/forex/?portfolio_id=${encodeURIComponent(portfolioId)}`),
   getUsdEvents: (accountId) => request(`/api/forex/${encodeURIComponent(accountId)}/events`),
-  recordUsdEvent: (accountId, event) => request(`/api/forex/${encodeURIComponent(accountId)}/events`, {
-    method: 'POST', body: JSON.stringify(event),
-  }),
+  recordUsdEvent: async (accountId, event) => {await requireInvestmentProtocol(api,event);return request(`/api/forex/${encodeURIComponent(accountId)}/events`, {method:'POST',body:JSON.stringify(event)});},
   undoUsdEvent: (accountId, eventId) => request(`/api/forex/${encodeURIComponent(accountId)}/events/${encodeURIComponent(eventId)}`, {
     method: 'DELETE',
   }),
@@ -206,10 +216,7 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/api/trades/${query ? `?${query}` : ''}`);
   },
-  batchExecuteTrades: (payload) => request('/api/trades/batch', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }),
+  batchExecuteTrades: async payload=>{await requireInvestmentProtocol(api,payload);return request('/api/trades/batch',{method:'POST',body:JSON.stringify(payload)});},
   batchDeleteTrades: (trade_ids) => request('/api/trades/batch', {
     method: 'DELETE',
     body: JSON.stringify({ trade_ids }),

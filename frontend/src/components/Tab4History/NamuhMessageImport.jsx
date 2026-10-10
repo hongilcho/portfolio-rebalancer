@@ -1,3 +1,4 @@
+import {executionNotices,executionContextKey} from '../../utils/investmentInput';
 import React,{useEffect,useState} from 'react';
 import {api} from '../../utils/api';
 import {isHistoricalWithdrawal,withdrawalCorrectionDraft,settleCorrectionRows} from '../../utils/withdrawalCorrection';
@@ -7,7 +8,9 @@ import {parseNhNotifications,noticeFingerprint,resolveNhNotice,flowCandidates,ch
   noticeApiRow,previewNhNotices,readNoticeDraft,writeNoticeDraft,validNoticeDate,isCashNotice,peerAccount} from '../../utils/nhNotices';
 
 const names={BUY:'매수 체결',DEPOSIT:'원화 입금',WITHDRAW:'원화 출금',EXCHANGE_IN:'원화 → 달러 환전'};
-export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange,onCorrectionRequest,correctionResult=null,onDraftCleared}) {
+export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange,onCorrectionRequest,correctionResult=null,onDraftCleared,executionContext=null,executionConfirmed=false}) {
+  const connectionKey=executionContextKey(executionContext);
+  useEffect(()=>{setConfirmed(false);},[connectionKey]);
   const [initial]=useState(()=>readNoticeDraft(portfolioId));
   const [open,setOpen]=useState(focused || Boolean(initial?.rows.length));
   const [text,setText]=useState('');
@@ -60,6 +63,8 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
       for(const row of parsed){
         const resolved=resolveNhNotice(row,accounts,assets,portfolioId,[...rows,...added]);
         const {raw,...data}=resolved;
+        const step=executionContext?.step;
+        if(!data.accountId && step && data.kind===step.kind && (data.kind!=='BUY' || data.assetId===step.asset_id)){data.accountId=step.account_id;data.accountWarning='알림에 계좌가 없어 선택한 투자 작업의 계좌를 채웠습니다. 실제 계좌를 확인해주세요.';}
         const pastCash=isCashNotice(data) && data.eventDate<kstToday();
         added.push({...data,...(pastCash?{applyCash:false}:{}),id:crypto.randomUUID(),fingerprint:await noticeFingerprint(raw)});
       }
@@ -85,7 +90,8 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
   const persist=(data)=>setStorageError(!writeNoticeDraft(portfolioId,data));
   const save=async()=>{
     if(!confirmed || (!pendingPayload && !ready))return;
-    const payload=pendingPayload || {request_id:requestId,confirmed:true,expected_cash:preview.expected,rows:ordinaryRows.map(row=>noticeApiRow(row,contexts[row.eventDate]))};
+    let payload=pendingPayload;
+    try{payload=payload || {request_id:requestId,confirmed:true,expected_cash:preview.expected,rows:executionNotices(ordinaryRows.map(row=>noticeApiRow(row,contexts[row.eventDate])),executionContext,executionConfirmed)};}catch(error){setMessage(error.message);return;}
     setSaving(true);setMessage('');setPendingPayload(payload);persist({rows,requestId,pendingPayload:payload});
     let recorded=false;
     try{
@@ -159,6 +165,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
               {row.crossPortfolio && <small>양쪽 기록은 함께 저장·취소됩니다. 상대 계좌가 앱에 없으면 ‘앱 밖으로 출금’으로 기록하세요.</small>}
             </>}
             </fieldset></details>
+            {executionContext?.step.kind==='TRANSFER' && isCashNotice(row) && <button type="button" className="btn btn-secondary btn-sm" disabled={saving || disabled || Boolean(pendingPayload)} onClick={()=>{const step=executionContext.step;setRows(previous=>previous.map((r,index)=>index!==i?r:{...r,external:false,crossPortfolio:false,accountId:r.kind==='DEPOSIT'?step.destination_account_id:step.account_id,sourceAccountId:r.kind==='DEPOSIT'?step.account_id:'',destinationAccountId:r.kind==='WITHDRAW'?step.destination_account_id:'',applyCash:true,flowId:undefined,counterpartyFlowId:undefined,duplicateConfirmed:false}));setConfirmed(false);}}>이번 작업의 계좌 이체로 설정</button>}
             {checks[i].errors.map(error=><p role="alert" key={error}>{error}</p>)}
             {checks[i].duplicate && <label><input type="checkbox" checked={Boolean(row.duplicateConfirmed)} onChange={e=>edit(i,'duplicateConfirmed',e.target.checked)} />기존 기록과 별개의 거래임을 확인했습니다.</label>}
             <div className="history-row-actions"><button type="button" className="btn btn-secondary btn-sm" disabled={i===0 || row.historicalCashChoice==='CORRECTION'} onClick={()=>move(i,-1)}>위로</button>{' '}

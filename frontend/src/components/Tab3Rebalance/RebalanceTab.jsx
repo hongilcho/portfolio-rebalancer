@@ -25,7 +25,7 @@ import KoreanNumberInput from '../common/KoreanNumberInput';
 import DriftBar from '../common/DriftBar';
 import SavedPlans from './SavedPlans';
 
-export default function RebalanceTab({ currentPortfolioId = 'default' }) {
+export default function RebalanceTab({ currentPortfolioId = 'default',onStartInvestment }) {
   const [scenario, setScenario] = useState('NEW_CASH');
   const [newCash, setNewCash] = useState(0);
   const [driftThreshold, setDriftThreshold] = useState(5.0);
@@ -53,7 +53,7 @@ export default function RebalanceTab({ currentPortfolioId = 'default' }) {
 
   return (
     <div>
-      <SavedPlans portfolioId={currentPortfolioId} result={result} />
+      <SavedPlans portfolioId={currentPortfolioId} result={result} onStartInvestment={onStartInvestment}/>
       {/* 1. Configuration Card */}
       <div className="section-card">
         <div className="section-title">

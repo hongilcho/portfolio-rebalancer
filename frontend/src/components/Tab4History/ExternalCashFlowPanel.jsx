@@ -1,10 +1,11 @@
+import {executionNotices,executionRows} from '../../utils/investmentInput';
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../../utils/api';
 import {readPendingRequest,persistPendingRequest,clearPendingRequest,requireBookkeepingProtocol,singleSubmission} from '../../utils/bookkeepingRequest';
 import { formatKRW } from '../../utils/formatters';
 import { kstToday } from '../../utils/depositMaturities';
 
-export default function ExternalCashFlowPanel({ portfolioId, accounts, performance, onOpenAnalysis, onCashChanged,onBusyChange,focused=false,disabled=false }) {
+export default function ExternalCashFlowPanel({ portfolioId, accounts, performance, onOpenAnalysis, onCashChanged,onBusyChange,focused=false,disabled=false,executionContext=null,executionConfirmed=false }) {
   const { data, busy, error, notice, run, capture } = performance;
   const pendingKey=`manual-funds/v1/${portfolioId}`;
   const submitLock=useRef(false);
@@ -35,6 +36,11 @@ export default function ExternalCashFlowPanel({ portfolioId, accounts, performan
               kind:form.direction,occurred_at:`${form.event_date}T12:00:00+09:00`,usd_amount:Number(form.native_amount),
               krw_amount:0,rate:Number(form.exchange_rate),notes:form.notes,flow_mode:'EXTERNAL',existing_flow_id:null}};
           }else row={kind:'FLOW',payload:{...form,native_amount:Number(form.native_amount),exchange_rate:form.currency==='KRW'?1:Number(form.exchange_rate)}};
+          if(executionContext){
+            if(row.kind==='CASH')row.payload.rows=executionNotices(row.payload.rows,executionContext,executionConfirmed);
+            else if(row.kind==='USD'){const [linked]=executionRows([{...row.payload,account_id:row.account_id,currency:'USD'}],executionContext,executionConfirmed);row.payload.execution=linked.execution;}
+            else throw new Error('이력만 저장하는 입출금은 투자 자금 준비로 연결하지 않습니다. 잔고 반영을 선택하거나 5번에서 연결 없이 기록해주세요.');
+          }
           persistPendingRequest(pendingKey,row);setPending(row);
         }
         let recorded=false;

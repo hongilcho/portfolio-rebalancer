@@ -31,7 +31,7 @@ function HistoryReview({history,decisions,onChange,onChoice,choice,disabled,with
     </details>
   </div>;
 }
-export default function LedgerCorrectionPanel({portfolioId,accounts,assets,active=true,disabled=false,onChanged,onBusyChange,reviewRequest=null,noticeRequest=null,onNoticeSettled,resetRequest=null}){
+export default function LedgerCorrectionPanel({portfolioId,accounts,assets,active=true,disabled=false,hidden=false,onChanged,onBusyChange,reviewRequest=null,noticeRequest=null,onNoticeSettled,resetRequest=null}){
   const storageKey=`ledger-correction-pending/v1/${portfolioId}`;
   const [initial]=useState(()=>{try{return restoreCorrection(localStorage.getItem(storageKey));}catch{return null;}});
   const panelRef=useRef(null);
@@ -129,7 +129,7 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
   const historyUnresolved=history.filter(h=>!decisions[h.key] || decisions[h.key]==='UNKNOWN').length;
   const pendingSummary=pending && <details><summary>저장 확인 중인 요청 내용</summary><p>{pending.proposal?`${pending.proposal.event_date} · ${labels[pending.proposal.kind]} · ${pending.proposal.reason}`:'과거 평가 기록 추가 확인'}</p>{pending.proposal && <p>계좌 {accounts.find(a=>a.id===pending.proposal.account_id)?.account_alias || '계좌 확인 필요'} · {pending.proposal.kind==='HOLDING'?`수량 ${pending.proposal.quantity} · 단가 ${pending.proposal.avg_price_usd || pending.proposal.avg_price}`:pending.proposal.kind==='PAST_WITHDRAWAL'?`누락 출금 ${pending.proposal.amount} ${pending.proposal.currency}`:`목표 예수금 ${pending.proposal.balance} ${pending.proposal.currency}`}</p>}{Object.entries(pending.decisions).map(([key,v])=><p key={key}>{key} · {v==='ERROR'?'동일 오차 보정':v==='NORMAL'?'정상 기록 유지':'미확정'}</p>)}</details>;
   const waiting=entries.filter(e=>!e.reversed_at && e.history.some(h=>h.decision==='UNKNOWN'));
-  return <details ref={panelRef} className="section-card history-help ledger-correction-panel" open={open} onToggle={e=>setOpen(e.currentTarget.open)}>
+  return <details hidden={hidden} ref={panelRef} className="section-card history-help ledger-correction-panel" open={open} onToggle={e=>setOpen(e.currentTarget.open)}>
     <summary>장부 확인 및 정정</summary>
     <p className="history-muted">실제 매매·기준일 이후 입출금은 위의 일반 입력을 사용하세요. 여기서는 초기 잔고·누락·오류를 사유와 함께 정정합니다.</p>
     {noticeSource && <div className="correction-notice-summary"><strong>{accounts.find(a=>a.id===noticeSource.accountId)?.account_alias || '정정 계좌'}</strong><p>{noticeSource.eventDate} · 누락 출금 {formatKRW(noticeSource.amount)}</p><details><summary>문자 참고 정보</summary>{Number.isFinite(noticeSource.reportedAvailableKrw) && <p>출금가능금액 {formatKRW(noticeSource.reportedAvailableKrw)} · 참고값</p>}</details><button className="btn btn-secondary btn-sm" disabled={locked} onClick={cancelNotice}>문자 누락 보정 취소</button></div>}

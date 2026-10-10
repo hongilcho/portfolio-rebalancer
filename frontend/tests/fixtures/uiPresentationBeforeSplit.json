@@ -6,7 +6,8 @@
     "correction_simplification": "2026-10-09: reviewed NH reset and always-visible final correction action in collapsed history forms; only two history hashes changed. Decision/effect handlers covered by nhNoticeControls; unrelated screens unchanged",
     "ledger_correction": "2026-10-08: tab1 display only, settings no cash edits, tab4 audited corrections collapsed; behavior covered by historyFocus and isolated PostgreSQL tests; unrelated screen hashes unchanged",
     "mobile_portfolio": "2026-10-09: dashboard account section moved to separate destination; dashboard desktop cards retained, calculation help collapsed, mobile disclosures covered in mobilePortfolio. Account editor/history hashes change only for shifted navigation labels. Other hashes unchanged. Accounts tested separately.",
-    "bookkeeping_integrity": "2026-10-09: settings deposit contract fields are read-only; history adds audited deposit input, durable retry controls and USD external-flow semantics. Only the four related hashes change; handler tests cover lost responses, navigation, refresh failure and double clicks."
+    "bookkeeping_integrity": "2026-10-09: settings deposit contract fields are read-only; history adds audited deposit input, durable retry controls and USD external-flow semantics. Only the four related hashes change; handler tests cover lost responses, navigation, refresh failure and double clicks.",
+    "investment_execution": "2026-10-10: intentional addition of manual KRW account transfer fallback to shared 5/8 input. Only the two history hashes change; explicit workflow connection consent, protocol gating and synthetic browser flows tested separately. Final user review pending."
   },
   "sha256": {
     "dashboard/KRW": "4526d0aad14d81e84f33b6fde734913d01a88a56a5996984b343ff531ad24065",
@@ -19,8 +20,8 @@
     "settings/edit-account": "cc36da336137334f08ea6961e7a52fc70eaae9c102bacab192aad9ab5e3cacb7",
     "settings/new-US-asset": "cd33edb1f4eb41667dddb49789064e880643c0d959bfbb5b3f8170ad3a412e84",
     "settings/edit-deposit": "bab4e8d4b9825adffea6eb5b99d9615df29eaa96b26f62603185c66c4b06864d",
-    "history/empty": "40df87d8e963a7c97161ab03d8de9f5c6523de8918d5048d057ed5fa094794d5",
-    "history/filled-forms": "c7f785ffe14303cbfe0410594609751bf13fb50792fa7ac128eebeaaec98fc1c",
+    "history/empty": "75c4ca98933427749bbfd3bbc501224ad04a9cde059dc6e858f56070e10b6df2",
+    "history/filled-forms": "4d6ea5715d4cc050b87653d66a5dbe869d26cc9a609e7f44351bad113fea6425",
     "overview/KRW": "ad703d16caad5132a682394a3a358d7c6b709b6a5c15ecaa27f225d03020498b",
     "overview/USD": "1162b5dc324691a7af8b194cd3733b1ece5c8ebaef1f4ddbb8ede45aa8b8d42f",
     "overview/no-crypto": "ae95dc5b044bc5e8d2ff29079fd3ffacefa93491d0de2dd4756bf96d2ca7b242",

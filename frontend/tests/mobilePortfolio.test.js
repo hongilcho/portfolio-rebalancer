@@ -26,10 +26,10 @@ const dailyReports=Array.from({length:90},(_,i)=>{const label=new Date(Date.UTC(
 try{
   const modules={};for(const [key,path] of Object.entries({Dashboard:'/src/components/Tab1Dashboard/DashboardTab.jsx',Accounts:'/src/components/Tab2Accounts/AccountsTab.jsx',Chart:'/src/components/Tab6Analysis/PerformanceChart.jsx',App:'/src/App.jsx'}))modules[key]=(await server.ssrLoadModule(path)).default;
   const render=(Component,props,states={},mobile=true)=>{globalThis.matchMedia=()=>({matches:mobile});globalThis.__mobileStates=states;return renderToStaticMarkup(React.createElement(Component,props));};
-  test('seven ordered destinations retain existing navigation ids and cross-links',()=>{
+  test('eight ordered destinations retain existing navigation ids and cross-links',()=>{
     const html=render(modules.App,{}, {isAuthenticated:true,loading:false,dashboardData:fixture.bundle.dashboard,assets:fixture.bundle.assets,accounts:fixture.bundle.accounts});
     const selector=html.match(/<select[^>]*aria-label="포트폴리오 화면 선택"[\s\S]*?<\/select>/)[0];
-    for(const label of ['1. 포트폴리오 현황','2. 계좌 현황 및 한도','3. 목표 비중 설정','4. 리밸런싱 전략','5. 매매 및 입출금 기록','6. 계좌 마스터 관리','7. 분석 및 확인'])assert.ok(selector.includes(label),label);
+    for(const label of ['1. 포트폴리오 현황','2. 계좌 현황 및 한도','3. 목표 비중 설정','4. 리밸런싱 전략','5. 매매 및 입출금 기록','6. 계좌 마스터 관리','7. 분석 및 확인','8. 투자 실행'])assert.ok(selector.includes(label),label);
     assert.ok(selector.indexOf('2. 계좌')<selector.indexOf('3. 목표'));
   });
   test('mobile overview shows meaningful totals and collapses detail; account lists have moved out',()=>{
