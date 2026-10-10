@@ -201,6 +201,7 @@ export const api = {
   savePlan: (pid, data) => request(`/api/plans/${encodeURIComponent(pid)}`, {method:'POST',body:JSON.stringify(data)}),
   linkPlanTrade: (pid, id, data) => request(`/api/plans/${encodeURIComponent(pid)}/${id}/links`, {method:'POST',body:JSON.stringify(data)}),
   unlinkPlanTrade: (pid, id, trade) => request(`/api/plans/${encodeURIComponent(pid)}/${id}/links/${trade}`, {method:'DELETE'}),
+  deletePlan: (pid,id) => request(`/api/plans/${encodeURIComponent(pid)}/${encodeURIComponent(id)}`, {method:'DELETE'}),
   archivePlan: (pid, id, archived) => request(`/api/plans/${encodeURIComponent(pid)}/${id}`, {method:'PATCH',body:JSON.stringify({archived})}),
   calculateRebalance: (data) => request('/api/rebalance/calculate', {
     method: 'POST',

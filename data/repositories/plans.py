@@ -102,3 +102,19 @@ def archive(ctx, pid, plan_id, archived):
         if not c.rowcount:
             raise ValueError('계획을 찾을 수 없습니다.')
         conn.commit()
+
+
+def delete(ctx,pid,plan_id):
+    """Remove an unused plan only; never delete journal trades or cycle history."""
+    from data.repositories.nh_notices import lock_scope
+    with ctx.connect() as conn,conn.cursor() as c:
+        # Same lock ordering as starting a cycle prevents a start/delete race.
+        lock_scope(c,pid,[])
+        c.execute('SELECT id FROM rebalance_plans WHERE id=%s AND portfolio_id=%s FOR UPDATE',(plan_id,pid))
+        if not c.fetchone():raise ValueError('계획을 찾을 수 없습니다.')
+        c.execute('SELECT 1 FROM portfolio_execution.cycles WHERE plan_id=%s',(plan_id,))
+        if c.fetchone():raise ValueError('투자 회차에 사용된 계획은 삭제할 수 없습니다. 회차 종료 후 계획 보관을 이용해주세요.')
+        c.execute('SELECT 1 FROM rebalance_plan_links WHERE plan_id=%s LIMIT 1',(plan_id,))
+        if c.fetchone():raise ValueError('거래가 연결된 계획은 삭제할 수 없습니다. 계획 보관을 이용해주세요.')
+        c.execute('DELETE FROM rebalance_plans WHERE id=%s AND portfolio_id=%s',(plan_id,pid))
+        conn.commit()

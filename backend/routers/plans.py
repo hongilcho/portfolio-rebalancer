@@ -75,3 +75,9 @@ def remove_link(pid: str, plan_id: str, trade_id: str):
 def archive_plan(pid: str, plan_id: str, req: Archive):
     perform(plans.archive,pid,plan_id,req.archived)
     return {'success':True}
+
+
+@router.delete('/{pid}/{plan_id}')
+def delete_plan(pid: str,plan_id: str):
+    perform(plans.delete,pid,plan_id)
+    return {'success':True}

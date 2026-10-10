@@ -24,6 +24,7 @@ import { formatKRW, formatQuantity, formatPercent } from '../../utils/formatters
 import KoreanNumberInput from '../common/KoreanNumberInput';
 import DriftBar from '../common/DriftBar';
 import SavedPlans from './SavedPlans';
+import PlanSave from './PlanSave';
 
 export default function RebalanceTab({ currentPortfolioId = 'default',onStartInvestment }) {
   const [scenario, setScenario] = useState('NEW_CASH');
@@ -31,6 +32,7 @@ export default function RebalanceTab({ currentPortfolioId = 'default',onStartInv
   const [driftThreshold, setDriftThreshold] = useState(5.0);
   const [calculating, setCalculating] = useState(false);
   const [result, setResult] = useState(null);
+  const [plansRevision,setPlansRevision]=useState(0);
 
   const handleCalculate = async () => {
     setCalculating(true);
@@ -53,7 +55,6 @@ export default function RebalanceTab({ currentPortfolioId = 'default',onStartInv
 
   return (
     <div>
-      <SavedPlans portfolioId={currentPortfolioId} result={result} onStartInvestment={onStartInvestment}/>
       {/* 1. Configuration Card */}
       <div className="section-card">
         <div className="section-title">
@@ -417,6 +418,8 @@ export default function RebalanceTab({ currentPortfolioId = 'default',onStartInv
           )}
         </div>
       )}
+      <PlanSave portfolioId={currentPortfolioId} result={result} onStartInvestment={onStartInvestment} onSaved={()=>setPlansRevision(n=>n+1)}/>
+      <SavedPlans portfolioId={currentPortfolioId} onStartInvestment={onStartInvestment} revision={plansRevision}/>
     </div>
   );
 }
