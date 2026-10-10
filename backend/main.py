@@ -29,7 +29,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 from logic.refreshing_cache import MarketRefreshUnavailable
 from data.data_manager import init_db, get_overview_batch_data
-from backend.routers import forex, plans, performance, nh_notices, activity, ledger_adjustments, deposits
+from backend.routers import forex, plans, performance, nh_notices, activity, ledger_adjustments, deposits, investments
 from logic.dividend_fetcher import prepare_dividend_cache
 from backend.services import market_service
 from backend.close_performance import start_scheduler
@@ -129,6 +129,7 @@ app.include_router(nh_notices.router)
 app.include_router(activity.router)
 app.include_router(ledger_adjustments.router)
 app.include_router(deposits.router)
+app.include_router(investments.router)
 
 @app.get("/api/health")
 def health_check():

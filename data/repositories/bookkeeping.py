@@ -5,7 +5,13 @@ from psycopg2.extras import Json
 
 
 def plain(value):
-    return json.loads(json.dumps(value, default=str))
+    result = json.loads(json.dumps(value, default=str))
+    def clean(item):
+        if isinstance(item, dict):
+            return {key:clean(val) for key,val in item.items() if key!='execution' or val is not None}
+        if isinstance(item, list): return [clean(val) for val in item]
+        return item
+    return clean(result)
 
 
 def begin(cursor, scope, request_id, payload):

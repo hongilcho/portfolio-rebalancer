@@ -48,12 +48,22 @@ def read(ctx, pid):
         return {'plans':plans, 'candidates':candidates}
 
 
+def guard_execution(c,plan_id,archive=False):
+    c.execute('SELECT status FROM portfolio_execution.cycles WHERE plan_id=%s',(plan_id,))
+    row=c.fetchone()
+    if row:
+        state=row['status'] if isinstance(row,dict) else row[0]
+        if not archive or state!='CLOSED':
+            raise ValueError('투자 실행에 사용 중인 계획입니다. 기록 연결·목표 변경은 8번 탭에서 처리해주세요.')
+
+
 def link(ctx, pid, plan_id, line_no, trade_id):
     with ctx.connect() as conn, conn.cursor(cursor_factory=RealDictCursor) as c:
         c.execute('SELECT * FROM rebalance_plans WHERE id=%s AND portfolio_id=%s FOR UPDATE', (plan_id,pid))
         plan = c.fetchone()
         if not plan or plan['archived'] or not 0 <= line_no < len(plan['payload']['trade_plan']):
             raise ValueError('진행 중인 계획과 매매 행을 확인해주세요.')
+        guard_execution(c,plan_id)
         line = plan['payload']['trade_plan'][line_no]
         c.execute('''SELECT t.* FROM trade_history t JOIN accounts a ON a.id=t.account_id
             JOIN assets s ON s.id=t.asset_id WHERE t.id=%s AND a.portfolio_id=%s AND s.portfolio_id=%s FOR UPDATE OF t''', (trade_id,pid,pid))
@@ -72,6 +82,9 @@ def link(ctx, pid, plan_id, line_no, trade_id):
 
 def unlink(ctx, pid, plan_id, trade_id):
     with ctx.connect() as conn, conn.cursor() as c:
+        c.execute('SELECT id FROM rebalance_plans WHERE id=%s AND portfolio_id=%s FOR UPDATE',(plan_id,pid))
+        if not c.fetchone(): raise ValueError('계획을 찾을 수 없습니다.')
+        guard_execution(c,plan_id)
         c.execute('''DELETE FROM rebalance_plan_links l USING rebalance_plans p
             WHERE l.plan_id=p.id AND p.portfolio_id=%s AND p.id=%s AND l.trade_id=%s''', (pid,plan_id,trade_id))
         conn.commit()
@@ -79,6 +92,9 @@ def unlink(ctx, pid, plan_id, trade_id):
 
 def archive(ctx, pid, plan_id, archived):
     with ctx.connect() as conn, conn.cursor() as c:
+        c.execute('SELECT id FROM rebalance_plans WHERE id=%s AND portfolio_id=%s FOR UPDATE',(plan_id,pid))
+        if not c.fetchone(): raise ValueError('계획을 찾을 수 없습니다.')
+        guard_execution(c,plan_id,archive=True)
         c.execute('UPDATE rebalance_plans SET archived=%s WHERE id=%s AND portfolio_id=%s', (archived,plan_id,pid))
         if not c.rowcount:
             raise ValueError('계획을 찾을 수 없습니다.')

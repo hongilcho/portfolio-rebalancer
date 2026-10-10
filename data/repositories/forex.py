@@ -356,6 +356,9 @@ def record_manual_event(db, account_id, payload):
                 c.execute('UPDATE performance_tracking SET revision=revision+1 WHERE portfolio_id=%s',(payload['portfolio_id'],))
         result = dict(success=True,message='달러 잔고·원가'+('와 외부 입출금 기록을 함께' if flow_id else '를')+' 저장했습니다.',
                       event_id=event_id,flow_id=flow_id,performance_not_started=bool(cash_transfer and not track),created_flow=bool(flow_id and payload['flow_mode']=='EXTERNAL'))
+        if payload.get('execution'):
+            from data.repositories.investments import attach
+            attach(c,db,payload['portfolio_id'],payload['execution'],'USD',event_id)
         bookkeeping.finish(c,scope,payload['request_id'],result)
         conn.commit()
         db.invalidate()

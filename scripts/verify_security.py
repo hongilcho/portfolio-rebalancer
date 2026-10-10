@@ -60,7 +60,11 @@ def settings_snapshot():
          FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped)
         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='public' AND c.relkind IN ('r','S') ORDER BY c.relname""")
-    return cur.fetchall()
+    # ACL entry ordering is not a permission; preserve every grant option.
+    def acl(value):
+        return None if value is None else tuple(sorted(value[1:-1].split(',')))
+    return [(name,rls,force,acl(grants),[(column,acl(rights)) for column,rights in columns])
+            for name,rls,force,grants,columns in cur.fetchall()]
 def financial_digest():
     rows=[]
     for name in sorted(APP_TABLES):

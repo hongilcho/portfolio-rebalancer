@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from backend.routers.plans import perform
 from data.repositories import nh_notices
+from backend.execution_models import ExecutionLink
 
 router=APIRouter(prefix='/api/nh-notices',tags=['nh-notices'])
 
@@ -15,6 +16,7 @@ class Cash(BaseModel):
 
 
 class Row(BaseModel):
+    execution: ExecutionLink | None = None
     kind: Literal['BUY','DEPOSIT','WITHDRAW','EXCHANGE_IN','KRW_ADJUST']
     account_id: str = Field(min_length=1,max_length=100)
     event_date: date

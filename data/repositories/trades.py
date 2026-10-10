@@ -478,11 +478,14 @@ def execute_batch(db, payload):
         results = []
         trade_ids = []
         for index,row in enumerate(payload['trades']):
-            ok,message = execute_trade(db,trade_date=payload['trade_date'],transaction=conn,**row)
+            ok,message = execute_trade(db,trade_date=payload['trade_date'],transaction=conn,**{key:value for key,value in row.items() if key!='execution'})
             if not ok:
                 raise ValueError(f'{index+1}번째 거래: {message} 이번 묶음은 모두 미반영입니다.')
             c.execute('SELECT id FROM trade_history WHERE account_id=%s ORDER BY trade_sequence DESC LIMIT 1',(row['account_id'],))
             trade_ids.append(c.fetchone()['id'])
+            if row.get('execution'):
+                from data.repositories.investments import attach
+                attach(c,db,payload['portfolio_id'],row['execution'],'TRADE',trade_ids[-1])
             results.append(dict(index=index,success=True,message=message))
         result = dict(success=True,success_count=len(results),errors=[],results=results,trade_ids=trade_ids,
                       message=f'{len(results)}건의 매매를 함께 저장했습니다.')

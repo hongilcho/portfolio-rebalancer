@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
 from data.data_manager import _context, get_trade_history, delete_trades
 from data.repositories import trades as repository
+from backend.execution_models import ExecutionLink
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
@@ -24,6 +25,7 @@ class TradeBatchItem(BaseModel):
     exchange_rate: Optional[float] = Field(default=None,gt=0,le=1e6,allow_inf_nan=False)
     import_source: Optional[Literal['NAMUH_KAKAO']] = None
     broker_order_no: Optional[str] = None
+    execution: ExecutionLink | None = None
 
 class BatchTradeRequest(BaseModel):
     """일괄 매매 기록 실행 요청 스키마"""

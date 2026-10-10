@@ -7,7 +7,8 @@ from logic.usd_cost import number, positive, receive
 
 
 def plain(value):
-    return json.loads(json.dumps(value, default=str))
+    from data.repositories.bookkeeping import plain as normalize
+    return normalize(value)
 
 
 def checkpoint(c, accounts):
@@ -223,6 +224,9 @@ def commit(db,pid,payload):
                     VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
                     (item_id,batch_id,entry['portfolio_id'],entry['account_id'],day,entry['kind'],row['fingerprint'],Json(stored_row),Json(entry_result),entry_result.get('flow_id'),entry_result.get('trade_id'),entry_result.get('usd_event_id')))
                 results.append(dict(id=item_id,kind=entry['kind'],account_id=entry['account_id'],**entry_result))
+                if row.get('execution') and entry['portfolio_id']==pid:
+                    from data.repositories.investments import attach
+                    attach(c,db,pid,row['execution'],'NOTICE',item_id,'NH_NOTICE')
         after=checkpoint(c,ids)
         result=plain(dict(batch_id=batch_id,notice_count=len(rows),affected_portfolios=sorted(tracks),performance_portfolios=sorted(p for p,t in tracks.items() if t),items=results,balances={aid:after[aid]['cash'] for aid in ids}))
         c.execute('UPDATE nh_notice_batches SET result=%s,audit=%s WHERE id=%s', (Json(result),Json(dict(before=before,after=after)),batch_id))

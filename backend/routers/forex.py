@@ -6,11 +6,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from data.data_manager import get_usd_ledgers, get_usd_events, _context, undo_usd_event
 from data.repositories import forex as repository
+from backend.execution_models import ExecutionLink
 
 router = APIRouter(prefix='/api/forex', tags=['forex'])
 
 
 class CashEvent(BaseModel):
+    execution: ExecutionLink | None = None
     request_id: str | None = Field(default=None,min_length=8,max_length=100)
     portfolio_id: str | None = Field(default=None,min_length=1,max_length=100)
     flow_mode: Literal['EXTERNAL','INCOME','ALREADY_RECORDED'] = 'EXTERNAL'
