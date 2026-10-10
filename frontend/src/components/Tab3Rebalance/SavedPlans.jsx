@@ -24,7 +24,7 @@ export default function SavedPlans({ portfolioId, onStartInvestment, revision=0 
       <summary>{p.name} · {new Date(p.created_at).toLocaleDateString('ko-KR')} · {p.archived ? '보관됨' : p.execution?'투자 회차 있음':'저장됨'}</summary>
       {onStartInvestment && <button className="btn btn-primary" disabled={busy || (!p.execution && (p.archived || p.payload.trade_plan.some(l=>l.type!=='BUY')))} onClick={()=>onStartInvestment({plan_id:p.id,cycle_id:p.execution?.id})}>{p.execution?'투자 실행 보기':'이 계획으로 투자 실행 준비'}</button>}
       {p.execution && <p>실행에 사용한 원본 계획입니다. 목표 변경과 기록 연결은 8번 투자 실행에서 관리합니다.</p>}
-      <p>계산 시나리오 {p.payload.scenario} · 신규 현금 {formatKRW(p.payload.new_cash_krw)}. 저장 후 장부에 입력한 거래를 해당 행에 연결하세요.</p>
+      {p.payload.plan_type==='CASH_RETURN'?<p>CMA 현금 회수 계획 · 실제 이체는 8번에서 진행·기록합니다.</p>:<p>계산 시나리오 {p.payload.scenario} · 신규 현금 {formatKRW(p.payload.new_cash_krw)}. 저장 후 장부에 입력한 거래를 해당 행에 연결하세요.</p>}
       {p.payload.trade_plan.map((l,i)=>{const progress=planProgress(p,i);const key=`${p.id}/${i}`;return <div key={key} className="trade-row-card">
         <b>{l.account_alias} · {l.asset_name} · {l.type==='BUY' ? '매수' : '매도'}</b>
         <p>계획 {formatQuantity(l.qty,'주')} ({formatKRW(l.total_krw)}) · 기록 {formatQuantity(progress.quantity,'주')} ({formatKRW(progress.amount)}) · 남음 {formatQuantity(progress.remaining,'주')}{progress.excess>0 && ` · 초과 ${formatQuantity(progress.excess,'주')}`}</p>

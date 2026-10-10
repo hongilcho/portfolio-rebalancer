@@ -3,6 +3,7 @@ import {ArrowRight, Check, ClipboardPaste, ListChecks} from 'lucide-react';
 import {investmentProgress} from '../../utils/investmentProgress';
 import {formatKRW, formatUSD, formatQuantity} from '../../utils/formatters';
 import './ExecutionTab.css';
+import FundingDetails from './FundingDetails';
 
 const trade = step => ['BUY','SELL'].includes(step.kind);
 const amount = (step, value) => trade(step) ? formatQuantity(value, step.unit || '주')
@@ -30,7 +31,7 @@ export default function ExecutionTab({cycle, onOpenPlans, onRecord, onReview, on
     {(!compactWhileInput || !inputStep) && <section className="section-card execution-heading">
       <div className="execution-title"><span className="execution-eyebrow">투자 회차</span><h2>{cycle.name}</h2>
         <p>{cycle.portfolio_name} · {cycle.status==='CLOSED' ? '종료됨' : cycle.status==='PAUSED' ? '일시 중단' : '진행 중'}</p></div>
-      <div className="execution-budget"><span>계획 예산</span><strong>{formatKRW(cycle.budget_krw)}</strong></div>
+      <div className="execution-budget"><span>{cycle.plan_type==='CASH_RETURN'?'회수 예정 금액':'계획 예산'}</span><strong>{formatKRW(cycle.budget_krw)}</strong></div>
       <div className="execution-overall"><span>작업 {progress.complete.length} / {progress.total} 완료</span>
         <progress value={progress.complete.length} max={Math.max(1,progress.total)} aria-label="투자 작업 진행률"/>
         <span>{progress.remaining.length ? `남은 작업 ${progress.remaining.length}건` : '모든 작업이 기록되었습니다'}</span></div>
@@ -81,9 +82,13 @@ export default function ExecutionTab({cycle, onOpenPlans, onRecord, onReview, on
         <span className="execution-state done">완료</span></li>)}</ul>
       {!progress.complete.length && <p>기록이 저장되면 이곳에 표시됩니다.</p>}
     </details>
-    <details className="section-card execution-help"><summary>이번 투자 안내</summary>
-      <p>입력한 결과는 매매 및 입출금 기록에도 함께 표시됩니다. 기록의 취소·정정은 5번 탭에서 처리합니다.</p>
-      <p>계획 저장이나 투자 종료는 잔고를 변경하지 않습니다. 실제 실행한 내역만 확인하여 기록해주세요.</p>
-    </details></>}
+    <section className="section-card execution-summary" aria-label="투자 요약"><h3>{cycle.plan_type==='CASH_RETURN'?'현금 회수 요약':'투자 요약'}</h3>
+      <p>{cycle.name} · {progress.complete.length}/{progress.total} 작업 완료</p>
+      {(cycle.steps || []).filter(step=>step.kind==='BUY').map(step=>{const item=progress.steps.find(row=>row.step.id===step.id);return <div className="trade-row-card" key={step.id}><strong>{step.asset_name}</strong><p>{step.account_alias} · 목표 {formatQuantity(item.target,'주')} / 기록 {formatQuantity(item.value,'주')} / 남음 {formatQuantity(item.remaining,'주')}{item.excluded?' · 제외':''}</p></div>;})}
+      {cycle.plan_type==='CASH_RETURN' && cycle.steps.map(step=><div className="trade-row-card" key={step.id}><strong>{step.account_alias} → {step.destination_alias}</strong><p>{formatKRW(step.target_amount)}</p></div>)}
+      {cycle.plan_type!=='CASH_RETURN' && <p>가격 여유 {cycle.payload?.price_buffer_percent || 0}% · 환율 여유 {cycle.payload?.fx_buffer_percent || 0}%</p>}
+      <FundingDetails rows={cycle.funding_details}/>
+      <details className="execution-help"><summary>입력 방법과 장부 처리 안내</summary><p>실제 입금·이체·환전·매수는 증권사에서 진행한 뒤 기록합니다. 5번에 이미 기록했다면 가져오기로 연결하세요. 참고 단가는 실제 체결 단가로 수정합니다.</p></details>
+    </section></>}
   </div>;
 }

@@ -113,6 +113,9 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
         {scopedAccounts.map(a => <option key={a.id} value={a.id}>{a.account_alias} ({a.account_no})</option>)}
       </select></label>
       {pending && <div role="alert"><p>달러 기록의 저장 확인 중입니다. 계좌·금액을 바꾸지 않고 같은 요청으로 확인합니다.</p><button type="button" className="btn btn-primary" disabled={saving} onClick={submit}>같은 요청의 결과 다시 확인</button></div>}
+      <div className="trade-row-card" aria-label="환전 계좌 예수금"><strong>현재 장부 예수금</strong><p>원화 {formatKRW(account?.deposit_krw || 0)} · 달러 {formatUSD(account?.deposit_usd || 0)}</p>
+        {exchange && Number(krw)>0 && Number(usd)>0 && <p>환전 후 예상 잔액: 원화 {formatKRW(Number(account?.deposit_krw || 0)+(effectiveKind==='EXCHANGE_IN'?-Number(krw):Number(krw)))} · 달러 {formatUSD(Number(account?.deposit_usd || 0)+(effectiveKind==='EXCHANGE_IN'?Number(usd):-Number(usd)))}</p>}
+      </div>
       {ledger ? <div style={{ margin: '14px 0' }}>
         기록상 달러 <b>{formatUSD(ledger.usd_balance)}</b> · 평균 취득환율 <b>{rateText(ledger.average_rate)} 원</b>/달러
         <div>현재 계좌 달러 {formatUSD(ledger.actual_usd)} · 원화 취득원가 {formatKRW(ledger.cost_krw)}</div>

@@ -355,7 +355,7 @@ export default function App() {
 
                 {activeTab==='tab8' && (loadedBundle?.portfolioId!==currentPortfolioId?<ViewLoading/>:<InvestmentWorkspace key={currentPortfolioId} portfolioId={currentPortfolioId}
                   model={investment} accounts={accounts} usdKrw={usdKrw} selection={executionSelection} inputContext={executionInput}
-                  writing={writing} onBusyChange={executionBusy} onCloseInput={closeExecutionInput}
+                  writing={writing} onBusyChange={executionBusy} onCloseInput={closeExecutionInput} onStartInvestment={openInvestment}
                   onOpenPlans={()=>setActiveTab('tab3')} onOpenHistory={()=>setActiveTab('tab4')}
                   onRecord={(cycle,step)=>setExecutionInput({portfolio_id:currentPortfolioId,cycle_id:cycle.id,revision:cycle.revision,name:cycle.name,step,steps:cycle.steps})}/>)
                 }

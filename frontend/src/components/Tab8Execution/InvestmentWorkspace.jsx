@@ -1,13 +1,14 @@
 import {pendingInvestmentSteps} from '../../utils/investmentDrafts';
 import React,{useEffect,useState,useRef,useCallback} from 'react';
 import ExecutionTab from './ExecutionTab';
+import CashReturnPlanner from './CashReturnPlanner';
 import StartInvestment from './StartInvestment';
 import GoalEditor from './GoalEditor';
 import ExistingRecords from './ExistingRecords';
 import {api} from '../../utils/api';
 import {formatKRW,formatUSD,formatQuantity} from '../../utils/formatters';
 import {investmentProgress} from '../../utils/investmentProgress';
-export default function InvestmentWorkspace({portfolioId,model,accounts,usdKrw,selection,inputContext,onRecord,onCloseInput,onOpenPlans,onOpenHistory,onBusyChange,writing}) {
+export default function InvestmentWorkspace({portfolioId,model,accounts,usdKrw,selection,inputContext,onRecord,onCloseInput,onOpenPlans,onOpenHistory,onBusyChange,writing,onStartInvestment}) {
   const [past,setPast]=useState(null),[selected,setSelected]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[reason,setReason]=useState(''),[pickingExisting,setPickingExisting]=useState(false);
   const chooseSequence=useRef(0);
   const [loadingPast,setLoadingPast]=useState(false);
@@ -43,7 +44,8 @@ export default function InvestmentWorkspace({portfolioId,model,accounts,usdKrw,s
     {cycle && !recording && !pickingExisting && <>
       {cycle.status!=='CLOSED' && <div className="section-card execution-controls"><button className="btn btn-secondary" disabled={actionBusy} onClick={()=>state(cycle.status==='PAUSED'?'ACTIVE':'PAUSED')}>{cycle.status==='PAUSED'?'투자 이어가기':'잠시 중단'}</button>
         <details className="execution-help"><summary>미실행 작업을 남기고 종료</summary><label>종료 이유<input aria-label="투자 종료 이유" className="input-text" maxLength={2000} value={reason} disabled={actionBusy} onChange={e=>setReason(e.target.value)}/></label><p>남은 작업 {progress.remaining.length}건. 종료해도 잔고나 거래를 취소하지 않습니다.</p><button className="btn btn-secondary" disabled={actionBusy || !reason.trim()} onClick={()=>state('CLOSED')}>이유를 남기고 투자 종료</button></details></div>}
-      {cycle.status!=='CLOSED' && <GoalEditor key={cycle.id+'/'+cycle.revision} portfolioId={portfolioId} cycle={cycle} onUpdated={refresh} onBusyChange={onBusyChange} disabled={actionBusy}/>}
+      {cycle.status!=='CLOSED' && cycle.plan_type!=='CASH_RETURN' && <GoalEditor key={cycle.id+'/'+cycle.revision} portfolioId={portfolioId} cycle={cycle} onUpdated={refresh} onBusyChange={onBusyChange} disabled={actionBusy}/>}
+      {cycle.status==='CLOSED' && cycle.plan_type!=='CASH_RETURN' && <CashReturnPlanner key={cycle.id} portfolioId={portfolioId} cycle={cycle} disabled={actionBusy} canStart={!model.cycle || model.cycle.status==='CLOSED'} onBusyChange={onBusyChange} onOpen={async selection=>{await model.refresh();setPast(null);setSelected('');onCloseInput();onStartInvestment?.(selection);}}/>}
       <details className="section-card execution-help"><summary>기록 연결과 이번 투자 결과</summary><p>현재 장부 기준입니다. 실제 기록의 취소·정정은 5번에서 처리합니다.</p>
         <ul className="execution-records">{cycle.results.map(r=><li key={r.id}><span>{r.event_date} · {cycle.steps.find(s=>s.id===r.step_id)?.title} · {r.quantity?formatQuantity(r.quantity,'주'):r.currency==='USD'?formatUSD(r.amount):formatKRW(r.amount)}{r.voided?' · 취소/중복':r.ledger_status==='RECORDED'?' · 반영됨':' · 확인 필요'}</span>
           {!r.voided && r.ledger_status==='RECORDED' && cycle.status!=='CLOSED' && <button className="btn btn-secondary btn-sm" disabled={actionBusy} onClick={()=>unlink(r)}>연결만 해제</button>}</li>)}</ul>

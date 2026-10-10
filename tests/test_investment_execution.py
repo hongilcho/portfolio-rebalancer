@@ -157,3 +157,40 @@ def test_start_review_detects_cash_changes_even_when_instructions_are_identical(
     before={'accounts':[{'id':'cma','deposit_krw':1150000,'deposit_usd':0}]}
     after={'accounts':[{'id':'cma','deposit_krw':1150001,'deposit_usd':0}]}
     assert preview_token(steps,before)!=preview_token(steps,after)
+
+
+def test_domestic_buffer_deducts_existing_cash_without_raising_buy_quantity(inputs):
+    plan,accounts,assets,setup=deepcopy(inputs)
+    plan['trade_plan']=plan['trade_plan'][:1];plan['trade_plan'][0].update(qty=80,price=10000)
+    accounts[1]['deposit_krw']=200000;setup['price_buffer_percent']=1
+    steps=build_steps(plan,accounts,assets,setup)
+    assert float(next(s for s in steps if s['kind']=='TRANSFER')['target_amount'])==608000
+    assert float(next(s for s in steps if s['kind']=='BUY')['target_quantity'])==80
+
+def test_us_price_and_fx_buffers_deduct_existing_dollars_separately(inputs):
+    plan,accounts,assets,setup=deepcopy(inputs);setup.update(price_buffer_percent=1,fx_buffer_percent=1)
+    steps=build_steps(plan,accounts,assets,setup)
+    exchange=next(s for s in steps if s['kind']=='EXCHANGE_IN')
+    assert float(exchange['target_amount'])==405
+    assert float(exchange['estimated_krw'])==572670
+    assert float(next(s for s in steps if s['kind']=='BUY' and s['currency']=='USD')['target_quantity'])==5
+    accounts[2]['deposit_usd']=1000
+    steps=build_steps(plan,accounts,assets,setup)
+    assert not any(s['kind']=='EXCHANGE_IN' for s in steps)
+
+def test_buffer_bounds_and_legacy_setup_remain_compatible(inputs):
+    plan,accounts,assets,setup=inputs
+    for value in (-1,21,float('nan'),float('inf')):
+        with pytest.raises(ValueError):build_steps(plan,accounts,assets,{**setup,'price_buffer_percent':value})
+    assert plain(Setup(request_id='legacy-request',plan_id='p',representative_account_id='cma',usd_krw=1400).model_dump()).get('price_buffer_percent') is None
+
+def test_cash_return_plan_only_allows_current_same_scope_unprotected_krw(inputs):
+    from logic.investment_execution import build_return_steps
+    _,accounts,_,_=deepcopy(inputs)
+    accounts[2]['deposit_krw']=10000
+    plan=dict(plan_type='CASH_RETURN',destination_account_id='cma',return_plan=[dict(account_id='us',amount_krw='9000')])
+    steps=build_return_steps(plan,accounts)
+    assert steps[0]['kind']=='TRANSFER' and steps[0]['currency']=='KRW' and float(steps[0]['target_amount'])==9000
+    assert accounts[2]['deposit_krw']==10000
+    for changes in ({'account_id':'isa','amount_krw':'1'},{'account_id':'other','amount_krw':'1'},{'account_id':'us','amount_krw':'11000'},{'account_id':'us','amount_krw':'1.5'}):
+        with pytest.raises(ValueError):build_return_steps({**plan,'return_plan':[changes]},accounts)

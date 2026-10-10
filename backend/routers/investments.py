@@ -14,6 +14,8 @@ class Setup(BaseModel):
     additional_cash_krw:float=Field(default=0,ge=0,le=1e15,allow_inf_nan=False)
     source_limits:dict[str,float]=Field(default_factory=dict,max_length=100)
     usd_krw:float=Field(gt=0,le=1e6,allow_inf_nan=False)
+    price_buffer_percent:float | None=Field(default=None,ge=0,le=20,allow_inf_nan=False)
+    fx_buffer_percent:float | None=Field(default=None,ge=0,le=20,allow_inf_nan=False)
     preview_token:str=Field(default='',pattern=r'^(?:[0-9a-f]{64})?$')
 class Link(BaseModel):
     step_id:str=Field(min_length=1,max_length=160)
@@ -24,7 +26,7 @@ class State(BaseModel):
     status:Literal['ACTIVE','PAUSED','CLOSED']
     reason:str=Field(default='',max_length=2000)
 @router.get('/capabilities')
-def capabilities(): return {'investment_protocol':1,'automatic_execution':False}
+def capabilities(): return {'investment_protocol':1,'automatic_execution':False,'funding_buffer_protocol':1,'cash_return_protocol':1}
 @router.get('/{pid}')
 def read(pid:str): return perform(investments.read,pid)
 @router.get('/{pid}/plans')
@@ -56,3 +58,25 @@ class Revision(BaseModel):
 @router.patch('/{pid}/{cycle_id}/goals')
 def revise(pid:str,cycle_id:str,request:Revision):
     return perform(investments.revise,pid,cycle_id,request.model_dump(mode='json'))
+
+class CashReturnRequest(BaseModel):
+    request_id:str=Field(min_length=8,max_length=100)
+    name:str=Field(min_length=1,max_length=120)
+    destination_account_id:str=Field(min_length=1,max_length=100)
+    keep_amounts:dict[str,float]=Field(min_length=1,max_length=100)
+    preview_token:str=Field(default='',pattern=r'^(?:[0-9a-f]{64})?$')
+
+@router.get('/{pid}/{cycle_id}/cash-return')
+def return_options(pid:str,cycle_id:str):
+    from data.repositories import cash_return
+    return perform(cash_return.read,pid,cycle_id)
+
+@router.post('/{pid}/{cycle_id}/cash-return/prepare')
+def prepare_return(pid:str,cycle_id:str,request:CashReturnRequest):
+    from data.repositories import cash_return
+    return perform(cash_return.prepare,pid,cycle_id,request.model_dump(mode='json'))
+
+@router.post('/{pid}/{cycle_id}/cash-return')
+def save_return(pid:str,cycle_id:str,request:CashReturnRequest):
+    from data.repositories import cash_return
+    return perform(cash_return.create,pid,cycle_id,request.model_dump(mode='json'))

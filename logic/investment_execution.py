@@ -8,12 +8,16 @@ def can_transfer_out(account):
     return not any(label in str(account.get('account_type','')).upper() for label in PROTECTED)
 
 def build_steps(plan, accounts, assets, setup, existing_quantities=None):
+    if plan.get('plan_type')=='CASH_RETURN':return build_return_steps(plan,accounts)
     accounts={str(a['id']):a for a in accounts}
     assets={str(a['id']):a for a in assets}
     main=setup['representative_account_id']
     if main not in accounts or not can_transfer_out(accounts[main]):
         raise ValueError('대표 자금 계좌는 출금 가능한 현재 포트폴리오 계좌로 선택해주세요.')
     fx=positive(setup['usd_krw'])
+    price_buffer=number(setup.get('price_buffer_percent') or 0)/100
+    fx_buffer=number(setup.get('fx_buffer_percent') or 0)/100
+    if not 0<=price_buffer<=Decimal('0.2') or not 0<=fx_buffer<=Decimal('0.2'):raise ValueError('여유율은 0~20%로 지정해주세요.')
     incoming=number(setup['additional_cash_krw'])
     if incoming<0:raise ValueError('추가로 입금할 금액은 0 이상이어야 합니다.')
     grouped={}
@@ -45,10 +49,15 @@ def build_steps(plan, accounts, assets, setup, existing_quantities=None):
         fund_key='fund';steps.append(dict(key=fund_key,kind='DEPOSIT',account_id=main,account_alias=accounts[main]['account_alias'],
             currency='KRW',target_amount=str(incoming),title='대표 계좌에 투자금 준비',depends_on=[]))
     for aid,g in grouped.items():
-        usd_short=max(Decimal(0),g['usd']-max(Decimal(0),number(accounts[aid].get('deposit_usd') or 0)))
+        required_domestic=(g['krw']*(1+price_buffer)).quantize(Decimal('1'),rounding=ROUND_CEILING)
+        usd_short=max(Decimal(0),g['usd']*(1+price_buffer)-max(Decimal(0),number(accounts[aid].get('deposit_usd') or 0)))
         usd_short=usd_short.quantize(Decimal('0.01'),rounding=ROUND_CEILING)
-        fx_krw=(usd_short*fx).quantize(Decimal('1'),rounding=ROUND_CEILING)
-        g['required_krw']=g['krw']+fx_krw
+        fx_krw=(usd_short*fx*(1+fx_buffer)).quantize(Decimal('1'),rounding=ROUND_CEILING)
+        g['required_krw']=required_domestic+fx_krw
+        g['funding']=dict(account_id=aid,account_alias=accounts[aid]['account_alias'],
+            estimated_buy_krw=str(g['krw']+g['usd']*fx),price_buffer_krw=str((g['krw']+g['usd']*fx)*price_buffer),
+            fx_buffer_krw=str(usd_short*fx*fx_buffer),existing_krw=str(accounts[aid].get('deposit_krw') or 0),
+            existing_usd=str(accounts[aid].get('deposit_usd') or 0),required_krw=str(g['required_krw']))
         needed[aid]=max(Decimal(0),g['required_krw']-max(Decimal(0),number(accounts[aid].get('deposit_krw') or 0)))
         if aid==main:needed[aid]=max(Decimal(0),needed[aid]-incoming)
         if usd_short>0:
@@ -79,6 +88,7 @@ def build_steps(plan, accounts, assets, setup, existing_quantities=None):
         if aid in fx_steps:
             fx_steps[aid]['depends_on']=deps;steps.append(fx_steps[aid])
         for line in g['lines']:
+            line['funding']=g['funding']
             line['depends_on']=[fx_steps[aid]['key']] if line['currency']=='USD' and aid in fx_steps else deps
             steps.append(line)
     return steps
@@ -124,3 +134,32 @@ def closing_progress(cycle):
                 target=str(target), recorded=str(value),
                 remaining=str(max(Decimal(0), target-value)), review_required=review))
     return dict(remaining_steps=remaining, excluded_step_ids=excluded)
+
+
+def is_cma_account(account):
+    return can_transfer_out(account) and 'CMA' in (str(account.get('account_type',''))+' '+str(account.get('account_alias',''))).upper()
+
+def build_return_steps(plan,accounts):
+    accounts={str(a['id']):a for a in accounts}
+    destination=accounts.get(str(plan.get('destination_account_id','')))
+    if not destination or not is_cma_account(destination):raise ValueError('현재 포트폴리오의 CMA 회수 계좌를 선택해주세요.')
+    lines=plan.get('return_plan') or []
+    if not 1<=len(lines)<=100:raise ValueError('회수할 계좌를 선택해주세요.')
+    seen=set();steps=[]
+    for line in lines:
+        aid=str(line['account_id']);account=accounts.get(aid);amount=positive(line['amount_krw'])
+        if aid in seen or not account or not can_transfer_out(account) or aid==str(destination['id']):
+            raise ValueError('회수 계좌를 확인해주세요. 절세계좌는 출금하지 않습니다.')
+        if amount!=amount.to_integral_value() or amount>max(Decimal(0),number(account.get('deposit_krw') or 0)):
+            raise ValueError('회수 금액이 현재 원화 예수금을 초과하거나 원 단위가 아닙니다. 계획을 다시 확인해주세요.')
+        seen.add(aid);steps.append(dict(key='return:'+aid,kind='TRANSFER',account_id=aid,account_alias=account['account_alias'],
+            destination_account_id=str(destination['id']),destination_alias=destination['account_alias'],currency='KRW',
+            target_amount=str(amount),title='CMA로 남은 원화 회수',depends_on=[]))
+    return steps
+
+def plan_budget(plan):
+    if plan.get('plan_type')=='CASH_RETURN':return sum(float(line['amount_krw']) for line in plan.get('return_plan',[]))
+    return sum(float(line['qty'])*float(line['price']) for line in plan['trade_plan'])
+
+def funding_details(steps):
+    return list({step['account_id']:step['funding'] for step in steps if step.get('funding')}.values())

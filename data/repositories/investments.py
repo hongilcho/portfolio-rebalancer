@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from psycopg2.extras import Json, RealDictCursor
-from logic.investment_execution import build_steps, closing_progress
+from logic.investment_execution import build_steps, closing_progress,plan_budget,funding_details
 from data.repositories.bookkeeping import plain
 from data.repositories.nh_notices import lock_scope
 S = 'portfolio_execution.'
@@ -125,9 +125,13 @@ def _setup(c,pid,request):
     c.execute('''SELECT l.line_no,t.quantity,t.id FROM rebalance_plan_links l JOIN trade_history t ON t.id=l.trade_id
       WHERE l.plan_id=%s''',(plan['id'],))
     existing=sorted(c.fetchall(),key=lambda r:(r['line_no'],r['id']));quantities={}
+    if plan['payload'].get('plan_type')=='CASH_RETURN':
+        c.execute("SELECT status FROM portfolio_execution.cycles WHERE id=%s AND portfolio_id=%s",(plan['payload']['source_cycle_id'],pid))
+        source_cycle=c.fetchone()
+        if not source_cycle or source_cycle['status']!='CLOSED':raise ValueError('종료한 투자에서 만든 회수 계획을 선택해주세요.')
     for row in existing: quantities[row['line_no']]=quantities.get(row['line_no'],0)+float(row['quantity'])
     steps=build_steps(plan['payload'],accounts,assets,request,quantities)
-    budget=sum(float(line['qty'])*float(line['price']) for line in plan['payload']['trade_plan'])
+    budget=plan_budget(plan['payload'])
     snapshot=dict(accounts=[{key:a.get(key) for key in ('id','deposit_krw','deposit_usd')} for a in accounts],
         plan=dict(id=plan['id'],payload=plan['payload'],cutoff=plan['cutoff']),linked_trades=existing)
     return plan,steps,budget,existing,snapshot
@@ -145,7 +149,7 @@ def prepare(db,pid,request):
     with db.connect() as conn,conn.cursor(cursor_factory=RealDictCursor) as c:
         c.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         plan,steps,budget,_,snapshot=_setup(c,pid,request)
-        return {'plan_id':plan['id'],'name':plan['name'],'budget_krw':budget,'steps':steps,'setup':request,'preview_token':preview_token(steps,snapshot)}
+        return {'plan_id':plan['id'],'name':plan['name'],'budget_krw':budget,'steps':steps,'setup':request,'funding_details':funding_details(steps),'preview_token':preview_token(steps,snapshot)}
 
 def create(db,pid,request):
     request=plain(request)
@@ -183,7 +187,8 @@ def _read(c,pid,cycle_id):
       WHERE cy.id=%s AND cy.portfolio_id=%s''',(cycle_id,pid))
     row=c.fetchone()
     if not row: raise ValueError('투자 과정을 찾을 수 없습니다.')
-    cycle=dict(row);cycle['budget_krw']=sum(float(line['qty'])*float(line['price']) for line in cycle.pop('plan_payload')['trade_plan'])
+    cycle=dict(row);plan=cycle.pop('plan_payload');cycle['budget_krw']=plan_budget(plan)
+    cycle['plan_type']=plan.get('plan_type','INVESTMENT');cycle['source_cycle_id']=plan.get('source_cycle_id')
     c.execute('SELECT payload FROM '+S+'steps WHERE cycle_id=%s ORDER BY ordinal',(cycle_id,));cycle['steps']=[r['payload'] for r in c.fetchall()]
     c.execute('''SELECT r.payload,l.record_kind,l.record_id FROM portfolio_execution.results r
       JOIN portfolio_execution.steps s ON s.id=r.step_id LEFT JOIN portfolio_execution.record_links l ON l.result_id=r.id
@@ -265,6 +270,7 @@ def revise(db,pid,cycle_id,request):
     with db.connect() as conn,conn.cursor(cursor_factory=RealDictCursor) as c:
         lock_scope(c,pid,[]);cycle=lock_cycle(c,pid,cycle_id)
         current=_read(c,pid,cycle_id)
+        if current['plan_type']=='CASH_RETURN':raise ValueError('현금 회수 금액 변경은 회차를 종료하고 새 회수 계획을 만들어주세요.')
         old_steps={s['id']:s for s in current['steps']}
         prior=[change for step in old_steps.values() for change in step.get('goal_history',[]) if change['request_id']==request['request_id']]
         if prior:
