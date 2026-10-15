@@ -136,3 +136,32 @@ test('cross portfolio withdrawal previews equal and opposite movements and links
   assert.ok(validateNhNotice({...r,crossPortfolio:false},ctx,accounts,assets,'p',[],[]).errors.length);
   assert.equal(previewNhNotices([{...r,applyCash:false}],{'2026-10-08':ctx}).balances.peer.deposit_krw,100);
 });
+
+
+test('a zero-dollar account starts cost from the first actual exchange and accumulates subsequent exchanges',()=>{
+  const e={...resolve(exchange),accountId:'acc'};
+  const ctx={...context,accounts:[{id:'acc',deposit_krw:2000000,deposit_usd:0}]};
+  const result=previewNhNotices([e,{...e,usdAmount:100,krwAmount:140000}],{'2026-10-08':ctx},[]);
+  assert.deepEqual(result.errors,[]);
+  assert.deepEqual(result.expected.acc,{deposit_krw:2000000,deposit_usd:0});
+  assert.deepEqual(result.balances.acc,{deposit_krw:900003,deposit_usd:817.31});
+  assert.equal(result.costs.acc.cost,1099997);
+  assert.equal(result.costs.acc.balance,817.31);
+});
+
+test('missing cost for nonzero dollars still blocks, including tiny balances',()=>{
+  const e={...resolve(exchange),accountId:'acc'};
+  for(const usd of [10,0.00000001,-1]){
+    const ctx={...context,accounts:[{id:'acc',deposit_krw:2000000,deposit_usd:usd}]};
+    assert.ok(previewNhNotices([e],{'2026-10-08':ctx},[]).errors.some(error=>error.includes('시작 기준환율')));
+  }
+});
+
+test('existing empty ledgers retain date and reconciliation guards',()=>{
+  const e={...resolve(exchange),accountId:'acc'};
+  const ctx={...context,accounts:[{id:'acc',deposit_krw:2000000,deposit_usd:0}]};
+  const state={account_id:'acc',usd_balance:0,cost_krw:0,last_event_date:'2026-10-09',needs_reconciliation:false};
+  assert.ok(previewNhNotices([e],{'2026-10-08':ctx},[state]).errors.some(error=>error.includes('이전 날짜')));
+  assert.ok(previewNhNotices([e],{'2026-10-08':ctx},[{...state,needs_reconciliation:true}]).errors.some(error=>error.includes('잔고·원가')));
+  assert.equal(state.cost_krw,0);
+});

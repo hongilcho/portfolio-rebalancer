@@ -38,7 +38,8 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
   const { accounts: scopedAccounts, account } = resolveUsdAccount(accounts, accountId, portfolioId);
   const activeAccountId = String(account?.id || '');
   const ledger = ledgers.find(s => String(s.account_id) === activeAccountId);
-  const effectiveKind = ledger ? kind : 'OPENING';
+  const zeroOpening = !ledger && account && Number(account.deposit_usd) === 0;
+  const effectiveKind = ledger ? kind : zeroOpening ? 'EXCHANGE_IN' : 'OPENING';
   const usesAmounts = ['EXCHANGE_IN', 'EXCHANGE_OUT', 'DEPOSIT', 'WITHDRAW'].includes(effectiveKind);
   const exchange = ['EXCHANGE_IN', 'EXCHANGE_OUT'].includes(effectiveKind);
   const usesRate = ['OPENING', 'RECONCILE', 'DEPOSIT','WITHDRAW'].includes(effectiveKind);
@@ -108,7 +109,7 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
       💵 달러 원가·환전 관리 {open ? '접기' : '열기'}
     </button>}
     {open && <div style={{ marginTop: 16 }}>
-      <p style={{ color: 'var(--text-secondary)' }}>계좌별 시작 잔액과 기준환율을 등록하면 이후 달러 매수에 평균 취득환율을 자동 적용합니다. 기존 보유분의 원가는 유지합니다.</p>
+      <p style={{ color: 'var(--text-secondary)' }}>계좌별 달러 취득원가를 기록하면 이후 달러 매수에 평균 취득환율을 자동 적용합니다. 기존 보유분의 원가는 유지합니다.</p>
       <label>계좌 <select className="input-select" value={activeAccountId} disabled={locked} onChange={e => { setAccountId(e.target.value); setUsd(''); setKrw(''); setRate(''); setNotes(''); setMessage(''); }}>
         {scopedAccounts.map(a => <option key={a.id} value={a.id}>{a.account_alias} ({a.account_no})</option>)}
       </select></label>
@@ -120,7 +121,7 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
         기록상 달러 <b>{formatUSD(ledger.usd_balance)}</b> · 평균 취득환율 <b>{rateText(ledger.average_rate)} 원</b>/달러
         <div>현재 계좌 달러 {formatUSD(ledger.actual_usd)} · 원화 취득원가 {formatKRW(ledger.cost_krw)}</div>
         {ledger.needs_reconciliation && <p role="alert" style={{ color: 'var(--color-loss)' }}>잔고 차이 {formatUSD(ledger.balance_difference)}: 실제 입출금을 확인한 뒤 ‘장부 확인 및 정정’에서 실제 잔고와 확인한 평균 취득환율을 등록해주세요. 대사 전에는 달러 매수·환전을 진행할 수 없습니다.</p>}
-      </div> : <p>시작 달러 잔액: <b>{formatUSD(account?.deposit_usd || 0)}</b>. 마지막 환전환율을 시작 기준환율로 입력해주세요.</p>}
+      </div> : zeroOpening ? <p>시작 달러 잔액은 $0.00입니다. 첫 환전을 저장하면 실제 원화 지출액과 수령 달러로 원가 추적을 시작합니다. 별도 시작 기준환율은 필요하지 않습니다.</p> : <p>시작 달러 잔액: <b>{formatUSD(account?.deposit_usd || 0)}</b>. 마지막 환전환율을 시작 기준환율로 입력해주세요.</p>}
       <form onSubmit={submit}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           {ledger && !executionContext && <label>기록 종류<br /><select className="input-select" value={kind} disabled={locked} onChange={e => setKind(e.target.value)}>
@@ -129,7 +130,7 @@ export default function UsdLedgerPanel({ accounts, assets, ledgers, flows=[], on
           <label>실제 일시 (한국시간)<br /><input aria-label="환전 기록 일시" className="input-text" type="datetime-local" required value={occurredAt} disabled={locked} onChange={e => {setOccurredAt(e.target.value);setFlowId('');setDuplicateConfirmed(false);}} /></label>
           {['DEPOSIT','WITHDRAW'].includes(effectiveKind) && <><label>달러 입출금 구분<select className="input-select" disabled={locked} value={flowMode} onChange={e=>{setFlowMode(e.target.value);setFlowId('');setDuplicateConfirmed(false);}}><option value="EXTERNAL">외부 투자자금 · 잔고와 성과 함께 반영</option>{effectiveKind==='DEPOSIT' && <option value="INCOME">배당·이자 입금 · 투자 손익으로 반영</option>}<option value="ALREADY_RECORDED">기존 성과 입출금과 연결</option></select></label>{flowMode==='ALREADY_RECORDED' && <label>연결할 기존 달러 입출금<select className="input-select" required disabled={locked} value={flowId} onChange={e=>{setFlowId(e.target.value);const flow=matchingFlows.find(f=>f.id===e.target.value);if(flow)setRate(String(flow.exchange_rate));}}><option value="">날짜·금액이 같은 기록 선택</option>{matchingFlows.map(f=><option value={f.id} key={f.id}>{f.event_date} · {formatUSD(f.native_amount)} · 평가환율 {rateText(f.exchange_rate)}원</option>)}</select></label>}{flowMode==='EXTERNAL' && matchingFlows.length>0 && <label><input type="checkbox" disabled={locked} checked={duplicateConfirmed} onChange={e=>setDuplicateConfirmed(e.target.checked)}/>같은 날짜·금액의 기존 기록과 별개의 실제 입출금입니다.</label>}</>}
           {usesAmounts && <label>달러 금액<br /><input aria-label="환전 달러 금액" className="input-number" type="number" min="0.00000001" step="any" required value={usd} disabled={locked} onChange={e => {setUsd(e.target.value);setFlowId('');setDuplicateConfirmed(false);}} /></label>}
-          {exchange && <label>{kind === 'EXCHANGE_IN' ? '실제 원화 지출액' : '실제 원화 수령액'}<br /><input aria-label="환전 원화 금액" className="input-number" type="number" min="0.01" step="any" required value={krw} disabled={locked} onChange={e => setKrw(e.target.value)} /></label>}
+          {exchange && <label>{effectiveKind === 'EXCHANGE_IN' ? '실제 원화 지출액' : '실제 원화 수령액'}<br /><input aria-label="환전 원화 금액" className="input-number" type="number" min="0.01" step="any" required value={krw} disabled={locked} onChange={e => setKrw(e.target.value)} /></label>}
           {usesRate && <label>{effectiveKind === 'DEPOSIT' ? '입금 원가·평가 기준환율' : effectiveKind==='WITHDRAW'?'출금 당시 평가환율':'시작 기준환율'}<br /><input aria-label="달러 기준환율" className="input-number" type="number" min="0.01" step="any" required value={rate} disabled={locked} onChange={e => {setRate(e.target.value);setDuplicateConfirmed(false);}} /></label>}
           <label>메모<br /><input className="input-text" value={notes} maxLength={2000} disabled={locked} onChange={e => setNotes(e.target.value)} /></label>
         </div>

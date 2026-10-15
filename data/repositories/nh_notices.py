@@ -3,7 +3,7 @@ import json
 from datetime import date, datetime
 from psycopg2.extras import Json, RealDictCursor
 from data.repositories import forex, trades
-from logic.usd_cost import number, positive, receive
+from logic.usd_cost import number, positive
 
 
 def plain(value):
@@ -125,17 +125,8 @@ def exchange(db,c,row):
     c.execute('SELECT deposit_krw,deposit_usd FROM accounts WHERE id=%s', (aid,))
     cash = c.fetchone()
     state = forex.load_state(c,aid)
-    if not state: raise ValueError('달러 시작 기준환율을 먼저 등록해주세요. 기존 달러 원가를 임의로 추정하지 않습니다.')
-    forex.validate_state(state,cash,moment)
     krw,usd = positive(row['krw_amount']),positive(row['usd_amount'])
-    if number(cash['deposit_krw'] or 0) < krw:
-        raise ValueError('환전 전 원화 예수금이 부족합니다. 입금 알림을 먼저 추가하거나 원화 예수금을 조정해주세요.')
-    balance,cost = receive(state['usd_balance'],state['cost_krw'],usd,krw)
-    before = forex.snapshot(state)
-    forex.save_state(c,aid,balance,cost,moment.date())
-    c.execute('UPDATE accounts SET deposit_krw=deposit_krw-%s,deposit_usd=%s WHERE id=%s', (krw,balance,aid))
-    event_id = forex.append_event(db,c,aid,'EXCHANGE_IN',moment,usd,krw,krw/usd,-krw,usd,before,
-        forex.snapshot(dict(usd_balance=balance,cost_krw=cost,last_event_date=moment.date())),
+    event_id = forex.record_exchange_in(db,c,aid,cash,state,moment,usd,krw,
         'NH 환전 알림 · 고시환율 '+str(row.get('quoted_rate') or '미제공'))
     if not row.get('occurred_at'):
         c.execute('UPDATE usd_cash_events SET occurred_at=NULL WHERE id=%s', (event_id,))

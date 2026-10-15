@@ -99,6 +99,36 @@ def get_events(db, account_id=None):
         conn.close()
 
 
+def record_exchange_in(db, cursor, account_id, account, state, moment, usd_amount, krw_amount, notes=''):
+    """Caller holds the account lock and owns commit/rollback, including first use."""
+    amount, krw = positive(usd_amount), positive(krw_amount)
+    if state:
+        validate_state(state, account, moment)
+    else:
+        if number(account['deposit_usd'] or 0) != 0:
+            raise ValueError('달러 시작 기준환율을 먼저 등록해주세요. 기존 달러 원가를 임의로 추정하지 않습니다.')
+        cursor.execute('SELECT id FROM usd_cash_events WHERE account_id=%s AND reversed_at IS NULL LIMIT 1', (str(account_id),))
+        if cursor.fetchone():
+            raise ValueError('기존 달러 기록의 원가 장부를 확인해주세요. 자동으로 시작 기준을 만들 수 없습니다.')
+    if number(account['deposit_krw'] or 0) < krw:
+        raise ValueError('환전에 필요한 원화 예수금이 부족합니다. 입금 알림을 먼저 추가하거나 원화 예수금을 확인해주세요.')
+    before = snapshot(state) if state else None
+    usd, cost = receive(state['usd_balance'] if state else 0, state['cost_krw'] if state else 0, amount, krw)
+    if state:
+        save_state(cursor, account_id, usd, cost, moment.date())
+    else:
+        cursor.execute('INSERT INTO usd_cash_state (account_id, usd_balance, cost_krw, last_event_date) VALUES (%s, %s, %s, %s)',
+                       (str(account_id), usd, cost, str(moment.date())))
+    after = snapshot(dict(usd_balance=usd, cost_krw=cost, last_event_date=moment.date()))
+    if not state:
+        cursor.execute("SELECT h.* FROM holdings h JOIN assets a ON a.id=h.asset_id WHERE h.account_id=%s AND a.market='US' ORDER BY h.asset_id", (str(account_id),))
+        after['opening_holdings'] = [dict(row) for row in cursor.fetchall()]
+    cursor.execute('UPDATE accounts SET deposit_krw = deposit_krw - %s, deposit_usd = %s WHERE id = %s',
+                   (krw, usd, str(account_id)))
+    return append_event(db, cursor, account_id, 'EXCHANGE_IN', moment, amount, krw, krw / amount,
+                        -krw, amount, before, after, notes)
+
+
 def record_cash_event(db, account_id, kind, occurred_at, usd_amount=0, krw_amount=0, rate=0, notes='', transaction=None):
     """Opening never changes holdings; exchange amounts are net cash movements."""
     conn = transaction if transaction is not None else db.connect()
@@ -110,6 +140,10 @@ def record_cash_event(db, account_id, kind, occurred_at, usd_amount=0, krw_amoun
         if not account:
             raise ValueError('존재하지 않는 계좌입니다.')
         state = load_state(cursor, account_id)
+        if kind == 'EXCHANGE_IN':
+            record_exchange_in(db, cursor, account_id, account, state, moment, usd_amount, krw_amount, notes)
+            if transaction is None: conn.commit()
+            return True, '달러 원가 기록이 저장되었습니다.'
         delta_krw = delta_usd = Decimal(0)
         if kind == 'OPENING':
             if state:
@@ -135,7 +169,7 @@ def record_cash_event(db, account_id, kind, occurred_at, usd_amount=0, krw_amoun
             else:
                 validate_state(state, account, moment)
                 amount = positive(usd_amount)
-                if kind in ('EXCHANGE_IN', 'EXCHANGE_OUT'):
+                if kind == 'EXCHANGE_OUT':
                     krw = positive(krw_amount)
                     fx = krw / amount
                 elif kind in ('DEPOSIT', 'WITHDRAW'):
@@ -143,10 +177,9 @@ def record_cash_event(db, account_id, kind, occurred_at, usd_amount=0, krw_amoun
                     krw = amount * fx
                 else:
                     raise ValueError('지원하지 않는 달러 거래 유형입니다.')
-                if kind in ('EXCHANGE_IN', 'DEPOSIT'):
+                if kind == 'DEPOSIT':
                     usd, cost = receive(state['usd_balance'], state['cost_krw'], amount, krw)
                     delta_usd = amount
-                    delta_krw = -krw if kind == 'EXCHANGE_IN' else Decimal(0)
                 else:
                     usd, cost, _ = spend(state['usd_balance'], state['cost_krw'], amount)
                     delta_usd = -amount

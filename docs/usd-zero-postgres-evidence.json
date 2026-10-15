@@ -1,0 +1,276 @@
+{
+  "database": "usd_zero_verify_20261015_104352_316e14",
+  "host": "127.0.0.1",
+  "port": 55441,
+  "cluster": "C:\\Users\\hammo\\.codex\\worktrees\\usd-zero-opening\\portfolio-rebalancer\\backups\\usd_zero_pg_20261015",
+  "checks": [
+    {
+      "name": "concurrent distinct first conversions serialize on a real account row",
+      "status": "PASS",
+      "seconds": 1.469,
+      "detail": {
+        "successes": 2,
+        "state_rows": 1,
+        "event_rows": 2,
+        "usd": 150,
+        "cost_krw": "215001"
+      }
+    },
+    {
+      "name": "manual duplicate concurrent requests apply once",
+      "status": "PASS",
+      "seconds": 1.219,
+      "detail": {
+        "successful_responses": 2,
+        "event_rows": 1,
+        "receipt_rows": 1
+      }
+    },
+    {
+      "name": "notice duplicate concurrent requests apply once",
+      "status": "PASS",
+      "seconds": 3.171,
+      "detail": {
+        "successful_responses": 2,
+        "event_rows": 1,
+        "receipt_rows": 1
+      }
+    },
+    {
+      "name": "concurrent first conversions cannot overspend KRW",
+      "status": "PASS",
+      "seconds": 2.36,
+      "detail": {
+        "successes": 1,
+        "rejected": 1,
+        "event_rows": 1,
+        "receipt_rows": 1
+      }
+    },
+    {
+      "name": "distinct NH previews reject stale cash after lock release",
+      "status": "PASS",
+      "seconds": 1.875,
+      "detail": {
+        "successes": 1,
+        "stale_rejections": 1,
+        "event_rows": 1
+      }
+    },
+    {
+      "name": "manual and NH first conversions share locking and one state",
+      "status": "PASS",
+      "seconds": 5.453,
+      "detail": [
+        {
+          "manual_success": true,
+          "notice_success": true,
+          "event_rows": 2
+        },
+        {
+          "manual_success": true,
+          "notice_success": false,
+          "event_rows": 1
+        },
+        {
+          "manual_success": true,
+          "notice_success": false,
+          "event_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "manual concurrent first-conversion undo restores only once",
+      "status": "PASS",
+      "seconds": 1.359,
+      "detail": {
+        "successful_cancel_responses": 2,
+        "cash_reversed_once": true,
+        "retry_reapplied": false
+      }
+    },
+    {
+      "name": "notice concurrent first-conversion undo restores only once",
+      "status": "PASS",
+      "seconds": 1.422,
+      "detail": {
+        "successful_cancel_responses": 2,
+        "cash_reversed_once": true,
+        "retry_reapplied": false
+      }
+    },
+    {
+      "name": "existing opening and exchanges remain identical",
+      "status": "PASS",
+      "seconds": 6.563,
+      "detail": {
+        "established_accounts_preserved": 2,
+        "unrelated_account_unchanged": true
+      }
+    },
+    {
+      "name": "manual first journal failure rolls back initialization and cash",
+      "status": "PASS",
+      "seconds": 2.359,
+      "detail": {
+        "cash_unchanged": true,
+        "state_rows": 0,
+        "event_rows": 0,
+        "receipts_or_batches": 0
+      }
+    },
+    {
+      "name": "notice first journal failure rolls back initialization and cash",
+      "status": "PASS",
+      "seconds": 2.047,
+      "detail": {
+        "cash_unchanged": true,
+        "state_rows": 0,
+        "event_rows": 0,
+        "receipts_or_batches": 0
+      }
+    },
+    {
+      "name": "first conversion preserves prior US holding costs and metadata",
+      "status": "PASS",
+      "seconds": 3.031,
+      "detail": {
+        "holding_and_trade_unchanged": true,
+        "old_trade_deletion_blocked": true
+      }
+    }
+  ],
+  "lock_observations": [
+    {
+      "case": "funded",
+      "blocker_pid": 12800,
+      "waiting": [
+        {
+          "pid": 22040,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "blockers": [
+            12800
+          ]
+        }
+      ]
+    },
+    {
+      "case": "retry-manual",
+      "blocker_pid": 15464,
+      "waiting": [
+        {
+          "pid": 12388,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "blockers": [
+            15464
+          ]
+        }
+      ]
+    },
+    {
+      "case": "retry-notice",
+      "blocker_pid": 25828,
+      "waiting": [
+        {
+          "pid": 26136,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "blockers": [
+            25828
+          ]
+        }
+      ]
+    },
+    {
+      "case": "insufficient",
+      "blocker_pid": 23232,
+      "waiting": [
+        {
+          "pid": 25784,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "blockers": [
+            23232
+          ]
+        }
+      ]
+    },
+    {
+      "case": "notice-stale",
+      "blocker_pid": 11412,
+      "waiting": [
+        {
+          "pid": 22580,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "blockers": [
+            11412
+          ]
+        }
+      ]
+    },
+    {
+      "case": "mixed-0",
+      "blocker_pid": 6076,
+      "waiting": [
+        {
+          "pid": 10604,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "blockers": [
+            6076
+          ]
+        }
+      ]
+    },
+    {
+      "case": "mixed-1",
+      "blocker_pid": 26432,
+      "waiting": [
+        {
+          "pid": 17484,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "blockers": [
+            26432
+          ]
+        }
+      ]
+    },
+    {
+      "case": "mixed-2",
+      "blocker_pid": 12244,
+      "waiting": [
+        {
+          "pid": 10964,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "blockers": [
+            12244
+          ]
+        }
+      ]
+    }
+  ],
+  "synthetic_data_only": true,
+  "production_config_loaded": false,
+  "production_connections": 0,
+  "external_http_calls": 0,
+  "postgres_version": "PostgreSQL 17.6 on x86_64-windows, compiled by msvc-19.44.35213, 64-bit",
+  "status": "PASS",
+  "completed_at_utc": "2026-10-15T10:44:30.700578+00:00",
+  "test_server_stopped": true,
+  "application_code_changed": false,
+  "existing_worktree_files_checked_unchanged": 9,
+  "other_development_worktrees_written": false,
+  "merges_pushes_deploys": 0,
+  "verification_script_sha256": "1e2671d8554e41004e496405643a0c356b89bca36a1ff0d301cf4eba7c9ff533",
+  "source_sha256": {
+    "data/repositories/forex.py": "132f2f5e2fa105f9a7d2064a036a96de2376c6f90030c699bf1a8750d9ead096",
+    "data/repositories/nh_notices.py": "42c8f6566b02761f5df3fba2c92854b57a529df9d10f24ed4c8bf99cb866ccb5",
+    "logic/usd_cost.py": "0d897410c5ae92b9d7f82c6501ba4e25e24a1966cad01252eb716a4965d85fd9"
+  },
+  "cleanup_confirmed_at_kst": "2026-10-15T19:45:57.020603+09:00"
+}

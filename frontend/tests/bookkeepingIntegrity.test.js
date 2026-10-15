@@ -108,6 +108,38 @@ try{
     client.recordUsdEvent=async()=>({message:'original result'});
     await retry.callback();assert.equal(readPendingRequest('manual-forex/v1/p'),null);assert.equal(calls,1);
   });
+  await test('zero-dollar first manual conversion submits actual amounts without a made-up opening rate',async()=>{
+    globalThis.localStorage=memory();
+    const zeroAccounts=[{...accounts[0],deposit_usd:0}];
+    const seeds={UsdLedgerPanel:{kind:'WITHDRAW',usd:'100',krw:'140001',occurredAt:'2026-01-02T09:00'}};
+    let submitted,refreshed=0;
+    client.getBookkeepingCapabilities=async()=>({bookkeeping_protocol:1});
+    client.recordUsdEvent=async(aid,body)=>{assert.equal(aid,'a');submitted=body;return {message:'saved'};};
+    const html=render(Usd,{accounts:zeroAccounts,assets,ledgers:[],portfolioId:'p',onChanged:async()=>{refreshed++;},focused:true},seeds);
+    assert.match(html,/별도 시작 기준환율은 필요하지 않습니다/);
+    assert.match(html,/실제 원화 지출액/);assert.doesNotMatch(html,/실제 원화 수령액/);
+    assert.match(html,/aria-label="환전 달러 금액"/);
+    assert.match(html,/aria-label="환전 원화 금액"/);
+    assert.doesNotMatch(html,/aria-label="달러 기준환율"/);
+    assert.match(html,/>원화 → 달러 환전<\/button>/);
+    await globalThis.__bookHandlers.find(h=>h.component==='UsdLedgerPanel' && h.label==='submit').callback();
+    assert.equal(submitted.kind,'EXCHANGE_IN');assert.equal(submitted.usd_amount,100);
+    assert.equal(submitted.krw_amount,140001);assert.equal(submitted.rate,0);assert.equal(refreshed,1);
+    assert.equal(readPendingRequest('manual-forex/v1/p'),null);
+  });
+  test('nonzero dollars still require explicit opening while an existing zero-dollar ledger stays tracked',()=>{
+    globalThis.localStorage=memory();
+    const base={accounts,assets,portfolioId:'p',onChanged:async()=>{},focused:true};
+    const missing=render(Usd,{...base,ledgers:[]});
+    assert.match(missing,/aria-label="달러 기준환율"/);
+    assert.match(missing,/>시작 기준 등록<\/button>/);
+    assert.doesNotMatch(missing,/aria-label="환전 달러 금액"/);
+    const initialized=render(Usd,{...base,accounts:[{...accounts[0],deposit_usd:0}],
+      ledgers:[{account_id:'a',usd_balance:0,cost_krw:0,average_rate:0,actual_usd:0}]});
+    assert.match(initialized,/기록상 달러/);assert.match(initialized,/기록 종류/);
+    assert.match(initialized,/aria-label="환전 달러 금액"/);
+    assert.doesNotMatch(initialized,/별도 시작 기준환율은 필요하지 않습니다/);
+  });
   await test('several pending receipts lock edits but allow navigation to each retry',()=>{
     globalThis.localStorage=memory();
     persistPendingRequest('manual-funds/v1/p',{payload:{request_id:'funds-request'}});

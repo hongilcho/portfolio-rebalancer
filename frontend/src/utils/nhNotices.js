@@ -141,6 +141,9 @@ export function previewNhNotices(rows,contexts,ledgers=[]) {
       if (!row.external && balances[peerAccount(row)]) balances[peerAccount(row)].deposit_krw-=cashSign(row)*row.krwAmount;
     }
     if (row.kind==='EXCHANGE_IN') {
+      if (!costs[row.accountId] && cash.deposit_usd===0) {
+        costs[row.accountId]={balance:0,cost:0,needsReconciliation:false,lastDate:row.eventDate};
+      }
       const cost=costs[row.accountId];
       if (!cost) errors.push('환전 계좌의 달러 시작 기준환율을 먼저 등록해주세요.');
       else if (cost.needsReconciliation) errors.push('달러 잔고·원가 차이를 먼저 확인해주세요.');

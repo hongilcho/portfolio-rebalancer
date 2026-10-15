@@ -60,6 +60,15 @@ try{
     const unchecked=render(Import,props,{...state,rows:[{...row,accountId:'isa'}],confirmed:false});
     assert.match(unchecked,/<button[^>]*disabled=""[^>]*>확인한 알림 1건 장부에 일괄 반영/);
   });
+  test('first exchange at zero dollars enables reviewed notice save without requiring an opening rate',()=>{
+    const exchange={id:'qa-first-exchange',kind:'EXCHANGE_IN',accountId:'usd',eventDate:day,krwAmount:140001,usdAmount:100,quotedRate:1400,external:true,errors:[],fingerprint:'c'.repeat(64)};
+    const zeroAccounts=accounts.map(a=>a.id==='usd'?{...a,deposit_krw:1000000,deposit_usd:0}:a);
+    const ctx={...context,accounts:zeroAccounts,flows:[]};
+    const html=render(Import,{...props,accounts:zeroAccounts,ledgers:[]},{...state,rows:[exchange],contexts:{[day]:ctx}});
+    assert.match(html,/<button type="button" class="btn btn-primary">확인한 알림 1건 장부에 일괄 반영/);
+    assert.doesNotMatch(html,/role="alert"/);
+    assert.match(html,/859,999/);assert.match(html,/100\.00/);
+  });
   test('deposit and exchange remain a single review with existing-flow link and seven-won preview',()=>{
     const deposit={id:'qa-deposit',kind:'DEPOSIT',accountId:'usd',eventDate:day,krwAmount:960000,external:true,applyCash:true,errors:[],fingerprint:'a'.repeat(64)};
     const exchange={id:'qa-exchange',kind:'EXCHANGE_IN',accountId:'usd',eventDate:day,krwAmount:959997,usdAmount:717.31,quotedRate:1338.33,external:true,errors:[],fingerprint:'b'.repeat(64)};
