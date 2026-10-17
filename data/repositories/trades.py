@@ -5,9 +5,14 @@ import re
 from datetime import date, datetime
 from typing import Tuple
 from psycopg2.extras import RealDictCursor
-from logic.trade_accounting import cash_movement, replay_holding
+from logic.trade_accounting import cash_movement
 from data.repository_context import RepositoryContext
 from data.repositories import forex, bookkeeping, trade_costs
+
+
+def replay_book(cursor, account_id, asset_id, rows, deleting=()):
+    from data.repositories.realized_openings import replay
+    return replay(cursor,account_id,asset_id,rows,deleting)
 
 def execute_trade(
     db: RepositoryContext,
@@ -123,7 +128,7 @@ def execute_trade(
             cursor.execute('SELECT * FROM holdings WHERE account_id=%s AND asset_id=%s',
                            (str(account_id),str(asset_id)))
             old_holding = cursor.fetchone() or {}
-            rebuilt = replay_holding(prior_trades)
+            rebuilt = replay_book(cursor,account_id,asset_id,prior_trades)
             current = (float(old_holding.get('quantity') or 0),
                        float(old_holding.get('original_avg_price') or old_holding.get('avg_price') or 0),
                        float(old_holding.get('original_avg_price_usd') or old_holding.get('avg_price_usd') or 0),
@@ -149,7 +154,7 @@ def execute_trade(
         if backdated:
             cursor.execute('SELECT * FROM trade_history WHERE account_id=%s AND asset_id=%s',
                            (str(account_id),str(asset_id)))
-            qty,avg_krw,avg_usd,fx = replay_holding(cursor.fetchall())
+            qty,avg_krw,avg_usd,fx = replay_book(cursor,account_id,asset_id,cursor.fetchall())
             cursor.execute("""INSERT INTO holdings
                 (id,account_id,asset_id,quantity,avg_price,avg_price_usd,buy_fx_rate,original_avg_price,original_avg_price_usd)
                 VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
@@ -358,7 +363,7 @@ def delete_trades(db: RepositoryContext, trade_ids, transaction=None):
         if transaction is None:
             for aid,asset_id in sorted({(t['account_id'],t['asset_id']) for t in selected}):
                 cursor.execute('SELECT * FROM trade_history WHERE account_id=%s AND asset_id=%s',(aid,asset_id))
-                rebuilt=replay_holding(cursor.fetchall())
+                rebuilt=replay_book(cursor,aid,asset_id,cursor.fetchall(),ids)
                 cursor.execute('SELECT * FROM holdings WHERE account_id=%s AND asset_id=%s',(aid,asset_id))
                 h=cursor.fetchone() or {}
                 current=(float(h.get('quantity') or 0),float(h.get('original_avg_price') or h.get('avg_price') or 0),
@@ -385,7 +390,7 @@ def delete_trades(db: RepositoryContext, trade_ids, transaction=None):
                 JOIN assets a ON t.asset_id = a.id
                 WHERE t.account_id = %s AND t.asset_id = %s
             """, (account_id, asset_id))
-            qty, avg_krw, avg_usd, buy_fx = replay_holding(cursor.fetchall())
+            qty, avg_krw, avg_usd, buy_fx = replay_book(cursor,account_id,asset_id,cursor.fetchall())
             if qty > 0:
                 cursor.execute("""
                     INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate, original_avg_price, original_avg_price_usd)

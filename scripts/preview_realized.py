@@ -19,25 +19,48 @@ curl_requests.Session.request=blocked
 from fastapi import FastAPI,HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from data import data_manager as dm
-from data.repositories import trades,realized
+from data.repositories import trades,realized,realized_openings
 from backend.routers.trades import BatchTradeRequest
-from test_trade_reversal import DatabaseAdapter
+from test_trade_reversal import DatabaseAdapter,CursorAdapter
+
+class Cursor(CursorAdapter):
+    def execute(self,sql,params=()):
+        if sql.startswith('SET TRANSACTION'):return None
+        return super().execute(sql,params)
+
+class Database(DatabaseAdapter):
+    def cursor(self,**kwargs):return Cursor(self)
+
+legacy_mode='--legacy' in sys.argv
 
 app=FastAPI(title='Synthetic realized gains preview')
-app.add_middleware(CORSMiddleware,allow_origins=['http://127.0.0.1:5200'],allow_methods=['GET','POST'],allow_headers=['Content-Type','Authorization'])
+app.add_middleware(CORSMiddleware,allow_origins=['http://127.0.0.1:5200','http://127.0.0.1:5201'],allow_methods=['GET','POST'],allow_headers=['Content-Type','Authorization'])
 lock=threading.RLock();db=None
 accounts=[dict(id='acc',account_alias='합성 ISA',account_type='ISA',portfolio_id='p'),
           dict(id='us',account_alias='합성 해외 ETF',account_type='종합매매',portfolio_id='p')]
 assets=[dict(id='ast',name='합성 국내 ETF',ticker='QA000',market='KR',allowed_accounts=['acc']),
-        dict(id='vt',name='합성 VT',ticker='VT',market='US',allowed_accounts=['us'])]
+        dict(id='vt',name='합성 VT',ticker='VT',market='US',allowed_accounts=['us']),
+        dict(id='pdbc',name='합성 PDBC',ticker='PDBC',market='US',allowed_accounts=['us'])]
 
 
 def reset():
     global db
     if db:db.raw.close()
-    db=DatabaseAdapter();dm.get_connection=lambda:db
+    db=Database();dm.get_connection=lambda:db
     db.raw.execute("INSERT INTO accounts(id,deposit_krw,deposit_usd) VALUES('us',1000000,2000)")
     db.raw.execute("INSERT INTO assets(id,market,allowed_accounts) VALUES('vt','US','[\"us\"]')");db.commit()
+    db.raw.execute("INSERT INTO assets(id,market,allowed_accounts) VALUES('pdbc','US','[\"us\"]')");db.commit()
+    if legacy_mode:
+        for aid,sid,qty,extra,price,fx in [('acc','ast',9,5,10000,1),('us','vt',63,52,100,1300),('us','pdbc',70,40,10,1300)]:
+            # Invented QA prices/balances. Reproduce only the legacy overlap pattern.
+            db.raw.execute('UPDATE accounts SET deposit_krw=10000000,deposit_usd=10000 WHERE id=?',(aid,));db.commit()
+            for kind,amount,day in [('INIT',qty,'2026-09-28'),('BUY',extra,'2026-09-29')]:
+                ok,msg=trades.execute_trade(dm._context(),day,aid,sid,kind,amount,price,'USD' if sid!='ast' else 'KRW',fx)
+                assert ok,msg
+            db.raw.execute('UPDATE holdings SET quantity=? WHERE asset_id=?',(qty,sid));db.commit()
+        items=realized_openings.preview(dm._context(),'p')['candidates']
+        realized_openings.commit(dm._context(),'p',dict(request_id='synthetic-one-time-repair',positions=[{k:p[k] for k in ('account_id','asset_id','book_token')} for p in items]))
+        return
     for day,aid,sid,kind,qty,price,fx,krw,usd in [
         ('2026-09-01','acc','ast','BUY',10,10000,1,100,None),
         ('2026-10-01','acc','ast','SELL',10,12000,1,50,None),
@@ -52,7 +75,7 @@ def reset():
 def state():
     with lock:
         holdings=[{**h,'asset_name':next(a['name'] for a in assets if a['id']==h['asset_id'])} for h in db.rows('holdings')]
-        return dict(accounts=[{**a,**next(r for r in db.rows('accounts') if r['id']==a['id'])} for a in accounts],assets=assets,holdings=holdings,trades=sorted(db.rows('trade_history'),key=lambda r:r['trade_sequence'],reverse=True))
+        return dict(legacy_mode=legacy_mode,accounts=[{**a,**next(r for r in db.rows('accounts') if r['id']==a['id'])} for a in accounts],assets=assets,holdings=holdings,trades=sorted(db.rows('trade_history'),key=lambda r:r['trade_sequence'],reverse=True))
 
 
 @app.post('/dev/reset')
@@ -72,7 +95,7 @@ def undo(ident:str):
 def report(portfolio_id:str,start_date:date|None=None,end_date:date|None=None,account_id:str|None=None,asset_id:str|None=None):
     if portfolio_id!='p':raise HTTPException(400,'합성 포트폴리오만 지원합니다.')
     if start_date and end_date and start_date>end_date:raise HTTPException(400,'조회 일자를 확인해주세요.')
-    with lock:return realized.enrich(db.rows('trade_history'),db.rows('holdings'),accounts,assets,{},start=start_date,end=end_date,account_id=account_id,asset_id=asset_id)
+    with lock:return realized.enrich(db.rows('trade_history'),db.rows('holdings'),accounts,assets,{},baselines=realized_openings.load(db.cursor(),'p'),start=start_date,end=end_date,account_id=account_id,asset_id=asset_id)
 
 
 @app.post('/api/trades/batch')
@@ -84,4 +107,5 @@ def record(req:BatchTradeRequest):
 
 if __name__=='__main__':
     import uvicorn
-    reset();uvicorn.run(app,host='127.0.0.1',port=8132,access_log=False)
+    port=int(sys.argv[sys.argv.index('--port')+1]) if '--port' in sys.argv else 8132
+    reset();uvicorn.run(app,host='127.0.0.1',port=port,access_log=False)

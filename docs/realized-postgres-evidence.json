@@ -7,9 +7,16 @@
     "read-only repeatable snapshot reports closed realized profit; portfolio scope and cash unchanged",
     "actual activity history SQL returns sale fee and original book evidence",
     "reentry is separate; reversing reentry and full sale restores quantity, cash, basis and report",
-    "fee failure rolls back entire transaction and request receipt"
+    "fee failure rolls back entire transaction and request receipt",
+    "legacy overlap confirmation preserves all eight financial tables; concurrent retry exactly once; scoped report",
+    "overview snapshot and detailed report share the same opening without changing valuation data",
+    "post-opening full sale and cancellation restore exact holding, cash and original history; unknown old fees stay unknown",
+    "revoking unused opening appends audit only and restores original report warning",
+    "one-time script selects exactly three positions; preparation is read-only; late failure rolls back all portfolio receipts",
+    "concurrent one-time apply across two portfolios preserves financial rows and clears only the three target warnings",
+    "one-time rollback preserves all financial data, is idempotent and leaves original analysis audit"
   ],
   "status": "passed",
-  "check_count": 6,
+  "check_count": 13,
   "isolated_cluster_stopped": true
 }

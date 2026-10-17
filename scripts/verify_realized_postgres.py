@@ -48,7 +48,7 @@ requests.sessions.Session.request=blocked
 curl_requests.Session.request=blocked
 from data.repository_context import RepositoryContext
 from data import schema
-from data.repositories import trades,realized,activity
+from data.repositories import trades,realized,activity,realized_openings,snapshots
 
 
 class Connection:
@@ -141,6 +141,80 @@ def main():
         else:raise AssertionError('fee overdraft must fail')
         assert (query('SELECT * FROM accounts'),query('SELECT * FROM trade_history'))==before
         passed('fee failure rolls back entire transaction and request receipt')
+        query("INSERT INTO assets(id,name,ticker,market,allowed_accounts,portfolio_id) VALUES('old','합성 과거 잔고 ETF','QAOLD','KR','[\"acc\"]','p')")
+        assert trades.execute_trade(ctx,'2026-09-28','acc','old','INIT',9,100,'KRW',1)[0]
+        assert trades.execute_trade(ctx,'2026-09-29','acc','old','BUY',5,100,'KRW',1)[0]
+        query("UPDATE holdings SET quantity=9 WHERE asset_id='old'")
+        tables=('accounts','assets','holdings','trade_history','usd_cash_state','usd_cash_events',
+                'performance_tracking','ledger_adjustments')
+        def financial_state():
+            return {t:query(f'SELECT row_to_json(t)::text FROM {t} t ORDER BY row_to_json(t)::text') for t in tables}
+        before=financial_state()
+        item=next(p for p in realized_openings.preview(ctx,'p')['candidates'] if p['asset_id']=='old')
+        body=dict(request_id='legacy-opening-confirmed',positions=[{k:item[k] for k in ('account_id','asset_id','book_token')}])
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results=list(pool.map(lambda _:realized_openings.commit(ctx,'p',body),range(2)))
+        assert results[0]==results[1] and financial_state()==before
+        assert query("SELECT count(*) FROM bookkeeping_requests WHERE scope='realized-opening:p'")==[(1,)]
+        assert not realized.read(ctx,'p')['warnings']
+        assert realized.read(ctx,'other')['openings']==[]
+        passed('legacy overlap confirmation preserves all eight financial tables; concurrent retry exactly once; scoped report')
+        batch_data=snapshots.get_overview_batch_data(ctx)
+        from logic.realized_opening import active
+        from logic.realized_gains import calculate
+        overview=calculate(batch_data['trade_history'],batch_data['holdings'],baselines=active(batch_data['realized_openings']))
+        assert not overview['warnings'] and overview['summary']==realized.read(ctx,'p')['summary']
+        assert financial_state()==before
+        passed('overview snapshot and detailed report share the same opening without changing valuation data')
+        day=__import__('datetime').datetime.now(__import__('zoneinfo').ZoneInfo('Asia/Seoul')).date().isoformat()
+        new=dict(request_id='post-opening-sale',portfolio_id='p',trade_date=day,trades=[dict(account_id='acc',
+            asset_id='old',trade_type='SELL',quantity=9,price=120,currency='KRW',exchange_rate=1)])
+        sale=trades.execute_batch(ctx,new)
+        report2=realized.read(ctx,'p');record=next(s for s in report2['sales'] if s['asset_id']=='old')
+        assert record['gross_profit_krw']==180 and record['net_profit_krw'] is None
+        assert not report2['warnings']
+        assert trades.delete_trades(ctx,sale['trade_ids'])[0]
+        assert financial_state()==before
+        passed('post-opening full sale and cancellation restore exact holding, cash and original history; unknown old fees stay unknown')
+        undo=dict(request_id='revoke-analysis-only',baseline_id=results[0]['positions'][0]['id'])
+        realized_openings.revoke(ctx,'p',undo)
+        assert financial_state()==before and realized.read(ctx,'p')['warnings']
+        passed('revoking unused opening appends audit only and restores original report warning')
+        from scripts import repair_realized_openings_once as repair
+        from copy import deepcopy
+        query('''INSERT INTO accounts(id,account_no,account_alias,account_type,portfolio_id,deposit_krw,deposit_usd)
+            VALUES('once-us','QA-US','해외ETF직투계좌','일반','p',1000000,100000),
+                  ('once-gold','QA-GOLD','금현물계좌','일반','other',1000000,0)''')
+        for sid,ticker,market,aid,pid,qty,extra in [
+            ('once-vt','VT','US','once-us','p',63,52),('once-pdbc','PDBC','US','once-us','p',70,40),
+            ('once-gold','M04020000','KR','once-gold','other',9,5)]:
+            query('INSERT INTO assets(id,name,ticker,market,allowed_accounts,portfolio_id) VALUES(%s,%s,%s,%s,%s,%s)',
+                (sid,'Synthetic '+ticker,ticker,market,json.dumps([aid]),pid))
+            for d,k,n in [('2026-09-28','INIT',qty),('2026-09-29','BUY',extra)]:
+                ok,msg=trades.execute_trade(ctx,d,aid,sid,k,n,100,'USD' if market=='US' else 'KRW',1300)
+                assert ok,msg
+            query('UPDATE holdings SET quantity=%s WHERE asset_id=%s',(qty,sid))
+        before=financial_state();receipts=query('SELECT count(*) FROM bookkeeping_requests')
+        plan=repair.prepare(ctx)
+        assert financial_state()==before and query('SELECT count(*) FROM bookkeeping_requests')==receipts
+        bad=deepcopy(plan);bad['positions'][0]['book_token']='0'*64
+        try:repair.apply(ctx,bad)
+        except ValueError:pass
+        else:raise AssertionError('Stale plan must fail')
+        assert financial_state()==before and query('SELECT count(*) FROM bookkeeping_requests')==receipts
+        passed('one-time script selects exactly three positions; preparation is read-only; late failure rolls back all portfolio receipts')
+        with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(lambda _:repair.apply(ctx,plan),range(2)))
+        assert results[0]==results[1] and financial_state()==before
+        assert query('SELECT count(*) FROM bookkeeping_requests')[0][0]==receipts[0][0]+2
+        targets={'once-vt','once-pdbc','once-gold'}
+        warnings=realized.read(ctx,'p')['warnings']+realized.read(ctx,'other')['warnings']
+        assert not any(w['asset_id'] in targets for w in warnings)
+        passed('concurrent one-time apply across two portfolios preserves financial rows and clears only the three target warnings')
+        repair.apply(ctx,plan,rollback=True);repair.apply(ctx,plan,rollback=True)
+        assert financial_state()==before
+        warnings=realized.read(ctx,'p')['warnings']+realized.read(ctx,'other')['warnings']
+        assert sum(w['asset_id'] in targets for w in warnings)==3
+        passed('one-time rollback preserves all financial data, is idempotent and leaves original analysis audit')
         report.update(status='passed',check_count=len(checks))
     finally:
         if pw.exists():pw.unlink()

@@ -104,7 +104,7 @@ def get_all_portfolios_overview(include_crypto: bool = Query(True), force_refres
             prices_map=crypto_prices
         )
 
-    valuation_inputs = index_valuation_inputs(all_holdings, all_trades, prices)
+    valuation_inputs = index_valuation_inputs(all_holdings, all_trades, prices,batch_data.get('realized_openings',[]))
 
     dashboards, errors, accounts_by_pid = evaluate_portfolios(
         portfolios, all_accounts, all_assets, valuation_inputs, price_map, usd_krw,

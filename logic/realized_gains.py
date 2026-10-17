@@ -9,6 +9,7 @@ from decimal import Decimal
 import json
 
 from logic.trade_accounting import trade_sort_key
+from logic.realized_opening import validity
 
 ZERO = Decimal(0)
 
@@ -37,18 +38,33 @@ def expense(trade, currency):
     return number(krw) + number(usd) * fx, known
 
 
-def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_id=None):
+def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_id=None, baselines=()):
     """Replay ALL history before filtering sales. Account/asset pools never mix."""
     groups = defaultdict(list)
     for t in trades:
         groups[(str(t['account_id']), str(t['asset_id']))].append(t)
     actual = {(str(h['account_id']), str(h['asset_id'])): number(h['quantity']) for h in holdings}
+    openings={(str(p['account_id']),str(p['asset_id'])):p for p in baselines}
+    for key in openings:groups.setdefault(key,[])
     sales, periods, warnings = [], [], []
     for (aid, sid), history in groups.items():
         if account_id and aid != str(account_id) or asset_id and sid != str(asset_id):
             continue
         qty = cost = cost_usd = acquisition_expenses = ZERO
         known, expenses_known, period = True, True, None
+        opening=openings.get((aid,sid));opening_invalid=False
+        if opening:
+            reason=validity(opening,history);opening_invalid=bool(reason)
+            if reason:warnings.append(dict(account_id=aid,asset_id=sid,reason=reason))
+            qty=number(opening['quantity']);cost=qty*number(opening['avg_krw']);cost_usd=qty*number(opening['avg_usd'])
+            known=not opening_invalid;expenses_known=False
+            reference=history[0] if history else {}
+            period=dict(id='opening:'+opening['id'],account_id=aid,asset_id=sid,
+                asset_name=reference.get('asset_name',sid),ticker=reference.get('ticker',''),
+                account_alias=reference.get('account_alias',aid),start_date=opening.get('first_buy_date'),
+                calculation_start_date=opening['date'],end_date=None,sales=[],basis_adjusted=True,
+                opening_id=opening['id'],dividend_scope='SINCE_CONFIRMED_BASELINE')
+            history=[t for t in history if str(t['id']) not in opening['covered_trades']]
         for t in sorted(history, key=trade_sort_key):
             kind = t['trade_type']; amount = number(t['quantity']); price = number(t['price'])
             currency = t.get('currency') or ('USD' if t.get('market') == 'US' else 'KRW')
@@ -61,7 +77,7 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
             anchor = document(t.get('accounting_basis'))
             # A newly recorded sale can preserve a trusted book opening when old
             # purchase history was never imported. Never override complete replay.
-            if kind == 'SELL' and anchor.get('source') == 'BOOK' and (not known or qty < amount):
+            if kind == 'SELL' and not opening_invalid and anchor.get('source') == 'BOOK' and (not known or qty < amount):
                 qty = number(anchor['quantity']); cost = qty * number(anchor['avg_krw'])
                 cost_usd = qty * number(anchor.get('avg_usd'))
                 acquisition_expenses, expenses_known, known = ZERO, False, True

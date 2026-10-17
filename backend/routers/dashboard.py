@@ -60,7 +60,8 @@ def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = Fa
         price_map=price_map,
         usd_krw=usd_krw,
         price_data=prices,
-        all_trades=all_trades
+        all_trades=all_trades,
+        all_openings=batch_data.get('realized_openings',[])
     )
     dash['market_status'] = {'prices': market_service.request_status(), 'dividends': get_dividend_status()}
 
@@ -91,7 +92,8 @@ def get_dashboard_summary(
     price_map: Optional[Dict[str, float]] = None,
     usd_krw: Optional[float] = None,
     all_trades: Optional[List[Dict[str, Any]]] = None,
-    price_data: Optional[List[Dict[str, Any]]] = None
+    price_data: Optional[List[Dict[str, Any]]] = None,
+    all_openings: Optional[List[Dict[str, Any]]] = None
 ):
     """
     포트폴리오 대시보드 종합 데이터 집계 API (portfolio_id 기준 필터링)
@@ -103,6 +105,7 @@ def get_dashboard_summary(
         prepare_dividend_cache(batch_data)
         all_accounts = batch_data.get("accounts", [])
         all_assets = batch_data.get("assets", [])
+        if all_openings is None:all_openings=batch_data.get('realized_openings',[])
         if all_holdings is None:
             all_holdings = batch_data.get("holdings", [])
         if all_trades is None:
@@ -122,7 +125,7 @@ def get_dashboard_summary(
     if usd_krw is None:
         usd_krw = market_service.usd_krw
 
-    inputs = index_valuation_inputs(all_holdings, all_trades, price_data)
+    inputs = index_valuation_inputs(all_holdings, all_trades, price_data,all_openings or [])
     return build_dashboard_summary(accounts, assets, inputs, price_map, usd_krw)
 
 
@@ -139,7 +142,9 @@ def build_dashboard_summary(accounts, assets, inputs, price_map, usd_krw):
     sids={str(a['id']) for a in assets if not a.get('is_deposit')}
     history=[t for (aid,sid),rows in inputs.trades_by_holding.items()
              if aid in aids and sid in sids for t in rows]
-    result['realized_summary']=calculate(history)['summary']
+    holdings=[h for aid,rows in inputs.holdings_by_account.items() if aid in aids for h in rows if str(h['asset_id']) in sids]
+    baselines=[p for p in inputs.realized_openings if p['account_id'] in aids and p['asset_id'] in sids]
+    result['realized_summary']=calculate(history,holdings,baselines=baselines)['summary']
     result['market_status'] = {
         'prices': market_service.request_status(), 'dividends': get_dividend_status(),
     }

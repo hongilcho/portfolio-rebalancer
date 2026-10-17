@@ -105,6 +105,8 @@ def get_overview_batch_data(db: RepositoryContext) -> Dict[str, Any]:
         ) h), '[]'::json),
         'crypto_holdings', COALESCE((SELECT json_agg(c) FROM crypto_holdings c), '[]'::json),
         'trade_history', COALESCE((SELECT json_agg(t ORDER BY t.trade_date ASC, t.id ASC) FROM trade_history t), '[]'::json),
+        'realized_openings', COALESCE((SELECT json_agg(b.result ORDER BY b.sequence) FROM bookkeeping_requests b
+            WHERE b.scope LIKE 'realized-opening:%' AND b.result IS NOT NULL), '[]'::json),
         'dividend_cache', COALESCE((
             SELECT json_object_agg(mc.key, json_build_object(
                 'data', mc.data,

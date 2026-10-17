@@ -14,9 +14,10 @@ class ValuationInputs:
     holdings_by_account: Dict[str, List[Dict[str, Any]]]
     trades_by_holding: Dict[Tuple[str, str], List[Dict[str, Any]]]
     price_usd_map: Dict[str, float]
+    realized_openings: tuple = ()
 
 
-def index_valuation_inputs(holdings, trades, prices):
+def index_valuation_inputs(holdings, trades, prices, realized_openings=()):
     """Index a batch once, including when several portfolios share the request."""
     by_account = {}
     for holding in holdings:
@@ -26,7 +27,8 @@ def index_valuation_inputs(holdings, trades, prices):
         key = (str(trade.get('account_id', '')), str(trade.get('asset_id', '')))
         by_holding.setdefault(key, []).append(trade)
     usd_prices = {str(item['id']): float(item.get('price_usd') or 0.0) for item in prices or []}
-    return ValuationInputs(by_account, by_holding, usd_prices)
+    from logic.realized_opening import active
+    return ValuationInputs(by_account, by_holding, usd_prices,tuple(active(realized_openings)))
 
 
 def calculate_portfolio_summary(accounts, assets, inputs, adjustments, price_map, usd_krw):
