@@ -1,6 +1,7 @@
 """Reconcile posted CMA interest, actual principal and the bank cash chain."""
 from collections import Counter
 from decimal import Decimal
+import hashlib
 from logic.cma_interest import amount,fingerprint,moment
 from logic import cma_policy
 
@@ -32,7 +33,7 @@ def normalize(snapshot,observation,*,pid,aid,start_date=None):
         observed=moment(observation['observed_at']);day=observed.date().isoformat()
         start_date=start_date or day
         if (snapshot.get('complete') is not True or moment(snapshot['observed_at'])!=observed
-            or snapshot['end_date']!=day or observation.get('state')!='CASH_RETURNED'
+            or snapshot['end_date']!=day or observation.get('state') not in ('CASH_RETURNED','AWAITING_CASH_RETURN')
             or not snapshot['start_date']<=start_date<=day
             or not 0<=(observed.date()-date.fromisoformat(start_date)).days<=30):
             return {'status':'STATEMENT_INCOMPLETE'}
@@ -46,6 +47,13 @@ def normalize(snapshot,observation,*,pid,aid,start_date=None):
                 block=body.get('message') or {}
                 if not isinstance(block,dict):return {'status':'STATEMENT_INCOMPLETE'}
                 signature=(body.get('rsp_cd',block.get('code')),body.get('rsp_msg',block.get('msg')))
+                # Observed 2026-10-17: no deposit/withdrawal rows. This exact
+                # no-data reply is accepted only for MOVES; TOTAL independently
+                # rejects any unmatched movement and must conserve all cash.
+                if (path==MOVES and signature[0]=='13578' and not q['rows']
+                    and body.get('Output_0')==[] and isinstance(signature[1],str)
+                    and hashlib.sha256(signature[1].encode()).hexdigest()=='ea371c00bddf458387eadbf82d526b16ee79573a70361738aa0442daf1520b7a'):
+                    continue
                 if signature not in {('00166','조회가 완료되었습니다.'),('00165','조회가 계속됩니다.'),('00218','조회가 계속됩니다.')}:
                     return {'status':'BUSINESS_STATUS_UNVERIFIED'}
         events=[];movement_index={};bank_moves=Counter();matched=Counter()
@@ -62,7 +70,7 @@ def normalize(snapshot,observation,*,pid,aid,start_date=None):
             if event_date>=start_date:
                 events.append(dict(kind=kind,event_date=event_date,amount_krw=str(value),
                     reference_hash=fingerprint(dict(day=event_date,index=index,kind=kind,amount=str(value),after=str(after)))))
-        cash=None;positions={};opening=None;last_date=snapshot['start_date'];final_redemption=False
+        cash=None;positions={};quantities={};opening=None;last_date=snapshot['start_date'];final_redemption=False
         gross_total=tax_total=fee_total=Decimal(0);daily={}
         for index,row in enumerate(queries[TOTAL]['rows']):
             event_date=_day(row['trd_dt'])
@@ -93,11 +101,13 @@ def normalize(snapshot,observation,*,pid,aid,start_date=None):
             before=after-delta
             if before<0 or (cash is not None and cash!=before):return {'status':'BANK_CASH_CHAIN_MISMATCH'}
             if event_date>=start_date and opening is None:opening=before+sum(positions.values(),Decimal(0))
-            if redeem:positions.pop(code)
-            if buy:positions[code]=positions.get(code,Decimal(0))+value
+            if redeem:positions.pop(code);quantities.pop(code,None)
+            if buy:
+                positions[code]=positions.get(code,Decimal(0))+value
+                quantities[code]=amount(row['trd_af_bnc_qty'])
             cash=after
             if redeem and event_date>=start_date:
-                if event_date==day:final_redemption=True
+                final_redemption=True
                 gross_total+=gross;tax_total+=tax;fee_total+=fee
                 item=daily.setdefault(event_date,dict(gross=Decimal(0),tax=Decimal(0),fees=Decimal(0)))
                 item['gross']+=gross;item['tax']+=tax;item['fees']+=fee
@@ -106,13 +116,31 @@ def normalize(snapshot,observation,*,pid,aid,start_date=None):
                         reference_hash=fingerprint(dict(day=event_date,index=index,code=code,gross=str(gross),tax=str(tax),fee=str(fee),after=str(after)))))
         if matched!=bank_moves:return {'status':'BANK_HISTORY_MISMATCH'}
         if not final_redemption or opening is None:return {'status':'INTEREST_POSTING_UNVERIFIED'}
-        closing=amount(observation['cash_krw'])
-        if cash!=closing or sum(positions.values(),Decimal(0))!=0:return {'status':'STATEMENT_BALANCE_MISMATCH'}
+        bank_cash=amount(observation['cash_krw']);principal=sum(positions.values(),Decimal(0))
+        if cash!=bank_cash:return {'status':'STATEMENT_BALANCE_MISMATCH'}
+        if positions:
+            balance=queries[BALANCE]['pages'][-1]['data'];rows=balance['Output_1'];seen=set();valuation=Decimal(0)
+            for row in rows:
+                code=row.get('iem_cd')
+                if code in seen or code not in positions:return {'status':'PRINCIPAL_MISMATCH'}
+                seen.add(code);value=amount(row['eal_amt']);unpaid=amount(row['eal_pls_amt'])
+                if (value<positions[code] or unpaid<0 or value-unpaid!=positions[code]
+                    or amount(row.get('rsdl_qty',row.get('itg_bnc_qty')))!=quantities[code]
+                    or amount(row.get('lon_bnc_amt',0))!=0):return {'status':'PRINCIPAL_MISMATCH'}
+                valuation+=value
+            if (seen!=set(positions) or valuation!=amount(observation['sweep_krw'])
+                or amount(balance['Output_0']['tot_byn_amt'])!=principal):return {'status':'PRINCIPAL_MISMATCH'}
+        elif observation.get('state')!='CASH_RETURNED':return {'status':'STATEMENT_BALANCE_MISMATCH'}
+        closing=bank_cash+principal
+        valuation_gap=amount(observation.get('total_krw',closing))-closing
+        if valuation_gap<0:return {'status':'STATEMENT_BALANCE_MISMATCH'}
         net=sum((amount(e['amount_krw'])*(1 if e['kind']=='DEPOSIT' else -1) for e in events if e['kind']!='PAID_INTEREST'),Decimal(0))
         if opening+net+gross_total-tax_total-fee_total!=closing:return {'status':'STATEMENT_BALANCE_MISMATCH'}
         return dict(profile=PROFILE,portfolio_id=pid,account_id=aid,currency='KRW',complete=True,
             interest_posting_final=True,start_date=start_date,as_of=observed.isoformat(),events=events,
             opening_cash_krw=str(opening),closing_cash_krw=str(closing),gross_interest_krw=str(gross_total),
+            posted_balance_krw=str(closing),bank_cash_krw=str(bank_cash),posted_principal_krw=str(principal),
+            unposted_valuation_krw=str(valuation_gap),
             withheld_tax_krw=str(tax_total),interest_fees_krw=str(fee_total),
             daily_interest=[dict(event_date=d,amount_krw=str(v['gross']-v['tax']-v['fees']),
                 gross_interest_krw=str(v['gross']),withheld_tax_krw=str(v['tax']),interest_fees_krw=str(v['fees']))

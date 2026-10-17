@@ -78,4 +78,11 @@ try{
     const disabled=render({...state,data:{...state.data,writes_enabled:false}});
     assert.doesNotMatch(disabled,/>이전 누적 이자만 정리</);
   });
+  test('swept CMA shows posted principal separately from unpaid valuation and withdrawal value',()=>{
+    const html=render({data:{enabled:true,writes_enabled:true,automatic_ready:true,accounts:[],income:[],checks:[]},
+      observation:{state:'CMA_PRINCIPAL_VERIFIED',observed_at:'2026-10-17T09:15:00+09:00',
+        cash_krw:'0',sweep_krw:'1043',total_krw:'1043',withdrawable_krw:'1040',posted_krw:'1020',unposted_valuation_krw:'23'}});
+    assert.match(html,/지급 완료 기준 장부 반영 잔액 1,020 원/);
+    assert.match(html,/지급 확인 전 평가 차이 23 원/);assert.match(html,/이자로 반영하지 않습니다/);
+  });
 }finally{await server.close();globalThis.fetch=originalFetch;delete globalThis.__cmaState;}

@@ -32,6 +32,11 @@ def fingerprint(value):
                                     default=str).encode()).hexdigest()
 
 
+def confirmed_balance(observation):
+    if observation.get('state')=='CMA_PRINCIPAL_VERIFIED':return amount(observation['posted_krw'])
+    return amount(observation['cash_krw'])
+
+
 def observe_balance(data, observed_at):
     """Keep cash distinct from sweep value/withdrawable cash, failing closed.
 
@@ -109,9 +114,9 @@ def interest_preview(account, observation, now):
     observed = moment(observation['observed_at'])
     if observed.date() != now.date() or not 0 <= (now-observed).total_seconds() <= 600:
         raise ValueError('당일 최근 CMA 조회로 다시 확인해주세요.')
-    if observation.get('state') != 'CASH_RETURNED':
+    if observation.get('state') not in ('CASH_RETURNED','CMA_PRINCIPAL_VERIFIED'):
         raise ValueError('CMA 현금 반환을 확인하지 못했습니다. 기존 장부를 유지합니다.')
-    book, cash = amount(account.get('deposit_krw')), amount(observation['cash_krw'])
+    book, cash = amount(account.get('deposit_krw')), confirmed_balance(observation)
     if book < 0:
         raise ValueError('현재 장부의 CMA 예수금을 확인해주세요.')
     delta = cash-book
@@ -133,12 +138,13 @@ def interest_preview(account, observation, now):
 
 
 def stable_return(previous, current):
-    if not previous or previous.get('state') != 'CASH_RETURNED' or current.get('state') != 'CASH_RETURNED':
+    valid=('CASH_RETURNED','CMA_PRINCIPAL_VERIFIED')
+    if not previous or previous.get('state') not in valid or current.get('state') not in valid:
         return False
     before, after = moment(previous['observed_at']), moment(current['observed_at'])
     return (before.date() == after.date() and 60 <= (after-before).total_seconds() <= 14400
             and previous.get('book_token') == current.get('book_token')
-            and amount(previous['cash_krw']) == amount(current['cash_krw']))
+            and confirmed_balance(previous) == confirmed_balance(current))
 
 
 def due_slot(now, completed_slots):

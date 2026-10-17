@@ -5,7 +5,7 @@ The live profile registry is deliberately empty until actual contracts are read.
 """
 from collections import Counter
 from decimal import Decimal
-from logic.cma_interest import amount,fingerprint,moment
+from logic.cma_interest import amount,fingerprint,moment,confirmed_balance
 from logic import cma_policy
 
 
@@ -46,7 +46,7 @@ def reconcile(statement,ledger,*,pid,aid,book_token,book_cash,observation,booked
         if Counter(bank_moves)!=Counter(book_moves):return {'status':'MOVEMENT_MISMATCH'}
         net=sum((v if k=='DEPOSIT' else -v for _,k,v in book_moves),Decimal(0))
         opening,closing=amount(statement['opening_cash_krw']),amount(statement['closing_cash_krw'])
-        if opening<0 or closing!=amount(observation['cash_krw']) or opening+net+interest!=closing:
+        if opening<0 or closing!=confirmed_balance(observation) or opening+net+interest!=closing:
             return {'status':'STATEMENT_BALANCE_MISMATCH'}
         breakdown={}
         fields=('gross_interest_krw','withheld_tax_krw','interest_fees_krw')
@@ -107,5 +107,5 @@ def _require_receipt(receipt,*,pid,aid,token,observation,delta,status):
         or receipt.get('event_date')!=moment(observation['observed_at']).date().isoformat()
         or receipt.get('observed_at')!=moment(observation['observed_at']).isoformat()
         or amount(receipt.get('paid_interest_krw'))!=delta
-        or amount(receipt.get('closing_cash_krw'))!=amount(observation['cash_krw'])):
+        or amount(receipt.get('closing_cash_krw'))!=confirmed_balance(observation)):
         raise ValueError('현재 계좌·장부에 일치하는 검증된 이자 명세가 필요합니다.')

@@ -21,10 +21,12 @@ def read_book(db, pid, aid):
         account, token = scope(c,pid,aid)
         c.execute('SELECT MAX(event_date) AS day FROM portfolio_cma.income WHERE account_id=%s', (aid,))
         last=c.fetchone()['day']
-        c.execute('SELECT recognized_on FROM portfolio_cma.openings WHERE account_id=%s AND reversed_at IS NULL', (aid,))
+        c.execute('SELECT recognized_on,details FROM portfolio_cma.openings WHERE account_id=%s AND reversed_at IS NULL', (aid,))
         opening=c.fetchone()
+        details=opening['details'] if opening else {}
+        if isinstance(details,str):details=__import__('json').loads(details)
         return dict(account=plain(account), book_token=token,
-            source_start=str(last or opening['recognized_on']) if last or opening else None)
+            source_start=str(last or details.get('source_start') or opening['recognized_on']) if last or opening else None)
 
 
 def record_observation(db, pid, aid, evidence, expected_token, *, reconciliation=None):
@@ -33,7 +35,7 @@ def record_observation(db, pid, aid, evidence, expected_token, *, reconciliation
         _, token = scope(c,pid,aid)
         if token != expected_token:
             raise ValueError('NH 조회 중 장부가 바뀌었습니다. 최신 장부로 다시 확인해주세요.')
-        safe = {k:evidence.get(k) for k in ('observed_at','state','cash_krw','sweep_krw','total_krw','withdrawable_krw')}
+        safe = {k:evidence.get(k) for k in ('observed_at','state','cash_krw','sweep_krw','total_krw','withdrawable_krw','posted_krw','unposted_valuation_krw')}
         # Provider data cannot inject a receipt. Only the server's reconciler
         # supplies this independent argument; no HTTP endpoint accepts it.
         safe['reconciliation']=reconciliation

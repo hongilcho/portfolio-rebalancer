@@ -3,6 +3,7 @@ export const cmaStateLabel = state => ({
   OTHER_ASSETS_UNVERIFIED:'다른 보유자산 확인 필요', NIGHT_TRANSITION:'야간 전환 중 · 장부 유지',
   AWAITING_CASH_RETURN:'CMA 상품에서 현금 반환 대기', ZERO_UNVERIFIED:'0원 잔고 · 반환 확인 대기',
   CASH_RETURNED:'현금 잔고 확인', AWAITING_STABLE_RETURN:'두 번째 현금 잔고 확인 대기',
+  CMA_PRINCIPAL_VERIFIED:'CMA 보유 원금·지급 이자 확인',
   REVIEW_INTEREST:'이자 반영 검토', AUTO_LIMIT_REVIEW:'자동 반영 상한 초과 · 검토 필요',
   APPLIED:'이자 반영 완료', NO_CHANGE:'추가 이자 차액 없음',
   CHECKING:'확인 중', CHECK_FAILED_REVIEW:'처리 결과 확인 필요 · 이자 반영 이력 확인',

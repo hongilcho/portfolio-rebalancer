@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import re
 
-CASH_FIELDS=('dca','nxt_dd_dca','nxt2_dd_dca','drn_pbl_amt','nas_amt','tot_aet_amt','tot_eal_amt',
+CASH_FIELDS=('dca','nxt_dd_dca','nxt2_dd_dca','drn_pbl_amt','nas_amt','tot_aet_amt','tot_eal_amt','tot_byn_amt','tot_eal_pls',
     'rba','int_ny_pmt_amt','ny_rdp_amt','ect_lga','lon_amt')
 
 
@@ -59,6 +59,7 @@ def balance_diagnostics(data,observed_at=None):
             rp=isinstance(ticker,str) and ticker.startswith('RP')
             result['rows'].append(dict(index=index,cma_marker=cma,rp_marker=rp,
                 evaluation_krw=_money(row.get('eal_amt')),
+                valuation_profit_krw=_money(row.get('eal_pls_amt')),
                 quantity=_money(row.get('rsdl_qty')),integrated_quantity=_money(row.get('itg_bnc_qty'))))
     return result
 

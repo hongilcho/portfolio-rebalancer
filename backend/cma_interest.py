@@ -26,12 +26,17 @@ def existing_nh_balance(pid, aid, *, start_date=None):
         raise ValueError('현재 포트폴리오의 CMA 계좌를 확인해주세요.')
     day=moment(datetime.now(timezone.utc)).date()
     from datetime import date
-    start=date.fromisoformat(start_date) if start_date else day
+    # Include recent paid days on first activation, including non-business days.
+    start=date.fromisoformat(start_date) if start_date else day-timedelta(days=2)
     if not 0<=(day-start).days<=30:raise ValueError('CMA 미확인 기간이 30일을 넘었습니다. 기존 명세를 검토해주세요.')
     data=snapshot(nh_api_client,account['account_no'],(start-timedelta(days=1)).isoformat(),day.isoformat())
     balance=data['queries'][BALANCE]['pages'][-1]['data']
     evidence=observe_balance(balance,moment(data['observed_at']))
     evidence['statement']=normalize(data,evidence,pid=pid,aid=aid,start_date=start.isoformat())
+    statement=evidence['statement']
+    if evidence['state']=='AWAITING_CASH_RETURN' and statement.get('profile'):
+        evidence.update(state='CMA_PRINCIPAL_VERIFIED',posted_krw=statement['posted_balance_krw'],
+            unposted_valuation_krw=statement['unposted_valuation_krw'])
     return evidence
 
 
@@ -66,7 +71,7 @@ class DailyCMA:
                 receipt=self.repo.reconciliation_for(self.db,pid,aid,book,evidence)
                 obs = self.repo.record_observation(self.db,pid,aid,evidence,book['book_token'],reconciliation=receipt)
                 state = obs['state']
-                if state == 'CASH_RETURNED':
+                if state in ('CASH_RETURNED','CMA_PRINCIPAL_VERIFIED'):
                     proposal = self.repo.preview(self.db,pid,aid,obs['id'],self.clock())
                     previous = self.repo.previous_observation(self.db,aid,obs['id'])
                     state = 'AWAITING_STABLE_RETURN'

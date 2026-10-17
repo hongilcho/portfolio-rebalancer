@@ -34,7 +34,7 @@ export default function CmaIncomePanel({portfolioId,active=true,disabled=false,o
   const check=()=>perform(async()=>{
     setObservation(null);setPreview(null);setConfirmed(false);setInitialConfirmed(false);
     const obs=await api.observeCma(portfolioId,aid);setObservation(obs);
-    if(obs.state==='CASH_RETURNED')setPreview(await api.previewCmaIncome(portfolioId,aid,obs.id));
+    if(['CASH_RETURNED','CMA_PRINCIPAL_VERIFIED'].includes(obs.state))setPreview(await api.previewCmaIncome(portfolioId,aid,obs.id));
   });
   const apply=(initial=false)=>perform(async()=>{
     const request=pending || (initial?cmaInitialInterestRequest(aid,preview,initialConfirmed,initialReason,crypto.randomUUID()):cmaIncomeRequest(aid,preview,confirmed,crypto.randomUUID()));
@@ -59,7 +59,7 @@ export default function CmaIncomePanel({portfolioId,active=true,disabled=false,o
     <summary>CMA 잔고·이자 확인</summary>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     {!data?<p>기능 상태 확인 중…</p>:!data.enabled?<p>외부 연결 없는 개발을 마쳤으며 실제 조회·자동 반영은 운영 검증과 승인 후 사용할 수 있습니다.</p>:<>
-      <p>NH 잔고와 지급 이자·입출금 명세를 장부와 대조합니다. 이자는 외부 투자금 입금으로 기록하지 않습니다. 초기 누적 차액은 당일 이자로 자동 처리하지 않으며, 예수금 0원·상품 전환 상태에서는 기존 장부를 유지합니다.</p>
+      <p>NH 잔고와 지급 이자·입출금 명세를 장부와 대조합니다. 이자는 외부 투자금 입금으로 기록하지 않습니다. 초기 누적 차액은 당일 이자로 자동 처리하지 않습니다. 예수금이 0원이면 보유 원금과 지급 명세를 검증하며, 확인되지 않는 동안 기존 장부를 유지합니다.</p>
       <p>이 포트폴리오에서 확인·반영한 CMA 이자 합계 <strong>{formatKRW(Number(data.interest_total_krw || 0))}</strong></p>
       {alerts.length>0 && <div role="alert">{alerts.map(text=><p key={text}>{text}</p>)}</div>}
       {!canWrite && <p role="status">조회 전용 상태입니다. CMA 이자 반영·취소는 서버에서 차단되어 있습니다.</p>}
@@ -73,6 +73,7 @@ export default function CmaIncomePanel({portfolioId,active=true,disabled=false,o
           <p>예수금 {observation.cash_krw==null?'확인되지 않음':formatKRW(Number(observation.cash_krw))} · CMA 상품 평가액 {observation.sweep_krw==null?'확인되지 않음':formatKRW(Number(observation.sweep_krw))}</p>
           <p>예수금·CMA 상품 합계 {observation.total_krw==null?'확인되지 않음':formatKRW(Number(observation.total_krw))}</p>
           <p>출금가능금액 (참고) {observation.withdrawable_krw==null?'확인되지 않음':formatKRW(Number(observation.withdrawable_krw))}</p>
+          {observation.posted_krw!=null && <><p>지급 완료 기준 장부 반영 잔액 {formatKRW(Number(observation.posted_krw))}</p><p>지급 확인 전 평가 차이 {formatKRW(Number(observation.unposted_valuation_krw))} · 이자로 반영하지 않습니다.</p></>}
           <p>예수금이 0원이어도 출금가능금액이 표시될 수 있습니다. 출금가능금액을 계좌 총잔고나 이자 확정액으로 사용하지 않습니다. 실제 상품 잔고와 반환 상태를 확인합니다.</p>
         </div>}
         {preview && <><p>현재 장부 {formatKRW(Number(preview.book_krw))} → NH 잔고 {formatKRW(Number(preview.broker_krw))} · 잔고 차액 {formatKRW(Number(preview.interest_krw))}</p>
@@ -87,7 +88,7 @@ export default function CmaIncomePanel({portfolioId,active=true,disabled=false,o
           {preview.paid_items?.length>0 && <p>은행 지급일별 이자: {preview.paid_items.map(i=>`${i.event_date} ${formatKRW(Number(i.amount_krw))}`).join(' · ')}</p>}
           {canWrite && preview.can_apply!==false && <><label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>이미 발생한 입출금·이체·매매는 장부에 반영했고, 남은 차액은 CMA 이자입니다.</label>
           <button type="button" className="btn btn-primary" disabled={!confirmed || Number(preview.interest_krw)<=0} onClick={()=>apply()}>CMA 이자로 반영</button></>}</>}
-        {aid && <details><summary>매일 확인 설정</summary><p>한국 시간 09:00·12:00·15:40에 하루 최대 3회 확인합니다. 반환 시각을 추정하지 않으며, 자동 반영은 동일한 현금 잔고 두 번 확인과 은행 이자·입출금 명세 대조가 모두 완료된 경우에만 진행합니다. 누락된 지급일은 마지막 반영일부터 최대 30일 범위에서 지급일별로 대조하며, 상한은 각 지급일에 적용합니다.</p>
+        {aid && <details><summary>매일 확인 설정</summary><p>한국 시간 09:00·12:00·15:40에 하루 최대 3회 확인합니다. 반환 시각을 추정하지 않으며, 자동 반영은 동일한 지급 완료 기준 잔액 두 번 확인과 은행 이자·입출금 명세 대조가 모두 완료된 경우에만 진행합니다. 상품 평가액의 미지급분은 제외합니다. 누락된 지급일은 마지막 반영일부터 최대 30일 범위에서 지급일별로 대조하며, 상한은 각 지급일에 적용합니다.</p>
           <label><input type="checkbox" checked={daily} onChange={e=>setDaily(e.target.checked)}/>매일 CMA 잔고 확인</label>
           <label><input type="checkbox" disabled={!canWrite||!autoReady} checked={automatic} onChange={e=>setAutomatic(e.target.checked)}/>이자 자동 반영 · 검증된 은행 명세와 장부를 대조합니다.</label>
           <label>1일 자동 반영 상한 (원)<input type="number" className="input-number" min="0" max="1000000000" value={limit} onChange={e=>setLimit(e.target.value)}/></label>
