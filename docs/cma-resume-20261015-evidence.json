@@ -1,0 +1,54 @@
+{
+  "session_date_kst": "2026-10-15",
+  "worktree": "C:\\Users\\hammo\\.codex\\worktrees\\cma-interest\\portfolio-rebalancer",
+  "branch": "codex/cma-interest",
+  "changes": {
+    "fixed_20_hour_assumption_removed": true,
+    "withdrawable_reference_separate": true,
+    "income_uses_only_verified_cash_difference": true,
+    "legacy_balance_fallback_preserved": true
+  },
+  "tests": {
+    "cma_backend_passed": 85,
+    "backend_passed": 455,
+    "backend_skipped": 5,
+    "frontend_passed": 191,
+    "frontend_build": "passed",
+    "postgres_checks_passed": 14,
+    "postgres_stopped": true,
+    "postgres_port_closed": true
+  },
+  "preservation": {
+    "baseline_files": 355,
+    "unchanged_files": 343,
+    "intentional_changed_files": [
+      "data/repositories/cma.py",
+      "docs/cma-interest-development-ko.md",
+      "docs/cma-postgres-evidence.json",
+      "docs/cma-worktree-context-ko.md",
+      "frontend/src/components/Tab4History/CmaIncomePanel.jsx",
+      "frontend/src/utils/cmaIncome.js",
+      "frontend/tests/cmaScreen.test.js",
+      "logic/cma_interest.py",
+      "scripts/verify_cma_postgres.py",
+      "tests/test_cma_interest.py",
+      "tests/test_cma_repository.py",
+      "tests/test_cma_worker.py"
+    ],
+    "original_us_equity_workspace_modified": false
+  },
+  "external_io": {
+    "credential_reads": 0,
+    "nh_calls": 0,
+    "token_requests": 0,
+    "live_ledger_writes": 0,
+    "live_schema_changes": 0,
+    "activation": false,
+    "deployments": 0,
+    "commits": 0
+  },
+  "pending": [
+    "Actual NH balance field semantics and completion envelope",
+    "Valid existing app authentication; prior administrator SSH credential retrieval denial remains unresolved"
+  ]
+}

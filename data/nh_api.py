@@ -337,7 +337,10 @@ class NamuhAPIClient:
                     
             return {
                 "deposit_krw": deposit,
-                "holdings": holdings
+                "holdings": holdings,
+                # Preserve legacy totals; interest uses verified cash-return evidence.
+                "cma_evidence": self._cma_evidence(data),
+                "cma_diagnostics": self._cma_diagnostics(data)
             }, None
             
         except Exception as e:
@@ -346,6 +349,17 @@ class NamuhAPIClient:
                 err_msg = res.text
             print(f"Namuh API Account Balance Fetch Error for {account_no}: {err_msg}")
             return None, err_msg
+
+    @staticmethod
+    def _cma_diagnostics(data):
+        from logic.cma_diagnostics import balance_diagnostics
+        return balance_diagnostics(data)
+
+    @staticmethod
+    def _cma_evidence(data):
+        from datetime import datetime, timezone
+        from logic.cma_interest import observe_balance
+        return observe_balance(data, datetime.now(timezone.utc))
 
     def fetch_overseas_account_balance(self, account_no: str):
         """

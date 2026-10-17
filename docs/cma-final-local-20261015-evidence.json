@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-15",
+  "scope": "local development and synthetic tests only",
+  "workspace": "C:/Users/hammo/.codex/worktrees/cma-interest/portfolio-rebalancer",
+  "branch": "codex/cma-interest",
+  "head": "7efe40fef908744872966864c17dd0a8bc595c01",
+  "local_preparation_status": "complete_to_operational_approval_boundary",
+  "production_automatic_interest_status": "blocked_pending_real_NH_contract_and_evidence",
+  "tests": {
+    "backend": {"passed": 497, "skipped": 5, "warning": "existing Starlette TestClient deprecation"},
+    "frontend": {"passed": 194},
+    "frontend_build": {"status": "passed", "output": "frontend/dist/cma-final-local-20261015"},
+    "isolated_postgres": {"version": "17.6", "passed": 18, "stopped": true, "evidence": "docs/cma-postgres-evidence.json"},
+    "bundle_patch_and_isolated_http": "passed",
+    "git_diff_check": "passed"
+  },
+  "default_flags": {
+    "CMA_INTEREST_ENABLED": "0",
+    "CMA_INTEREST_WRITES_ENABLED": "0",
+    "CMA_DIAGNOSTICS_ENABLED": "0"
+  },
+  "validated_production_statement_profiles": [],
+  "synthetic_statement_profile_used_only_in_tests": true,
+  "actual_NH_statement_collector_implemented": false,
+  "this_phase_actions": {
+    "external_calls": 0,
+    "production_credential_accesses": 0,
+    "production_ledger_writes": 0,
+    "orders": 0,
+    "production_migrations": 0,
+    "service_changes": 0,
+    "deployments": 0,
+    "commits": 0,
+    "pushes": 0,
+    "original_US_stock_workspace_writes": 0,
+    "user_recorded_4000000_transfer_replayed": false
+  },
+  "preservation": {
+    "baseline": "backups/cma-final-local-20261015/baseline.json",
+    "baseline_files": 361,
+    "unchanged": 345,
+    "missing": [],
+    "intentional_modifications": [
+      "backend/cma_interest.py",
+      "backend/routers/cma.py",
+      "data/repositories/cma.py",
+      "docs/cma-interest-development-ko.md",
+      "docs/cma-postgres-evidence.json",
+      "docs/cma-worktree-context-ko.md",
+      "frontend/src/components/Tab4History/CmaIncomePanel.jsx",
+      "frontend/src/utils/cmaIncome.js",
+      "frontend/tests/cmaIncome.test.js",
+      "frontend/tests/cmaScreen.test.js",
+      "scripts/verify_cma_postgres.py",
+      "tests/test_cma_repository.py",
+      "tests/test_cma_worker.py",
+      "backend/main.py",
+      "data/nh_api.py",
+      "tests/conftest.py"
+    ],
+    "note": "New files are additions; existing file hashes were checked against the phase baseline. Original workspace binaries were used read-only for the dedicated synthetic PostgreSQL cluster."
+  },
+  "readonly_artifact": {
+    "bundle": "backups/cma-final-local-20261015/readonly-bundle-f5955c6ae62549d0811fd327c84fbd75/cma-readonly-7efe40f.zip",
+    "sha256": "908daac32f4acde17ffb69c1fa710acb4264c2dfbe2f794de44691177fec54e4",
+    "runtime_files": 4,
+    "contains_interest_schema_scheduler_or_money_endpoints": false,
+    "approved_for_execution": false,
+    "base_commit_and_before_file_hashes_must_match": true,
+    "evidence": "docs/cma-readonly-bundle-evidence.json"
+  },
+  "next_approval_proposal": {
+    "diagnostic_only_release_and_service_restart": true,
+    "reuse_existing_authorized_auth_and_NH_client": true,
+    "selected_portfolio": "미래 성장포트",
+    "selected_account_type": "CMA",
+    "balance_reads_max_per_day": 3,
+    "balance_reads_max_total": 6,
+    "window_hours": 48,
+    "approved": false,
+    "scheduled": false,
+    "statement_API_reads_require_separate_scope": true,
+    "ledger_writes_or_automatic_activation_included": false
+  }
+}

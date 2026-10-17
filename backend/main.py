@@ -33,6 +33,9 @@ from backend.routers import forex, plans, performance, nh_notices, activity, led
 from logic.dividend_fetcher import prepare_dividend_cache
 from backend.services import market_service
 from backend.close_performance import start_scheduler
+from backend.cma_interest import start_scheduler as start_cma_scheduler
+from backend.routers import cma
+from backend.routers import cma_diagnostics
 from logic.crypto_price_fetcher import get_crypto_prices
 from backend.security import ApiAuthenticationMiddleware, validate_settings, cors_origins
 from backend.routers import auth, market, dashboard, accounts, assets, holdings, rebalance, trades, sync, crypto, portfolios, system
@@ -59,10 +62,14 @@ async def lifespan(app: FastAPI):
 
     threading.Thread(target=_background_dividend_warmup, daemon=True).start()
     stop, close_thread = start_scheduler()
+    cma_stop, cma_thread = start_cma_scheduler()
     try:
         yield
     finally:
         stop.set()
+        cma_stop.set()
+        if cma_thread:
+            cma_thread.join(timeout=1)
         # Provider requests are bounded; DB leases survive a forced shutdown.
         if close_thread:
             close_thread.join(timeout=1)
@@ -125,6 +132,8 @@ app.include_router(system.router)
 app.include_router(forex.router)
 app.include_router(plans.router)
 app.include_router(performance.router)
+app.include_router(cma.router)
+app.include_router(cma_diagnostics.router)
 app.include_router(nh_notices.router)
 app.include_router(activity.router)
 app.include_router(ledger_adjustments.router)

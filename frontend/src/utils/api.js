@@ -195,6 +195,14 @@ export const api = {
 
   // Rebalancing
   getPerformance: pid => request(`/api/performance/${encodeURIComponent(pid)}`),
+  getCmaIncome: pid => request(`/api/cma/${encodeURIComponent(pid)}`),
+  observeCma: (pid,aid) => request(`/api/cma/${encodeURIComponent(pid)}/${encodeURIComponent(aid)}/observe`,{method:'POST'}),
+  previewCmaIncome: (pid,aid,id) => request(`/api/cma/${encodeURIComponent(pid)}/${encodeURIComponent(aid)}/preview/${encodeURIComponent(id)}`),
+  applyCmaIncome: (pid,data) => request(`/api/cma/${encodeURIComponent(pid)}/income`,{method:'POST',body:JSON.stringify(data)}),
+  initializeCmaInterest: (pid,data) => request(`/api/cma/${encodeURIComponent(pid)}/initial-interest`,{method:'POST',body:JSON.stringify(data)}),
+  undoInitialCmaInterest: (pid,aid,id) => request(`/api/cma/${encodeURIComponent(pid)}/${encodeURIComponent(aid)}/initial-interest/${encodeURIComponent(id)}/undo`,{method:'POST'}),
+  undoCmaIncome: (pid,aid,id) => request(`/api/cma/${encodeURIComponent(pid)}/${encodeURIComponent(aid)}/income/${encodeURIComponent(id)}/undo`,{method:'POST'}),
+  configureCma: (pid,aid,data) => request(`/api/cma/${encodeURIComponent(pid)}/${encodeURIComponent(aid)}/settings`,{method:'PUT',body:JSON.stringify(data)}),
   startPerformance: pid => request(`/api/performance/${encodeURIComponent(pid)}/start`, {method:'POST'}),
   capturePerformance: pid => request(`/api/performance/${encodeURIComponent(pid)}/snapshot`, {method:'POST'}),
   addPerformanceFlow: (pid,data) => request(`/api/performance/${encodeURIComponent(pid)}/flows`, {method:'POST',body:JSON.stringify(data)}),

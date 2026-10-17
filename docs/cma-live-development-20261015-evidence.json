@@ -1,0 +1,102 @@
+{
+  "date": "2026-10-15",
+  "workspace": "C:/Users/hammo/.codex/worktrees/cma-interest/portfolio-rebalancer",
+  "branch": "codex/cma-interest",
+  "head": "fafd90c8c0459aa3e64d30c2e38466211ef81781",
+  "main_update": "fast-forward of the completed independent forex fix; CMA working changes preserved",
+  "new_commits_or_pushes_by_this_task": 0,
+  "original_US_stock_workspace_writes": 0,
+  "authorization": {
+    "all_needed_reads_and_checks": true,
+    "actual_trades_forbidden": true,
+    "automatic_trust_registration": "rejected_by_automatic_approval_review",
+    "rejected_change_applied": false
+  },
+  "production_reads": {
+    "client": "existing running AWS app and NH singleton/cache",
+    "diagnostic_sessions": 2,
+    "CMA_business_API_requests": 6,
+    "paths": [
+      "/common/inquiry/v1/totalTransaction",
+      "/common/inquiry/v1/depositWithdrawal",
+      "/krstock/inquiry/v1/balance"
+    ],
+    "pages_per_path_per_session": 1,
+    "HTTP_statuses": [200, 200],
+    "separate_NH_client_created": false,
+    "separate_token_probe_requests": 0,
+    "normal_app_token_refresh": "not counted or inspected separately",
+    "account_records_unchanged": true,
+    "complete_business_code": "00166",
+    "complete_business_message": "조회가 완료되었습니다.",
+    "domestic_totalTransaction_currency_code": "",
+    "depositWithdrawal_currency_field_present": false,
+    "CMA_code_marker_verified": true
+  },
+  "observed_financial_facts": {
+    "today": "2026-10-15",
+    "paid_gross_interest_krw": "2765",
+    "withheld_tax_krw": "410",
+    "interest_fees_krw": "0",
+    "paid_net_interest_krw": "2355",
+    "current_book_krw": "33936748",
+    "broker_total_krw": "33974558",
+    "total_difference_krw": "37810",
+    "difference_before_today_interest_krw": "35455",
+    "booked_and_broker_confirmed_withdrawals": [
+      {"date": "2026-10-14", "amount_krw": "200000"},
+      {"date": "2026-10-15", "amount_krw": "4000000"},
+      {"date": "2026-10-15", "amount_krw": "100000"}
+    ],
+    "withdrawals_replayed_or_reclassified": false,
+    "prior_difference_dated_or_posted": false
+  },
+  "sweep_observation": {
+    "first_KST": "2026-10-15T20:21:53.901132+09:00",
+    "first_cash_krw": "33974558",
+    "first_CMA_evaluation_krw": "0",
+    "second_KST": "2026-10-15T20:25:21.723980+09:00",
+    "second_cash_krw": "0",
+    "second_CMA_evaluation_krw": "33974558",
+    "withdrawable_and_net_assets_unchanged_krw": "33974558",
+    "fixed_daily_transition_hour_claimed": false
+  },
+  "production_validation_changes": {
+    "diagnostic_only_runtime_files": 5,
+    "diagnostic_releases": ["fafd90c-cma-readonly-937c96a7bf16", "fafd90c-cma-readonly-7a34951e491a"],
+    "full_CMA_schema_or_scheduler_included": false,
+    "final_release": "fafd90c",
+    "diagnostic_dropin_removed": true,
+    "final_account_records_unchanged": true,
+    "production_ledger_writes": 0,
+    "production_CMA_migrations": 0,
+    "orders": 0,
+    "automatic_interest_activation": false,
+    "temporary_SSH_credentials_deleted": true,
+    "audit_artifacts": "backups/cma-live-20261015"
+  },
+  "local_verification": {
+    "backend_passed": 562,
+    "backend_skipped": 5,
+    "frontend_full_suite": "passed, exit 0",
+    "frontend_reporter": "dot",
+    "frontend_build": "passed: frontend/dist/cma-live-20261015",
+    "isolated_PostgreSQL_passed": 18,
+    "isolated_PostgreSQL_stopped": true,
+    "isolated_PostgreSQL_evidence": "docs/cma-postgres-evidence.json",
+    "git_diff_check": "passed",
+    "real_redacted_replay_result": "actual book: INITIAL_BALANCE_REVIEW; synthetic initial-gap-resolved book: MATCHED for 2355 only",
+    "replay_financial_writes": 0
+  },
+  "remaining_boundary": {
+    "production_trusted_statement_profiles": [],
+    "default_writes_enabled": false,
+    "candidate_parser_implemented_and_locally_tested": true,
+    "CMA_full_feature_deployed_or_active": false,
+    "initial_gap_cannot_be_posted_as_daily_income": true,
+    "automatic_review_rejection_action": "persist NH_COMMON_CMA_PAID_V1 in the production trusted-profile registry",
+    "automatic_review_reason": "persistent safety-guard relaxation enabling future automatic interest accounting; read/check approval was not accepted as accounting/automatic activation approval",
+    "workaround_used": false,
+    "explicit_financial_activation_authorization_needed": true
+  }
+}

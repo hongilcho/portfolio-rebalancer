@@ -1,0 +1,47 @@
+{
+  "bundle": "backups\\cma-final-local-20261015\\readonly-bundle-9dfa447c26bd45f8b6c9de6d36af6324\\cma-readonly-fafd90c.zip",
+  "sha256": "94c5eb6d09164f098841460af2b5229a693d3b16a6ca45a9d37c62dcad95f999",
+  "manifest": {
+    "base_commit": "fafd90c8c0459aa3e64d30c2e38466211ef81781",
+    "profile_verified": false,
+    "flags": {
+      "CMA_DIAGNOSTICS_ENABLED": "1",
+      "CMA_INTEREST_ENABLED": "0",
+      "CMA_INTEREST_WRITES_ENABLED": "0"
+    },
+    "approved_for_execution": false,
+    "files": {
+      "logic/cma_diagnostics.py": {
+        "before_sha256": null,
+        "after_sha256": "463d68a5276786e77e33e6d504af6744f4c7649365647131925d90a08ae04b57"
+      },
+      "backend/routers/cma_diagnostics.py": {
+        "before_sha256": null,
+        "after_sha256": "16699d344a7f78dcdebf1cb071ab4b1fff91add20ef33a17c979bf264b3b5754"
+      },
+      "data/cma_nh.py": {
+        "before_sha256": null,
+        "after_sha256": "7116443fcff914e3362c76c68aab32c0e0acb9564eade750ebfdf9088cdaa8ff"
+      },
+      "data/nh_api.py": {
+        "before_sha256": "420c118edb6c208a462de3e285ed2802959c58a09a7c3cbcd4c39d886c3eda55",
+        "after_sha256": "5f5faf0c1b1d8ca32e1508104497deeed96ed078e3a99285109e3326d4bd74e1",
+        "before_crlf_sha256": "f723e99312cf45d6a7dc76644f6929f2256c094c17751d65a1236fdef019c9fd"
+      },
+      "backend/main.py": {
+        "before_sha256": "b18ceae39fbfe95c7beacdf0be8d37eeaf6ff2b253e2e4677582f135a0ebabf0",
+        "after_sha256": "1d6fdce33a422bc012c8281cbf271fca3a80d6ccf95dfb4efbcbdb1f05903e77",
+        "before_crlf_sha256": "b16a00efba1c54c85711365c0f626d87ca8a429c20b80cd4a35a8f4813cc89a4"
+      }
+    },
+    "tests": {
+      "patch_check": true,
+      "patch_applied_to_synthetic_base": true,
+      "payload_hashes_match": true,
+      "no_interest_or_schema_code": true,
+      "isolated_diagnostic_http": true,
+      "external_calls": 0
+    },
+    "operator_sha256": "5b08f89f48b2a23654f4043ecc3e22496cc5a05b1403a483537a642690f06174"
+  }
+}

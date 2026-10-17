@@ -20,6 +20,7 @@ import UsdLedgerPanel from './UsdLedgerPanel';
 import DepositLedgerPanel from './DepositLedgerPanel';
 import NamuhMessageImport from './NamuhMessageImport';
 import LedgerCorrectionPanel from './LedgerCorrectionPanel';
+import CmaIncomePanel from './CmaIncomePanel';
 import ExternalCashFlowPanel from './ExternalCashFlowPanel';
 import InternalTransferForm from './InternalTransferForm';
 import {executionRows,executionReferencePrice,seedExecutionPrice} from '../../utils/investmentInput';
@@ -127,6 +128,7 @@ export default function HistoryTab({
   const depositsBusy=useCallback((value,writing=value)=>{setChildBusy(old=>({...old,deposits:value}));setChildWriting(old=>({...old,deposits:writing}));},[]);
   const historyBusy=useCallback((value,writing=value)=>{setChildBusy(old=>({...old,history:value}));setChildWriting(old=>({...old,history:writing}));},[]);
   const correctionBusy=useCallback((value,writing=value)=>{setChildBusy(old=>({...old,correction:value}));setChildWriting(old=>({...old,correction:writing}));},[]);
+  const cmaBusy=useCallback(value=>{setChildBusy(old=>({...old,cma:value}));setChildWriting(old=>({...old,cma:value}));},[]);
   const navigationBusy=savingBatch || performance?.busy || Object.values(childWriting).some(Boolean);
   const busy=savingBatch || Boolean(pendingSubmission) || performance?.busy || Object.values(childBusy).some(Boolean);
   useEffect(()=>{onBusyChange?.(navigationBusy);},[navigationBusy,onBusyChange]);
@@ -373,6 +375,8 @@ export default function HistoryTab({
         {!embedded && <LedgerCorrectionPanel hidden={embedded} key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
           resetRequest={correctionReset} noticeRequest={noticeCorrection?.source?.portfolioId===currentPortfolioId?noticeCorrection:null} onNoticeSettled={correctionCompleted}
           reviewRequest={reviewCorrection?.portfolioId===currentPortfolioId?reviewCorrection:null} active={active && !embedded && effectiveView==='input'} disabled={busy && !childBusy.correction} onBusyChange={correctionBusy} onChanged={changed}/>}
+        {!embedded && <CmaIncomePanel key={`cma/${currentPortfolioId}`} portfolioId={currentPortfolioId}
+          active={active && effectiveView==='input'} disabled={busy && !childBusy.cma} onBusyChange={cmaBusy} onChanged={changed}/>}
       </div>
       {!embedded && <div id="history-record-panel" role="tabpanel" aria-labelledby="history-record-tab" hidden={effectiveView!=='records'}>
         <ActivityHistory key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}

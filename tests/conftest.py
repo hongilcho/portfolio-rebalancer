@@ -17,6 +17,9 @@ _isolation = pytest.MonkeyPatch()
 for key, value in {
     "PORTFOLIO_LOAD_CONFIG_FILES": "0",
     "PERFORMANCE_CLOSE_SCHEDULER_ENABLED": "0",
+    "CMA_INTEREST_ENABLED": "0",
+    "CMA_INTEREST_WRITES_ENABLED": "0",
+    "CMA_DIAGNOSTICS_ENABLED": "0",
     "PORTFOLIO_DB_SECURITY_ENABLED": "0",
     "SUPABASE_URL": "",
     "APP_PASSWORD": "test-only",

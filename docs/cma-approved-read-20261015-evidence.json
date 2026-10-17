@@ -1,0 +1,90 @@
+{
+  "session_date_kst": "2026-10-15",
+  "branch": "codex/cma-interest",
+  "approved_scope": {
+    "designated_temporary_ssh_credentials": true,
+    "existing_application_settings_read_only": true,
+    "existing_nh_cma_balance_read": true,
+    "orders": false,
+    "live_ledger_writes": false,
+    "operational_activation": false,
+    "deployment": false
+  },
+  "server": {
+    "instance": "portfolio-rebalancer",
+    "region": "ap-southeast-2",
+    "existing_release": "7efe40f",
+    "service_active": true,
+    "app_authentication": "existing_service_environment",
+    "temporary_ssh_credentials_removed": true,
+    "private_key_memory_references_cleared": true,
+    "credential_values_printed_or_documented": false
+  },
+  "balance_snapshot_before_user_recorded_transfer": {
+    "checked_at": "2026-10-15T19:12:06.539114+09:00",
+    "portfolio_name": "미래 성장포트",
+    "cma_account_matches": 1,
+    "app_auth_http_status": 200,
+    "compare_http_status": 200,
+    "book_krw": "38036748",
+    "broker_comparison_krw": "34074558",
+    "difference_krw": "-3962190",
+    "returned_holding_count": 0,
+    "scoped_accounts_unchanged_during_query": true,
+    "raw_cash_sweep_withdrawable_fields_available": false,
+    "interest_confirmed": false
+  },
+  "scoped_ledger_read_before_user_recorded_transfer": {
+    "checked_at": "2026-10-15T19:13:53.951517+09:00",
+    "source": "existing /api/activity, scoped CMA account, READ ONLY transaction",
+    "start_date": "2026-10-14",
+    "end_date": "2026-10-15",
+    "complete": true,
+    "item_count": 1,
+    "recorded_withdrawal_date": "2026-10-14",
+    "recorded_withdrawal_krw": "200000",
+    "cash_applied": true,
+    "reported_available_krw_in_message": "38072203",
+    "scoped_accounts_unchanged_during_query": true
+  },
+  "user_clarification_after_read": {
+    "transfer_date": "2026-10-15",
+    "transfer_krw": "4000000",
+    "destination": "another portfolio account",
+    "subsequently_recorded_by_user": true,
+    "assistant_repeated_or_modified_entry": false,
+    "latest_book_after_user_entry_requeried": false
+  },
+  "reference_calculation_only": {
+    "book_after_subtracting_confirmed_transfer_krw": "34036748",
+    "accumulated_positive_difference_candidate_krw": "37810",
+    "prior_message_minus_prior_book_krw": "35455",
+    "current_comparison_plus_transfer_minus_prior_message_krw": "2355",
+    "condition": "Balances must use comparable bases and no additional unrecorded movement may remain; these are not posted or final interest values."
+  },
+  "execution": {
+    "ssh_read_only_sessions": 2,
+    "app_auth_requests": 2,
+    "existing_nh_balance_comparison_requests": 1,
+    "standalone_nh_client_created": false,
+    "direct_nh_token_requests": 0,
+    "normal_existing_client_token_refresh_observed": "not inspected",
+    "order_requests": 0,
+    "live_ledger_write_requests": 0,
+    "service_or_configuration_changes": 0,
+    "activation": false,
+    "deployments": 0,
+    "original_us_equity_workspace_modified": false
+  },
+  "local_validation": {
+    "related_backend_tests_passed": 92,
+    "real_network_in_tests": false,
+    "synthetic_transfer_and_income_test_only": true
+  },
+  "remaining": [
+    "Operational comparison API does not expose distinct cash, CMA product value or withdrawal limits; no production changes were made to add them.",
+    "Actual balance response field semantics and completion profile remain unverified.",
+    "Do not replay the 4,000,000 KRW transfer: the user has recorded it.",
+    "Do not post candidate interest or query again under this completed read session; the user asked the assistant to leave bookkeeping alone."
+  ]
+}

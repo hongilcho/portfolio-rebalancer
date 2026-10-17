@@ -1,5 +1,6 @@
 """Existing startup schema, migration lock and deposit cleanup. Explicit IO only."""
 from datetime import datetime
+import os
 from data.repository_context import RepositoryContext
 from data.usd_schema import initialize as initialize_usd_ledger
 from data.workflow_schema import initialize as initialize_workflow
@@ -289,6 +290,9 @@ def _do_init_db_schema(db: RepositoryContext, conn, cursor):
     initialize_workflow(cursor)
     initialize_security(cursor)
     initialize_execution(cursor)
+    if os.getenv('CMA_INTEREST_ENABLED','0') == '1':
+        from data.cma_schema import initialize as initialize_cma
+        initialize_cma(cursor)
     conn.commit()
     clean_deposit_shadow_accounts(db)
 

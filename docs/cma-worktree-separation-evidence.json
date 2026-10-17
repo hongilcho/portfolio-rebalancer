@@ -1,0 +1,31 @@
+{
+  "status": "separated",
+  "cma_branch": "codex/cma-interest",
+  "base": "main",
+  "source_branch": "codex/us-etf-auto-buy",
+  "cma_source_files_removed": 21,
+  "common_files_restored": 8,
+  "unrelated_current_files_preserved": 435,
+  "pre_cma_baseline_files": 443,
+  "pre_cma_exact_matches": 443,
+  "changes_since_pre_cma_baseline": [],
+  "original_worktree": "C:\\Users\\hammo\\Documents\\portfolio-rebalancer",
+  "cma_worktree": "C:\\Users\\hammo\\.codex\\worktrees\\cma-interest\\portfolio-rebalancer",
+  "recovery_snapshot": "C:\\Users\\hammo\\.codex\\worktrees\\cma-interest\\portfolio-rebalancer\\backups\\cma_separation_20261014.zip",
+  "commits": 0,
+  "pushes": 0,
+  "deployments": 0,
+  "final_baseline_exact_matches": 443,
+  "original_tests": {
+    "backend_passed": 1176,
+    "backend_skipped": 5,
+    "frontend_passed": 186
+  },
+  "cma_tests": {
+    "backend_passed": 434,
+    "backend_skipped": 5,
+    "frontend_passed": 189,
+    "build": "passed"
+  },
+  "remaining_source_cma_files": []
+}

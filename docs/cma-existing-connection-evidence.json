@@ -1,0 +1,10 @@
+{
+  "checked_at": "2026-10-14T11:29:37.011425+00:00",
+  "source": "existing AWS /api/sync/namuh/compare",
+  "nh_compare_attempts": 0,
+  "ledger_write_requests": 0,
+  "direct_nh_token_requests": 0,
+  "deployments": 0,
+  "app_auth_status": 401,
+  "state": "APP_AUTH_UNAVAILABLE"
+}
