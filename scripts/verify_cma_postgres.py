@@ -198,7 +198,7 @@ def main():
         assert query('SELECT count(*) FROM portfolio_cma.income')[0][0]==0
         passed('read-only global mode blocks income and undo before any ledger writes')
         os.environ['CMA_INTEREST_WRITES_ENABLED']='1'  # Synthetic database only.
-        assert not cma_policy.VALIDATED_STATEMENT_PROFILES
+        assert cma_policy.VALIDATED_STATEMENT_PROFILES==frozenset({'NH_COMMON_CMA_PAID_V1'})
         # Only this isolated QA process trusts this synthetic profile.
         cma_policy.VALIDATED_STATEMENT_PROFILES=frozenset({'SYNTHETIC_PG_TEST_ONLY'})
         reference=wire(0);reference['Output_0']['drn_pbl_amt']='4800123'

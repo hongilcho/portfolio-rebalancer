@@ -25,8 +25,8 @@ def trusted(monkeypatch):
     monkeypatch.setattr(cma_policy,'VALIDATED_STATEMENT_PROFILES',frozenset({PROFILE}))
 
 
-def test_production_registry_is_empty_and_an_api_flag_cannot_validate_profile():
-    assert not cma_policy.VALIDATED_STATEMENT_PROFILES
+def test_only_approved_production_profile_is_trusted_and_api_flags_cannot_add_one():
+    assert cma_policy.VALIDATED_STATEMENT_PROFILES==frozenset({'NH_COMMON_CMA_PAID_V1'})
     assert check({**statement(),'profile_validated':True})['status']=='PROFILE_UNVERIFIED'
 
 

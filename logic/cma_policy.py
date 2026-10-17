@@ -2,10 +2,12 @@
 import os
 
 # Only code-reviewed, live-validated NH transaction profiles belong here.
-# An observed candidate is tested locally. Production trust registration remains
-# unapproved and blocked; environment/API input cannot grant that trust.
-# Tests inject an explicitly synthetic profile only inside their process.
-VALIDATED_STATEMENT_PROFILES=frozenset()
+# NH_COMMON_CMA_PAID_V1 was observed through the existing app on 2026-10-15,
+# including actual interest/tax, bank cash/principal chains and the evening sweep.
+# The user explicitly approved persistent registration and automatic CMA income
+# on 2026-10-17. This does not enable writes or any account's automatic policy.
+# Environment/API input cannot add trusted profiles; synthetic tests stay local.
+VALIDATED_STATEMENT_PROFILES=frozenset({'NH_COMMON_CMA_PAID_V1'})
 
 
 def writes_enabled():return os.getenv('CMA_INTEREST_WRITES_ENABLED','0')=='1'

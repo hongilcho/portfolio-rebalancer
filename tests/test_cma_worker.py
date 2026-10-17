@@ -80,7 +80,7 @@ def test_provider_uses_existing_singleton_for_statement_and_balance_not_a_new_cl
     monkeypatch.setattr(nh_api.nh_api_client,'get_access_token',Mock(side_effect=AssertionError('no separate token request')))
     result=existing_nh_balance('p','acc')
     assert {k:v for k,v in result.items() if k!='statement'}==evidence
-    assert result['statement']=={'status':'PROFILE_UNVERIFIED'}
+    assert result['statement']=={'status':'STATEMENT_INCOMPLETE'}
     assert fetch.call_count==1
     assert fetch.call_args.args[:2]==(nh_api.nh_api_client,'SYNTHETIC_ONLY')
 
