@@ -10,15 +10,23 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
   const [filters,setFilters]=useState(()=>({start_date:recentMonths(kstToday()),end_date:kstToday(),account_id:'',category:'',asset_id:'',include_cancelled:false}));
   const [page,setPage]=useState(1),[data,setData]=useState(null),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[reload,setReload]=useState(0);
   const [selectedTrades,setSelectedTrades]=useState([]);
+  const [saleResults,setSaleResults]=useState({}),[saleError,setSaleError]=useState('');
   useEffect(()=>{onBusyChange?.(saving);},[saving,onBusyChange]);
   useEffect(()=>{
     if(!active)return;let cancelled=false;
-    setData(null);setSelectedTrades([]);setError('');setLoading(true);
+    setData(null);setSelectedTrades([]);setError('');setLoading(true);setSaleResults({});setSaleError('');
     if(!filters.start_date || !filters.end_date || filters.start_date>filters.end_date){setError('조회 시작일·종료일을 확인해주세요.');setLoading(false);return()=>{cancelled=true;};}
     const query={start_date:filters.start_date,end_date:filters.end_date,page,page_size:20,include_cancelled:filters.include_cancelled};
     if(filters.account_id)query.account_id=filters.account_id;if(filters.category)query.category=filters.category;
     if(filters.asset_id)query.asset_id=filters.asset_id;
-    api.getActivity(portfolioId,query).then(result=>{if(!cancelled)setData(result);})
+    api.getActivity(portfolioId,query).then(async result=>{
+      if(cancelled)return;setData(result);
+      if(result.items.some(r=>r.category==='TRADE'&&r.kind==='SELL'&&!r.cancelled)){
+        try{const report=await api.getRealizedGains(portfolioId,{start_date:filters.start_date,end_date:filters.end_date});
+          if(!cancelled)setSaleResults(Object.fromEntries(report.sales.map(r=>[r.trade_id,r])));
+        }catch(e){if(!cancelled)setSaleError(e.message);}
+      }
+    })
       .catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setLoading(false);});
     return()=>{cancelled=true;};
   },[portfolioId,active,filters,page,revision,reload]);
@@ -63,12 +71,15 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
     {loading?<p className="history-muted" role="status">기록 조회 중…</p>:data && <>
       <p className="history-muted">선택한 기간 · {data.total}건</p>
       {data.items.length===0?<div className="history-empty">선택한 조건의 기록이 없습니다.</div>:<div className="history-record-list">{data.items.map(item=>{
-        const d=item.detail || {},canCancel=!item.cancelled && (item.batch_id || ['TRADE','USD','CASH'].includes(item.category) || item.detail?.correction_id);
+        const d=item.detail || {},sale=saleResults[d.trade_id],canCancel=!item.cancelled && (item.batch_id || ['TRADE','USD','CASH'].includes(item.category) || item.detail?.correction_id);
         return <article key={item.id} className={`history-record ${item.cancelled?'is-cancelled':''}`}>
           <div className="history-record-summary"><time>{item.event_date}</time><div className="history-record-identity"><span className="history-kind">{kindNames[item.kind] || item.kind}</span><strong>{item.account_alias}</strong><span className="history-muted">{item.description}</span>{item.cancelled && <span className="history-kind">취소됨</span>}</div><strong className="history-record-amount">{recordAmount(item)}</strong></div>
           <details className="history-record-detail"><summary>상세 기록{item.batch_id?' · 알림 묶음':''}</summary><div className="history-record-detail-body">
             {d.correction_id && <>{!item.cancelled && d.history_pending && <button className="btn btn-secondary btn-sm" disabled={saving} onClick={()=>onReviewCorrection?.(d.correction_id)}>남은 과거 평가 기록 확인</button>}<p>등록 시각 {new Date(d.created_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})}</p><p>원화 예수금 {formatKRW(Number(d.before_cash.deposit_krw))} → {formatKRW(Number(d.after_cash.deposit_krw))} · 달러 {formatUSD(Number(d.before_cash.deposit_usd))} → {formatUSD(Number(d.after_cash.deposit_usd))}</p>{d.proposal.kind==='HOLDING' && <p>수량 {(d.before_holdings.find(h=>h.asset_id===d.proposal.asset_id)?.quantity ?? 0)} → {d.proposal.quantity} · 확인한 단가 {d.proposal.avg_price_usd || d.proposal.avg_price} · 매입환율 {d.proposal.buy_fx_rate || '해당 없음'}</p>}{d.history_pending && <p>과거 평가 기록 미확정 · 입력 화면의 ‘장부 확인 및 정정’에서 남은 기록을 확인해주세요.</p>}</>}
             {d.quantity!=null && <p>수량 {d.quantity} · 단가 {item.currency==='USD'?formatUSD(Number(d.price)):formatKRW(Number(d.price))}{d.ticker?` · ${d.ticker}`:''}</p>}
+            {sale&&<p>매도손익 · 비용 전 {sale.gross_profit_krw==null?'원가 확인 필요':formatKRW(sale.gross_profit_krw)} · 순손익 {sale.net_profit_krw==null?'비용·원가 확인 필요':formatKRW(sale.net_profit_krw)} · 7번 분석 및 확인에서 상세 조회</p>}
+            {item.kind==='SELL' && saleError && <p role="alert">매도손익 조회 실패: {saleError}</p>}
+            {d.trade_costs && <p>기록 비용 · 원화 {d.trade_costs.krw==null?'미확인':formatKRW(d.trade_costs.krw)}{item.currency==='USD'?` · 달러 ${d.trade_costs.usd==null?'미확인':formatUSD(d.trade_costs.usd)}`:''}</p>}
             {(d.fx_rate || d.exchange_rate) && <p>적용환율 {Number(d.fx_rate || d.exchange_rate).toLocaleString('ko-KR',{maximumFractionDigits:8})}원</p>}
             {d.reported_available_krw!=null && <p>알림의 출금가능금액 {formatKRW(Number(d.reported_available_krw))} · 참고값</p>}{d.occurred_at && <p>실제 일시 {new Date(d.occurred_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})}</p>}
             {d.balance!=null && <p>처리 후 달러 {formatUSD(Number(d.balance))} · 원화 취득원가 {formatKRW(Number(d.cost_krw))}</p>}

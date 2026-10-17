@@ -1,0 +1,15 @@
+{
+  "external_calls": 0,
+  "production_writes": 0,
+  "checks": [
+    "additive startup migration twice preserves legacy values; missing fees stay NULL",
+    "concurrent duplicate requests deduct principal and fees exactly once",
+    "read-only repeatable snapshot reports closed realized profit; portfolio scope and cash unchanged",
+    "actual activity history SQL returns sale fee and original book evidence",
+    "reentry is separate; reversing reentry and full sale restores quantity, cash, basis and report",
+    "fee failure rolls back entire transaction and request receipt"
+  ],
+  "status": "passed",
+  "check_count": 6,
+  "isolated_cluster_stopped": true
+}

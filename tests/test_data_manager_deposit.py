@@ -41,6 +41,7 @@ def test_execute_trade_deposit_update(mock_get_connection):
         asset, # verified account/asset scope
         {'deposit_krw': 10000.0}, # account balance
         None, # USD ledger is opt-in
+        {'quantity': 10, 'avg_price': 25000.0}, # immutable pre-sale book basis
         {'quantity': 10, 'avg_price': 25000.0} # holdings lookup (selling 5 at 26000)
     ]
 

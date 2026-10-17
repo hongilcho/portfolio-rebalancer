@@ -60,7 +60,7 @@ class DatabaseAdapter:
                 trade_sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE,
                 trade_date TEXT, account_id TEXT, asset_id TEXT, trade_type TEXT,
                 quantity REAL, price REAL, currency TEXT, exchange_rate REAL,
-                cash_delta_krw REAL, cash_delta_usd REAL
+                cash_delta_krw REAL, cash_delta_usd REAL, trade_costs TEXT, accounting_basis TEXT
             );
             CREATE TABLE holdings (
                 id TEXT PRIMARY KEY, account_id TEXT, asset_id TEXT, quantity REAL,

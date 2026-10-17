@@ -14,6 +14,7 @@ import {readPendingRequest,requireBookkeepingProtocol,singleSubmission} from '..
 import { loadAccountHoldings } from '../../utils/accountHoldings';
 import PriceReference from './PriceReference';
 import TradeBatchForm from './TradeBatchForm';
+import {feePayload} from '../../utils/tradeCosts';
 import ActivityHistory from './ActivityHistory';
 import {ClipboardPaste,PenLine,Wallet,History} from 'lucide-react';
 import UsdLedgerPanel from './UsdLedgerPanel';
@@ -176,6 +177,7 @@ export default function HistoryTab({
       prev.map((r) => {
         if (r.id !== id) return r;
         const updated = { ...r, [field]: value };
+        if(field==='assetId'||field==='accountId'){updated.costsConfirmed=false;updated.feesKrw=0;updated.feesUsd=0;}
         if (field === 'assetId' && value) {
           const ast = assets.find((a) => String(a.id) === String(value));
           if (ast?.market === 'US') {
@@ -209,6 +211,7 @@ export default function HistoryTab({
       prev.map((r) => {
         if (r.id !== id) return r;
         const updated = { ...r, [field]: value };
+        if(field==='assetId'||field==='accountId'){updated.costsConfirmed=false;updated.feesKrw=0;updated.feesUsd=0;}
         if (field === 'assetId' && value) {
           const ast = assets.find((a) => String(a.id) === String(value));
           if (ast?.market === 'US') {
@@ -244,6 +247,8 @@ export default function HistoryTab({
     }
     const submittedBuys = buyRows.filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0);
     const submittedSells = sellRows.filter((r) => r.accountId && r.assetId && r.quantity > 0 && r.price > 0);
+    try { [...submittedBuys,...submittedSells].forEach(r=>feePayload(r,assets.find(a=>String(a.id)===String(r.assetId))?.market==='US')); }
+    catch(error){alert(error.message);return;}
     const validBuys = submittedBuys
       .map((r) => {
         const ast = assets.find((a) => String(a.id) === String(r.assetId));
@@ -252,6 +257,7 @@ export default function HistoryTab({
           account_id: String(r.accountId),
           asset_id: String(r.assetId),
           trade_type: 'BUY',
+          ...feePayload(r,isUS),
           quantity: Number(r.quantity),
           price: Number(r.price),
           currency: isUS ? 'USD' : 'KRW',
@@ -268,6 +274,7 @@ export default function HistoryTab({
           account_id: String(r.accountId),
           asset_id: String(r.assetId),
           trade_type: 'SELL',
+          ...feePayload(r,isUS),
           quantity: Number(r.quantity),
           price: Number(r.price),
           currency: isUS ? 'USD' : 'KRW',
@@ -289,6 +296,10 @@ export default function HistoryTab({
   const submitManual = async payload => {
     return singleSubmission(submitLock,async()=>{
       try{await requireBookkeepingProtocol(api);}catch(error){alert(error.message);return;}
+      if(payload.trades.some(r=>r.fees_krw!=null || r.fees_usd!=null)){
+        try{if((await api.getBookkeepingCapabilities()).trade_costs_protocol!==1)throw Error('서버가 비용 기록을 지원하지 않습니다. 백엔드 업데이트 후 다시 저장해주세요.');}
+        catch(error){alert(error.message);return;}
+      }
       const draft={tradeDate,buyRows,sellRows,uncertainSubmission:true,pendingSubmission:payload};
       if (!writeTradeDraft(storage,currentPortfolioId,draft)) {
         setDraftStorageError(true);alert('임시 저장을 사용할 수 없어 요청을 보내지 않았습니다. 브라우저 저장소를 허용해주세요.');return;

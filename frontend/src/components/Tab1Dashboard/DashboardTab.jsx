@@ -203,6 +203,7 @@ export default function DashboardTab({
   return (
     <div className="portfolio-dashboard">
       <MarketStatus status={dashboardData?.market_status} />
+      {dashboardData?.realized_summary?.sell_count>0 && <details className="section-card"><summary>누적 매도손익 · 비용 전 {dashboardData.realized_summary.gross_profit_krw==null?'원가 확인 필요':formatKRW(dashboardData.realized_summary.gross_profit_krw)}</summary><p>비용 확인 완료분 순손익 {dashboardData.realized_summary.confirmed_net_profit_krw==null?'확인 필요':formatKRW(dashboardData.realized_summary.confirmed_net_profit_krw)} · 확인 필요 {dashboardData.realized_summary.pending_count}건</p><p>7번 분석 및 확인에서 매도별 손익과 전량 매도 이력을 확인할 수 있습니다. 현재 보유자산 손익과 구분하며 총자산에 다시 합산하지 않습니다.</p></details>}
       <details className="dashboard-calculation-help"><summary>수익률 계산 기준</summary><p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
         보유자산 수익률 = (평가손익 + 세후 배당) ÷ 보유자산 매입원가. 예수금은 총자산에만 포함됩니다.
       </p></details>

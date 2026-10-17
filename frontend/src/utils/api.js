@@ -54,6 +54,7 @@ async function request(endpoint, options = {}, format = 'json') {
 }
 
 export const api = {
+  getRealizedGains:(pid,params={})=>request(`/api/trades/realized?${new URLSearchParams({portfolio_id:pid,...params})}`),
   getInvestmentCapabilities:()=>request('/api/investments/capabilities'),
   getInvestments:pid=>request(`/api/investments/${encodeURIComponent(pid)}`),
   getInvestmentPlans:pid=>request(`/api/investments/${encodeURIComponent(pid)}/plans`),

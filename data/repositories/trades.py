@@ -7,7 +7,7 @@ from typing import Tuple
 from psycopg2.extras import RealDictCursor
 from logic.trade_accounting import cash_movement, replay_holding
 from data.repository_context import RepositoryContext
-from data.repositories import forex, bookkeeping
+from data.repositories import forex, bookkeeping, trade_costs
 
 def execute_trade(
     db: RepositoryContext,
@@ -22,6 +22,8 @@ def execute_trade(
     import_source=None,
     broker_order_no=None,
     transaction=None,
+    fees_krw=None,
+    fees_usd=None,
 ):
     if not all(math.isfinite(v) and v > 0 for v in (quantity, price)):
         return False, "수량과 단가는 0보다 커야 합니다."
@@ -49,6 +51,7 @@ def execute_trade(
         currency = currency or ('USD' if is_us else 'KRW')
         if currency != ('USD' if is_us else 'KRW'):
             raise ValueError('미국 종목은 달러 단가, 국내 종목은 원화 단가로 입력해주세요.')
+        costs = trade_costs.normalize(fees_krw, fees_usd, currency)
 
         # Lock before reading balances; deletion takes the same account lock.
         cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
@@ -84,6 +87,7 @@ def execute_trade(
         dep_krw = float(acc_row.get('deposit_krw') or 0.0)
         dep_usd = float(acc_row.get('deposit_usd') or 0.0)
         state = forex.load_state(cursor, account_id)
+        basis = trade_costs.capture(cursor, account_id, asset_id) if trade_type == 'SELL' else None
         if state:
             cursor.execute('SELECT market FROM assets WHERE id = %s', (str(asset_id),))
             asset = cursor.fetchone()
@@ -94,6 +98,7 @@ def execute_trade(
                     raise ValueError('매도대금 수취기준환율을 입력해주세요.')
                 forex.execute_managed_trade(db, cursor, account_id, asset_id, new_trade_id,
                                             state, acc_row, trade_date, trade_type, quantity, price, exchange_rate)
+                trade_costs.apply(cursor, new_trade_id, costs, basis)
                 if transaction is None: conn.commit()
                 return True, '계좌 달러 평균환율로 매매 기록과 원가를 저장했습니다.'
             if currency == 'USD':
@@ -153,6 +158,7 @@ def execute_trade(
                     buy_fx_rate=EXCLUDED.buy_fx_rate,original_avg_price=EXCLUDED.original_avg_price,
                     original_avg_price_usd=EXCLUDED.original_avg_price_usd""",
                 (db.new_id(),str(account_id),str(asset_id),qty,avg_krw,avg_usd,fx,avg_krw,avg_usd))
+            trade_costs.apply(cursor, new_trade_id, costs)
             if transaction is None: conn.commit()
             return True, '거래일 순서로 보유 수량·원가를 재계산하고 매매를 저장했습니다.'
 
@@ -250,6 +256,7 @@ def execute_trade(
                 if transaction is None: conn.rollback()
                 return False, "매도할 보유 잔고가 없습니다."
                 
+        trade_costs.apply(cursor, new_trade_id, costs, basis)
         if transaction is None: conn.commit()
         return True, "매매 기록 및 잔고 업데이트가 완료되었습니다."
     except Exception as e:
@@ -458,6 +465,9 @@ def apply_transfer_plan(db: RepositoryContext, transfer_plan: list) -> Tuple[boo
 
 def execute_batch(db, payload):
     """Manual rows commit together. A lost response can retry the exact receipt."""
+    # Preserve pre-upgrade request receipts: new unknown fee fields are omitted.
+    payload = {**payload, 'trades': [{k:v for k,v in row.items()
+                if k not in ('fees_krw','fees_usd') or v is not None} for row in payload['trades']]}
     conn = db.connect()
     try:
         c = conn.cursor(cursor_factory=RealDictCursor)

@@ -19,7 +19,7 @@ def overview_data(mocker):
                       "asset_name": "Test ETF", "ticker": "TEST", "market": "KR",
                       "first_buy_date": "2026-01-01"}],
         "trade_history": [{"id": "init", "account_id": "acc", "asset_id": "ast",
-                           "trade_date": "2026-01-01", "trade_type": "INIT", "quantity": 10}],
+                           "trade_date": "2026-01-01", "trade_type": "INIT", "quantity": 10, "price": 100000}],
         "crypto_holdings": [],
     }
     quotes = [{"id": "ast", "price_krw": 110000, "price_usd": 0}]
@@ -104,7 +104,7 @@ def test_history_dividends_match_individual_and_overview(overview_data, mocker, 
              manual_dividend_override=manual_override)
     batch["trade_history"][0]["quantity"] = 33
     batch["trade_history"].append({"id": "buy", "account_id": "acc", "asset_id": "ast",
-                                  "trade_date": "2026-02-15", "trade_type": "BUY", "quantity": 45})
+                                  "trade_date": "2026-02-15", "trade_type": "BUY", "quantity": 45, "price": 100})
     dividends[:] = [{"date": "2026-02-01", "amount": 83}, {"date": "2026-03-01", "amount": 30}]
     quotes[0]["price_krw"] = 110
     batch_reader = mocker.spy(portfolios, "get_overview_batch_data")

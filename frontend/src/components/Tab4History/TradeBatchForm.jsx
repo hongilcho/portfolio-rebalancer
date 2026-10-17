@@ -2,6 +2,8 @@
 import React,{useState} from 'react';
 import { Plus, Save } from 'lucide-react';
 import { formatKRW, formatUSD } from '../../utils/formatters';
+import TradeCosts from './TradeCosts';
+import {remainingSellQuantity} from '../../utils/tradeCosts';
 
 export default function TradeBatchForm({
   tradeDate,
@@ -224,6 +226,7 @@ export default function TradeBatchForm({
                     </div>
                   )}
                   {isUS && ledger && <p role="status">{ledger.needs_reconciliation ? '달러 잔고 대사가 필요합니다.' : `사용 가능한 달러 ${formatUSD(ledger.usd_balance)}. 부족하면 실제 환전 후 기록을 먼저 등록하세요.`}</p>}
+                  <TradeCosts row={row} isUS={isUS} onChange={(key,value)=>updateBuyRow(row.id,key,value)} />
                 </div>
               );
             })}
@@ -248,12 +251,14 @@ export default function TradeBatchForm({
 
             {sellRows.map((row) => {
               const accHoldings = (accountHoldingsMap[String(row.accountId)] || []).filter((h) => h.quantity > 0);
+              const remaining=remainingSellQuantity(row,sellRows,accHoldings);
               const ledger = usdLedgers.find(s => String(s.account_id) === String(row.accountId));
               const selectedAst = assets.find((a) => String(a.id) === String(row.assetId));
               const isUS = selectedAst?.market === 'US';
 
               return (
                 <div key={row.id} className="trade-row-card">
+                  {row.assetId && <p><button type="button" className="btn btn-secondary btn-sm" disabled={locked || remaining<=0} onClick={()=>updateSellRow(row.id,'quantity',remaining)}>전량 {remaining}주</button><small> 다른 매도 대기 행을 제외한 수량 · 실제 체결 단가는 직접 확인해주세요.</small></p>}
                   {/* Desktop Layout */}
                   <div className="trade-row-desktop">
                     <select
@@ -414,6 +419,7 @@ export default function TradeBatchForm({
                       </div>
                     </div>
                   )}
+                  <TradeCosts row={row} isUS={isUS} onChange={(key,value)=>updateSellRow(row.id,key,value)} />
                 </div>
               );
             })}

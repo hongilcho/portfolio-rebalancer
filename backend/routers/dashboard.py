@@ -133,6 +133,13 @@ def build_dashboard_summary(accounts, assets, inputs, price_map, usd_krw):
         calculate_adjustment=calculate_adjusted_holding_prices,
     )
     result['rate_source'] = market_service.request_snapshot()['rate_source']
+    # Reuse this request's history: no additional DB/quote requests for this KPI.
+    from logic.realized_gains import calculate
+    aids={str(a['id']) for a in accounts}
+    sids={str(a['id']) for a in assets if not a.get('is_deposit')}
+    history=[t for (aid,sid),rows in inputs.trades_by_holding.items()
+             if aid in aids and sid in sids for t in rows]
+    result['realized_summary']=calculate(history)['summary']
     result['market_status'] = {
         'prices': market_service.request_status(), 'dividends': get_dividend_status(),
     }

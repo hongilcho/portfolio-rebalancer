@@ -8,6 +8,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
+from datetime import date
 from data.data_manager import _context, get_trade_history, delete_trades
 from data.repositories import trades as repository
 from backend.execution_models import ExecutionLink
@@ -26,6 +27,8 @@ class TradeBatchItem(BaseModel):
     import_source: Optional[Literal['NAMUH_KAKAO']] = None
     broker_order_no: Optional[str] = None
     execution: ExecutionLink | None = None
+    fees_krw: Optional[float] = Field(default=None,ge=0,le=1e12,allow_inf_nan=False)
+    fees_usd: Optional[float] = Field(default=None,ge=0,le=1e12,allow_inf_nan=False)
 
 class BatchTradeRequest(BaseModel):
     """일괄 매매 기록 실행 요청 스키마"""
@@ -40,7 +43,15 @@ class DeleteTradesRequest(BaseModel):
 
 @router.get('/capabilities')
 def capabilities():
-    return {'bookkeeping_protocol':1}
+    return {'bookkeeping_protocol':1,'trade_costs_protocol':1}
+
+@router.get('/realized')
+def realized_report(portfolio_id: str, start_date: date | None=None, end_date: date | None=None,
+                    account_id: str | None=None, asset_id: str | None=None):
+    if start_date and end_date and start_date>end_date:
+        raise HTTPException(status_code=400,detail='조회 시작일·종료일을 확인해주세요.')
+    from data.repositories.realized import read
+    return read(_context(),portfolio_id,start=start_date,end=end_date,account_id=account_id,asset_id=asset_id)
 
 @router.get("/")
 def list_trades(

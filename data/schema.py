@@ -200,6 +200,9 @@ def _do_init_db_schema(db: RepositoryContext, conn, cursor):
     # Imported order identity shares the trade transaction and deletion lifecycle.
     cursor.execute("ALTER TABLE trade_history ADD COLUMN IF NOT EXISTS import_source TEXT")
     cursor.execute("ALTER TABLE trade_history ADD COLUMN IF NOT EXISTS broker_order_no TEXT")
+    # Additive metadata only: legacy cost certainty is deliberately left NULL.
+    cursor.execute("ALTER TABLE trade_history ADD COLUMN IF NOT EXISTS trade_costs JSONB")
+    cursor.execute("ALTER TABLE trade_history ADD COLUMN IF NOT EXISTS accounting_basis JSONB")
     cursor.execute('''CREATE UNIQUE INDEX IF NOT EXISTS trade_history_import_order_unique
         ON trade_history (account_id, trade_date, import_source, broker_order_no)
         WHERE import_source IS NOT NULL AND broker_order_no IS NOT NULL''')

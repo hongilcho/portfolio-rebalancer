@@ -10,7 +10,8 @@ ACTIVITY = '''WITH activity AS (
    (t.quantity*t.price)::numeric AS amount,ast.name AS description,FALSE AS cancelled,
    n.batch_id,NULL::timestamptz AS order_at,
    jsonb_build_object('trade_id',t.id,'asset_id',t.asset_id,'ticker',ast.ticker,'quantity',t.quantity,
-     'price',t.price,'exchange_rate',t.exchange_rate,'broker_order_no',t.broker_order_no,'notes',t.notes) AS detail
+     'price',t.price,'exchange_rate',t.exchange_rate,'broker_order_no',t.broker_order_no,'notes',t.notes,
+     'trade_costs',t.trade_costs,'accounting_basis',t.accounting_basis) AS detail
  FROM trade_history t JOIN accounts a ON a.id=t.account_id LEFT JOIN assets ast ON ast.id=t.asset_id
  LEFT JOIN nh_notice_items n ON n.linked_trade_id=t.id AND n.reversed_at IS NULL
  WHERE a.portfolio_id=%(pid)s AND t.trade_type<>'INIT'

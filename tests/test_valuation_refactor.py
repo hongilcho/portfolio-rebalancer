@@ -62,9 +62,11 @@ def sample_snapshot(variant="normal"):
                 batch['holdings'].append(h)
                 batch['trade_history'].extend([
                     dict(id=f"{h['id']}-init", account_id=acc_id, asset_id=aid, trade_type="INIT",
-                         quantity=qty + 1, trade_date="2026-01-01", trade_sequence=1),
+                         quantity=qty + 1, trade_date="2026-01-01", trade_sequence=1,
+                         price=h['original_avg_price'],currency='KRW'),
                     dict(id=f"{h['id']}-sell", account_id=acc_id, asset_id=aid, trade_type="SELL",
-                         quantity=1, trade_date="2026-02-15", trade_sequence=2),
+                         quantity=1, trade_date="2026-02-15", trade_sequence=2,
+                         price=h['original_avg_price'],currency='KRW'),
                 ])
     if variant == "manual":
         for h in batch['holdings']:
@@ -114,6 +116,9 @@ VARIANTS = ("normal", "manual", "zero_quotes", "missing_quotes", "empty", "zero_
 def test_full_responses_match_pre_refactor(variant):
     expected = json.loads((Path(__file__).parent / 'fixtures/valuation_before_refactor.json').read_text())
     for endpoint, output in snapshot_outputs(variant).items():
+        # The additive realized summary has dedicated accounting tests. Every
+        # pre-existing valuation field still matches its unchanged baseline.
+        if endpoint=='bundle':output['dashboard'].pop('realized_summary',None)
         encoded = json.dumps(output, sort_keys=True, ensure_ascii=False).encode()
         assert hashlib.sha256(encoded).hexdigest() == expected['sha256'][f'{variant}/{endpoint}'], \
             f'{variant}/{endpoint} response changed'
