@@ -85,8 +85,12 @@ def calculate_portfolio_summary(accounts, assets, inputs, adjustments, price_map
         acc_eval_profit_krw = stock_eval - stock_buy_total
         acc_eval_profit_pct = (acc_eval_profit_krw / stock_buy_total * 100) if stock_buy_total > 0 else 0.0
         acc_div_profit_krw = sum(h.get('dividend_profit_krw', 0.0) for h in holding_details)
-        acc_total_profit_krw = acc_eval_profit_krw + acc_div_profit_krw
-        acc_total_profit_pct = (acc_total_profit_krw / stock_buy_total * 100) if stock_buy_total > 0 else 0.0
+        holding_profit_krw = acc_eval_profit_krw + acc_div_profit_krw
+        cma_interest_krw = float(acc.get('cma_interest_krw') or 0) if acc_type == 'CMA' else 0.0
+        acc_total_profit_krw = holding_profit_krw + cma_interest_krw
+        # The existing rate measures held assets. Cash interest has no matching
+        # investment denominator here; do not divide it by stock purchase cost.
+        acc_total_profit_pct = (holding_profit_krw / stock_buy_total * 100) if stock_buy_total > 0 else 0.0
 
         account_summaries.append({
             "id": acc_id,
@@ -120,6 +124,8 @@ def calculate_portfolio_summary(accounts, assets, inputs, adjustments, price_map
             "limit_preference": acc.get('limit_preference', 'ANNUAL'),
             "holdings": holding_details
         })
+        if acc_type == 'CMA':
+            account_summaries[-1]['cma_interest_krw'] = cma_interest_krw
 
     portfolio_assets = aggregate_positions(accounts, assets, inputs, adjustments, price_map, usd_krw)
     total_krw_cash = sum(float(a['deposit_krw']) for a in accounts)

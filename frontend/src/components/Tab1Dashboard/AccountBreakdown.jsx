@@ -49,8 +49,9 @@ export default function AccountBreakdown({
             const isIrp = acc.account_type === 'IRP';
             const riskKnown=acc.risk_pct!=null && Number.isFinite(Number(acc.risk_pct));
             const isIrpOverRisk = isIrp && acc.risk_pct > 70.0;
-            const accStockProfit = acc.profit_krw || ((acc.stock_eval || 0) - (acc.stock_buy_total || 0));
-            const accStockReturn = acc.profit_pct || (acc.stock_buy_total > 0 ? (accStockProfit / acc.stock_buy_total * 100) : 0);
+            const isCma=acc.account_type==='CMA';
+            const accStockProfit = acc.profit_krw ?? ((acc.stock_eval || 0) - (acc.stock_buy_total || 0));
+            const accStockReturn = acc.profit_pct ?? (acc.stock_buy_total > 0 ? (accStockProfit / acc.stock_buy_total * 100) : 0);
             const totalVal = acc.total_val || (acc.stock_eval + acc.deposit_krw + (acc.deposit_usd * (usd_krw || 1380)));
 
             const annualPct = (acc.annual_limit_pct || 0) * 100;
@@ -98,16 +99,22 @@ export default function AccountBreakdown({
                         <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{formatKRW(acc.stock_eval)}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>총손익 (수익률)</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{isCma?'총손익':'총손익 (수익률)'}</div>
                         <div style={{ fontSize: '1.15rem', fontWeight: 700, color: getProfitColor(accStockProfit) }}>
-                          {(accStockProfit || 0) > 0 ? '+' : ''}{formatKRW(accStockProfit)} ({formatPercent(accStockReturn)})
+                          {(accStockProfit || 0) > 0 ? '+' : ''}{formatKRW(accStockProfit)}{!isCma && ` (${formatPercent(accStockReturn)})`}
                         </div>
+                        {isCma && <div style={{fontSize:'0.72rem',color:'var(--text-secondary)',marginTop:'2px'}}>보유자산 수익률 {acc.stock_buy_total>0?formatPercent(accStockReturn):'—'} · CMA 이자는 총손익에 포함</div>}
                         {acc.dividend_profit_krw > 0 && (
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                             시세 {formatKRW(acc.eval_profit_krw, true)} | 배당 +{formatKRW(acc.dividend_profit_krw)}
                           </div>
                         )}
                       </div>
+                      {isCma && <div>
+                        <div style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>CMA 누적 세후 이자</div>
+                        <div style={{fontSize:'1.15rem',fontWeight:700,color:getProfitColor(acc.cma_interest_krw)}}>{formatKRW(acc.cma_interest_krw || 0)}</div>
+                        <div style={{fontSize:'0.72rem',color:'var(--text-secondary)',marginTop:'2px'}}>초기 누적분 포함 · 예수금에 이미 반영됨</div>
+                      </div>}
                       <div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>💵 보유 예수금</div>
                         <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>

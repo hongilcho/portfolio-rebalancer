@@ -4,6 +4,26 @@ from typing import Dict, Any
 from data.normalization import sanitize_account_names, _normalize_asset
 from data.repository_context import RepositoryContext
 
+
+def _overview_account_source(cursor):
+    """Optional private journal; never create tables or change cash on a read."""
+    cursor.execute("SELECT to_regclass('portfolio_cma.income'), to_regclass('portfolio_cma.openings')")
+    income, openings = cursor.fetchone()
+    if not income and not openings:
+        return 'accounts'
+    if not income or not openings:
+        raise RuntimeError('CMA income schema is incomplete')
+    # Aggregate first: joining individual daily rows to openings multiplies income.
+    # Both portfolio and account must match, including after an account is moved.
+    return '''(SELECT a.*, COALESCE(i.amount_krw, 0) AS cma_interest_krw
+        FROM accounts a LEFT JOIN (
+            SELECT portfolio_id, account_id, SUM(amount_krw) AS amount_krw FROM (
+                SELECT portfolio_id, account_id, amount_krw FROM portfolio_cma.income WHERE reversed_at IS NULL
+                UNION ALL
+                SELECT portfolio_id, account_id, amount_krw FROM portfolio_cma.openings WHERE reversed_at IS NULL
+            ) journal GROUP BY portfolio_id, account_id
+        ) i ON a.account_type='CMA' AND i.portfolio_id=a.portfolio_id AND i.account_id=a.id)'''
+
 def get_rebalance_batch_data(db: RepositoryContext, portfolio_id: str) -> Dict[str, Any]:
     """Read one portfolio's calculation inputs in one consistent SQL snapshot.
 
@@ -52,12 +72,12 @@ def get_rebalance_batch_data(db: RepositoryContext, portfolio_id: str) -> Dict[s
 def get_overview_batch_data(db: RepositoryContext) -> Dict[str, Any]:
     """
     전체 포트폴리오 요약에 필요한 모든 테이블(portfolios, accounts, assets, holdings, crypto_holdings)을
-    단 1회의 PostgreSQL 네트워크 왕복(single round-trip)으로 고속 조회
+    CMA 스키마 존재 확인 후 단일 SQL 스냅샷으로 잔고와 누적 이자를 함께 조회.
     """
     sql = """
     SELECT json_build_object(
         'portfolios', COALESCE((SELECT json_agg(p ORDER BY p.is_default DESC, p.created_at ASC) FROM portfolios p), '[]'::json),
-        'accounts', COALESCE((SELECT json_agg(acc ORDER BY acc.account_alias ASC) FROM accounts acc), '[]'::json),
+        'accounts', COALESCE((SELECT json_agg(acc ORDER BY acc.account_alias ASC) FROM __ACCOUNT_SOURCE__ acc), '[]'::json),
         'assets', COALESCE((SELECT json_agg(ast ORDER BY ast.name ASC) FROM assets ast), '[]'::json),
         'holdings', COALESCE((SELECT json_agg(h) FROM (
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
@@ -102,6 +122,7 @@ def get_overview_batch_data(db: RepositoryContext) -> Dict[str, Any]:
     conn = db.connect()
     cursor = conn.cursor()
     try:
+        sql = sql.replace('__ACCOUNT_SOURCE__', _overview_account_source(cursor))
         cursor.execute(sql)
         row = cursor.fetchone()
         raw = row[0] if row else {}

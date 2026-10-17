@@ -175,6 +175,8 @@ def main():
         finally: admin.close()
         schema.init_db(ctx)
         assert query("SELECT to_regnamespace('portfolio_cma')")[0][0] is None
+        from data.repositories.snapshots import get_overview_batch_data
+        assert get_overview_batch_data(ctx)['accounts']==[]
         passed('default-off startup creates no CMA schema')
         os.environ['CMA_INTEREST_ENABLED']='1'
         schema.init_db(ctx)
@@ -333,6 +335,25 @@ def main():
             conn.rollback()
         finally: conn.close()
         passed('unexpected schema owner is rejected before reuse')
+        from logic.portfolio_valuation import calculate_portfolio_summary,index_valuation_inputs
+        # Actual PostgreSQL overview query: read twice, compare every account to
+        # its independent journal sums, including reversed opening/daily rows.
+        before_accounts=query('SELECT id,deposit_krw FROM accounts ORDER BY id')
+        batch=get_overview_batch_data(ctx)
+        assert get_overview_batch_data(ctx)==batch
+        for account in batch['accounts']:
+            expected=query('''SELECT COALESCE(SUM(amount_krw),0) FROM (
+                SELECT amount_krw FROM portfolio_cma.income WHERE portfolio_id=%s AND account_id=%s AND reversed_at IS NULL
+                UNION ALL
+                SELECT amount_krw FROM portfolio_cma.openings WHERE portfolio_id=%s AND account_id=%s AND reversed_at IS NULL
+            ) journal''',(account['portfolio_id'],account['id'],account['portfolio_id'],account['id']))[0][0]
+            assert Decimal(str(account['cma_interest_krw']))==expected
+            result=calculate_portfolio_summary([account],[],index_valuation_inputs([],[],[]),{},{},1400)
+            summary=result['accounts'][0]
+            assert Decimal(str(summary['profit_krw']))==expected
+            assert Decimal(str(summary['total_val']))==Decimal(str(account['deposit_krw']))
+        assert query('SELECT id,deposit_krw FROM accounts ORDER BY id')==before_accounts
+        passed('overview sums scoped active initial and daily income; repeat reads never change cash or total assets')
         report.update(status='passed',checks=checks,check_count=len(checks))
     except Exception as exc:
         report.update(status='failed',checks=checks,error_type=type(exc).__name__)

@@ -2,6 +2,7 @@ import React,{useMemo,useState} from 'react';
 import AccountBreakdown from '../Tab1Dashboard/AccountBreakdown';
 import MarketStatus from '../common/MarketStatus';
 import {useCompactLayout} from '../../utils/useCompactLayout';
+import {accountWithoutDeposits} from '../../utils/accountPresentation';
 export default function AccountsTab({dashboardData,currencyMode='KRW'}){
   const compact=useCompactLayout();
   const [expandedAccs,setExpandedAccs]=useState({});
@@ -13,23 +14,7 @@ export default function AccountsTab({dashboardData,currencyMode='KRW'}){
     if (includeDeposits) return accSummaries;
     return (accSummaries || [])
       .filter((acc) => acc.account_type !== '정기예금')
-      .map((acc) => {
-        const nonDepositHoldings = (acc.holdings || []).filter((h) => !h.is_deposit);
-        const stockEval = nonDepositHoldings.reduce((sum, h) => sum + (Number(h.eval_amount) || 0), 0);
-        const stockBuy = nonDepositHoldings.reduce((sum, h) => sum + (Number(h.avg_price) * Number(h.quantity) || 0), 0);
-        const profitKrw = stockEval - stockBuy;
-        const profitPct = stockBuy > 0 ? (profitKrw / stockBuy * 100) : 0;
-        const totalVal = stockEval + (Number(acc.deposit_krw) || 0) + ((Number(acc.deposit_usd) || 0) * (usd_krw || 1380));
-        return {
-          ...acc,
-          holdings: nonDepositHoldings,
-          stock_eval: stockEval,
-          stock_buy_total: stockBuy,
-          profit_krw: profitKrw,
-          profit_pct: profitPct,
-          total_val: totalVal
-        };
-      });
+      .map(acc=>accountWithoutDeposits(acc,usd_krw));
   }, [accSummaries, includeDeposits, usd_krw]);
 
 

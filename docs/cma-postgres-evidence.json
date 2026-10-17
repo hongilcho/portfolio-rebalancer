@@ -27,9 +27,10 @@
     "opening invalidates old observations; fresh daily receipt posts only today; reversal honors later writes",
     "missed dates post atomically with per-payment-day cap; exact retry and whole-batch reversal preserve cash",
     "undo cannot overwrite a later cash movement",
-    "unexpected schema owner is rejected before reuse"
+    "unexpected schema owner is rejected before reuse",
+    "overview sums scoped active initial and daily income; repeat reads never change cash or total assets"
   ],
-  "check_count": 21,
+  "check_count": 22,
   "isolated_cluster_stopped": true,
-  "synthetic_files_location": "backups\\local_validation\\cma_pg_3ac5d9503a584dbf902543ae5a8586ca"
+  "synthetic_files_location": "backups\\local_validation\\cma_pg_aa861148b4d34a4289c23c628054d6af"
 }
