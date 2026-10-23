@@ -40,11 +40,12 @@ export default function RealizedGainsPanel({portfolioId,accounts=[],assets=[],re
       {view!=='sales'&&<p className="history-muted">보유기간 이력은 전체 기간 기준입니다. 전량 매도 후 재매수하면 새로운 보유기간으로 표시합니다.</p>}
       {!list.length&&<p className="history-empty">조건에 해당하는 {view==='sales'?'매도':'보유기간'} 기록이 없습니다.</p>}
       <div className="history-record-list">{list.slice((current-1)*20,current*20).map(r=>view==='sales'?<article className="history-record" key={r.trade_id}>
-        <div className="history-record-summary"><time>{r.trade_date}</time><div className="history-record-identity"><strong>{r.asset_name}</strong><span>{r.account_alias} · {r.quantity}주</span></div><strong style={{color:getProfitColor(r.net_profit_krw??r.gross_profit_krw)}}>{amount(r.net_profit_krw??r.gross_profit_krw)}<small style={{display:'block'}}>{names[r.status]}</small></strong></div>
+        <div className="history-record-summary"><time>{r.trade_date}</time><div className="history-record-identity"><strong>{r.asset_name}</strong><span>{r.account_alias} · {r.quantity}주</span></div><strong style={{color:getProfitColor(r.net_profit_krw??r.estimated_net_profit_krw??r.gross_profit_krw)}}>{amount(r.net_profit_krw??r.estimated_net_profit_krw??r.gross_profit_krw)}<small style={{display:'block'}}>{r.estimated_net_profit_krw!=null?'수수료 반영 예상 · 세금 등 미확인':names[r.status]}</small></strong></div>
         <details className="history-record-detail"><summary>매도 원가·비용 상세</summary><div className="history-record-detail-body">
           <p>매도대금 {amount(r.proceeds_krw)} · 배분 취득원가 {amount(r.cost_basis_krw)}</p>
           <p>매도 비용 {amount(r.sale_cost_krw)} · 배분 매입 비용 {amount(r.allocated_buy_cost_krw)}</p>
           <p>비용 전 손익 {amount(r.gross_profit_krw)} · 순손익 {amount(r.net_profit_krw)}</p>
+          {r.estimated_net_profit_krw!=null&&<p>수수료 반영 예상 순손익 {amount(r.estimated_net_profit_krw)} · 실제 결제 비용으로 확정된 값은 아닙니다.</p>}
           {r.currency==='USD'&&<><p>달러 가격 손익 {r.price_profit_usd==null?'확인 필요':formatUSD(r.price_profit_usd)} · 매도일 환율 {r.exchange_rate}</p><p>원화 환산 손익 중 환율 효과 {amount(r.fx_profit_krw)} · 매도 후 달러 현금의 환차손익은 별도입니다.</p></>}
           {r.status!=='CONFIRMED'&&<p>미확인 비용이나 원가를 0으로 확정하지 않았습니다. 표시 손익은 확인 가능한 범위입니다.</p>}
         </div></details>

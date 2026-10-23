@@ -6,6 +6,7 @@ import {kstToday} from '../../utils/depositMaturities';
 import {recentMonths,recordAmount} from '../../utils/activityHistory';
 
 const kindNames={PAST_WITHDRAWAL:'과거 출금 누락 정정',CASH:'예수금 정정',HOLDING:'보유 수량·원가 정정',BUY:'매수',SELL:'매도',DEPOSIT:'입금',WITHDRAW:'출금',EXCHANGE_IN:'원화 → 달러',EXCHANGE_OUT:'달러 → 원화',OPENING:'달러 시작 기준',RECONCILE:'달러 원가 조정',KRW_ADJUST:'원화 잔고 조정',INTERNAL_TRANSFER:'원화 내부 이체'};
+Object.assign(kindNames,{COST_SETTLEMENT:'거래비용 차이 정산',BALANCE_SETTLEMENT:'예수금 차이 정산'});
 export default function ActivityHistory({portfolioId,accounts,assets=[],active,revision=0,onChanged,onBusyChange,onReviewCorrection}){
   const [filters,setFilters]=useState(()=>({start_date:recentMonths(kstToday()),end_date:kstToday(),account_id:'',category:'',asset_id:'',include_cancelled:false}));
   const [page,setPage]=useState(1),[data,setData]=useState(null),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[reload,setReload]=useState(0);
@@ -79,7 +80,7 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
             {d.quantity!=null && <p>수량 {d.quantity} · 단가 {item.currency==='USD'?formatUSD(Number(d.price)):formatKRW(Number(d.price))}{d.ticker?` · ${d.ticker}`:''}</p>}
             {sale&&<p>매도손익 · 비용 전 {sale.gross_profit_krw==null?'원가 확인 필요':formatKRW(sale.gross_profit_krw)} · 순손익 {sale.net_profit_krw==null?'비용·원가 확인 필요':formatKRW(sale.net_profit_krw)} · 7번 분석 및 확인에서 상세 조회</p>}
             {item.kind==='SELL' && saleError && <p role="alert">매도손익 조회 실패: {saleError}</p>}
-            {d.trade_costs && <p>기록 비용 · 원화 {d.trade_costs.krw==null?'미확인':formatKRW(d.trade_costs.krw)}{item.currency==='USD'?` · 달러 ${d.trade_costs.usd==null?'미확인':formatUSD(d.trade_costs.usd)}`:''}</p>}
+            {d.trade_costs && <p>{d.trade_costs.status==='ESTIMATED'?'자동 계산한 예상 비용':d.trade_costs.status==='DEFERRED'?'미차감 · 비용 정산 대기':'기록 비용'} · 원화 {d.trade_costs.krw==null?'미확인':formatKRW(d.trade_costs.krw)}{item.currency==='USD'?` · 달러 ${d.trade_costs.usd==null?'미확인':formatUSD(d.trade_costs.usd)}`:''}{d.trade_costs.status==='DEFERRED'&&` · 미반영 예상 비용 ${formatKRW(d.trade_costs.estimated_krw||0)} / ${formatUSD(d.trade_costs.estimated_usd||0)}`}</p>}
             {(d.fx_rate || d.exchange_rate) && <p>적용환율 {Number(d.fx_rate || d.exchange_rate).toLocaleString('ko-KR',{maximumFractionDigits:8})}원</p>}
             {d.reported_available_krw!=null && <p>알림의 출금가능금액 {formatKRW(Number(d.reported_available_krw))} · 참고값</p>}{d.occurred_at && <p>실제 일시 {new Date(d.occurred_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})}</p>}
             {d.balance!=null && <p>처리 후 달러 {formatUSD(Number(d.balance))} · 원화 취득원가 {formatKRW(Number(d.cost_krw))}</p>}

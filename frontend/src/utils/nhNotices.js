@@ -1,4 +1,5 @@
 import {parseNamuhMessages,resolveNamuhDraft,validateNamuhDraft} from './namuhMessage.js';
+import {estimateFee} from './tradingFees.js';
 
 const normalized = text => String(text || '').normalize('NFKC').replace(/\r\n?/g,'\n').replace(/[\u200b-\u200d\ufeff]/g,'').trim();
 export const validNoticeDate = day => /^\d{4}-\d{2}-\d{2}$/.test(day || '') && Number.isFinite(Date.parse(day+'T00:00:00Z'))
@@ -119,8 +120,8 @@ export function noticeApiRow(row,context) {
     reported_available_krw:Number.isFinite(row.reportedAvailableKrw)?row.reportedAvailableKrw:null,broker_order_no:row.brokerOrderNo || '',krw_amount:row.krwAmount || 0,usd_amount:row.usdAmount || 0,quoted_rate:row.quotedRate || 0};
 }
 
-export function previewNhNotices(rows,contexts,ledgers=[]) {
-  const expected={},balances={},costs={},errors=[];
+export function previewNhNotices(rows,contexts,ledgers=[],assets=[]) {
+  const expected={},balances={},costs={},errors=[],fees=[];
   for (const row of rows) {
     for (const aid of [row.accountId,...(!row.external && peerAccount(row)?[peerAccount(row)]:[])].filter(Boolean)) {
       if (balances[aid]) continue;
@@ -135,7 +136,13 @@ export function previewNhNotices(rows,contexts,ledgers=[]) {
     const cash=balances[row.accountId];
     if (!cash) continue;
     if (row.errors?.length) continue;
-    if (row.kind==='BUY') cash.deposit_krw-=row.quantity*row.price;
+    if (row.kind==='BUY') {
+      cash.deposit_krw-=row.quantity*row.price;
+      const account=contexts[row.eventDate]?.accounts?.find(a=>String(a.id)===row.accountId);
+      const asset=assets.find(a=>String(a.id)===row.assetId)||{market:'KR',ticker:row.ticker};
+      const fee=estimateFee(account,asset,row.eventDate,row.quantity,row.price);
+      if(fee){const deferred=cash.deposit_krw<fee.amount;if(!deferred)cash.deposit_krw-=fee.amount;fees.push({id:row.id,...fee,deferred});}
+    }
     if (isCashNotice(row) && row.applyCash) {
       cash.deposit_krw+=cashSign(row)*row.krwAmount;
       if (!row.external && balances[peerAccount(row)]) balances[peerAccount(row)].deposit_krw-=cashSign(row)*row.krwAmount;
@@ -153,7 +160,7 @@ export function previewNhNotices(rows,contexts,ledgers=[]) {
     }
     if ([row.accountId,...(!row.external?[peerAccount(row)]:[])].some(aid=>balances[aid]?.deposit_krw < -0.000001) && !(isCashNotice(row) && !row.applyCash)) errors.push('처리 순서상 원화가 부족합니다. 입금 알림을 먼저 배치하거나 원화 잔고를 확인해주세요.');
   }
-  return {expected,balances,costs,errors:[...new Set(errors)]};
+  return {expected,balances,costs,fees,errors:[...new Set(errors)]};
 }
 
 const key=pid=>`nh-notice-draft/v1/${pid}`;

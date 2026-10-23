@@ -22,6 +22,8 @@ def read_state(c,pid,aid,lock=False):
 def validate(c,pid,p,before,tracking):
     today=datetime.now(forex.KST).date()
     if date.fromisoformat(p['event_date'])>today:raise ValueError('미래 날짜는 등록할 수 없습니다.')
+    if p['kind'] in ('COST_SETTLEMENT','BALANCE_SETTLEMENT') and date.fromisoformat(p['event_date'])!=today:
+        raise ValueError('누적 차이 정산은 오늘의 잔고를 기준으로 처리해주세요.')
     if len(p['reason'].strip())<3:raise ValueError('정정 사유를 입력해주세요.')
     if p['first_buy_date'] and date.fromisoformat(p['first_buy_date'])>today:raise ValueError('배당 산정 시작일은 미래일 수 없습니다.')
     if p['kind']=='PAST_WITHDRAWAL' and p['amount']<=0:raise ValueError('누락된 출금 금액을 입력해주세요.')
@@ -56,6 +58,26 @@ def preview(db,pid,p):
         validate(c,pid,p,before,track)
         rows=history_plan(p,before,track,snapshots)
         return dict(token=digest([p,before,track,snapshots,active]),before=before,delta=adjustment_delta(p,before),history=rows)
+    finally:conn.close()
+
+
+def settlement_preview(db,pid,aid,currency,balance,classification,reason,average_rate=0):
+    """Build one ordinary audited correction; no broker calls or hidden writes."""
+    if classification not in ('COST_SETTLEMENT','BALANCE_SETTLEMENT') or currency not in ('KRW','USD'):
+        raise ValueError('정산 구분과 통화를 확인해주세요.')
+    conn=db.connect()
+    try:
+        c=conn.cursor(cursor_factory=RealDictCursor)
+        before,track,snapshots,active=read_state(c,pid,aid)
+        state=before.get('state') or {}
+        if currency=='USD' and float(state.get('usd_balance') or 0)>0:
+            average_rate=float(state['cost_krw'])/float(state['usd_balance'])
+        p=dict(kind=classification,account_id=aid,event_date=str(datetime.now(forex.KST).date()),reason=reason,
+            currency=currency,balance=float(balance),amount=0.0,usd_average_rate=float(average_rate),asset_id='',quantity=0.0,
+            avg_price=0.0,avg_price_usd=0.0,buy_fx_rate=0.0,first_buy_date=None,manual_dividend_override=None)
+        validate(c,pid,p,before,track)
+        return dict(proposal=p,before=before,delta=adjustment_delta(p,before),history=[],
+                    token=digest([p,before,track,snapshots,active]))
     finally:conn.close()
 
 

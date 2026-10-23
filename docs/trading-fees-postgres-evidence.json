@@ -1,0 +1,22 @@
+{
+  "status": "passed",
+  "production_connections": 0,
+  "broker_calls": 0,
+  "checks": [
+    "additive repeated migration preserves cash, holdings and legacy history",
+    "account settings persist three fee policies without changing balances",
+    "concurrent duplicate request charges principal and estimated fee once",
+    "later policy changes do not rewrite stored rates or costs",
+    "full liquidation retains history and never labels estimates as confirmed net profit",
+    "caller rollback restores principal, fee, holdings and trade audit",
+    "US commission updates cash and average-cost USD pool atomically",
+    "USD trade cancellation restores original fee and cost pool",
+    "gold commission includes configured fee VAT exactly once",
+    "estimated fee shortage preserves a real fill and never makes cash negative",
+    "settlement preserves trades, positions, saved performance and external flows; retry is idempotent",
+    "audited settlement cancellation restores cash and USD cost",
+    "intervening financial changes reject stale settlement previews"
+  ],
+  "check_count": 13,
+  "isolated_cluster_stopped": true
+}

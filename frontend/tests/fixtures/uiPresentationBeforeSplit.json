@@ -9,7 +9,8 @@
     "bookkeeping_integrity": "2026-10-09: settings deposit contract fields are read-only; history adds audited deposit input, durable retry controls and USD external-flow semantics. Only the four related hashes change; handler tests cover lost responses, navigation, refresh failure and double clicks.",
     "investment_execution": "2026-10-10: intentional addition of manual KRW account transfer fallback to shared 5/8 input. Only the two history hashes change; explicit workflow connection consent, protocol gating and synthetic browser flows tested separately. Final user review pending.",
     "cma_interest": "2026-10-14: intentional collapsed CMA balance/income panel in tab 5; disabled-by-default status, confirmed interest preview, exact retry receipt, bounded daily checks and opt-in automatic policy. Only two history hashes change; dedicated synthetic CMA UI and accounting tests cover the addition. Period graph unchanged.",
-    "realized_gains": "2026-10-17: intentional optional cost disclosure and full-sale quantity action in the common trade form. Only the two history hashes changed; realizedGains tests cover fee certainty and remaining quantities. All unrelated markup retained."
+    "realized_gains": "2026-10-17: intentional optional cost disclosure and full-sale quantity action in the common trade form. Only the two history hashes changed; realizedGains tests cover fee certainty and remaining quantities. All unrelated markup retained.",
+    "trading_fees": "2026-10-23: account category fee schedules, shared automatic-cost disclosure and collapsed audited cash settlement panel reviewed. Only two account-form and two history hashes changed; financial behavior covered by synthetic and isolated PostgreSQL validation."
   },
   "sha256": {
     "dashboard/KRW": "4526d0aad14d81e84f33b6fde734913d01a88a56a5996984b343ff531ad24065",
@@ -18,12 +19,12 @@
     "dashboard/collapsed": "4526d0aad14d81e84f33b6fde734913d01a88a56a5996984b343ff531ad24065",
     "dashboard/no-data": "48af2e6aa349ca6c381ecddfcad6c35b5d15f3454a88d4aff9f6ca2e85492e7b",
     "settings/tables": "b235b1d54cc9f0e70027e7e599fc76f2522c4558c2f1933a15c63300da9a9c9b",
-    "settings/new-account": "b0a73605b4eb768bee7d7565e5311ad920ab84bacd01c85aa461331f18af679b",
-    "settings/edit-account": "cc36da336137334f08ea6961e7a52fc70eaae9c102bacab192aad9ab5e3cacb7",
+    "settings/new-account": "0c846e9c82a3a7d0338fdcfdb2c6d70ea63532da5db9fe41c8933b357c78b786",
+    "settings/edit-account": "50372c541f73d242a5c22f43b8ffc1c631afe22e1d5357a240526fdd183fa911",
     "settings/new-US-asset": "cd33edb1f4eb41667dddb49789064e880643c0d959bfbb5b3f8170ad3a412e84",
     "settings/edit-deposit": "bab4e8d4b9825adffea6eb5b99d9615df29eaa96b26f62603185c66c4b06864d",
-    "history/empty": "8ba3aaab8dec9175c2581496a5c484b0b66a8ef52f2ca3402d36d11f06954fbf",
-    "history/filled-forms": "fe22bdb5b0a133301051f59f5c567fb2d21d2911d8075ea9d8e5c385247b514d",
+    "history/empty": "272862da9d407694b46f39865d9d2c3effcd36350374f33295d8521df7d357e3",
+    "history/filled-forms": "9ee04ae9a3097b4a28a1ef2bfbf62c754ee2577e30c00d52796496e182cf849b",
     "overview/KRW": "ad703d16caad5132a682394a3a358d7c6b709b6a5c15ecaa27f225d03020498b",
     "overview/USD": "1162b5dc324691a7af8b194cd3733b1ece5c8ebaef1f4ddbb8ede45aa8b8d42f",
     "overview/no-crypto": "ae95dc5b044bc5e8d2ff29079fd3ffacefa93491d0de2dd4756bf96d2ca7b242",

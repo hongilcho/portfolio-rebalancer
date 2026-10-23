@@ -37,7 +37,15 @@ def apply(c, trade_id, costs, basis=None):
         t = c.fetchone(); aid = t['account_id']
         c.execute('SELECT deposit_krw,deposit_usd FROM accounts WHERE id=%s FOR UPDATE', (aid,))
         cash = c.fetchone()
-        if (krw and krw > Decimal(str(cash['deposit_krw'] or 0))) or (usd and usd > Decimal(str(cash['deposit_usd'] or 0))):
+        insufficient=(krw and krw > Decimal(str(cash['deposit_krw'] or 0))) or (usd and usd > Decimal(str(cash['deposit_usd'] or 0)))
+        if insufficient and costs.get('status')=='ESTIMATED':
+            # A provisional fee must not prevent recording a real filled trade.
+            # Preserve the estimate; defer it to explicit cash reconciliation.
+            costs={**costs,'status':'DEFERRED','estimated_krw':str(krw),'estimated_usd':str(usd),'krw':'0','usd':'0'}
+            c.execute('UPDATE trade_history SET trade_costs=%s,accounting_basis=%s WHERE id=%s',
+                      (Json(costs),Json(basis) if basis else None,trade_id))
+            return
+        if insufficient:
             raise ValueError('매매 후 비용을 반영할 예수금이 부족합니다. 5번 탭에서 잔고를 확인해주세요.')
         c.execute('UPDATE accounts SET deposit_krw=deposit_krw-%s,deposit_usd=deposit_usd-%s WHERE id=%s', (krw, usd, aid))
         state = forex.load_state(c, aid)

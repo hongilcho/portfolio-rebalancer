@@ -55,6 +55,9 @@ def correct_payload(payload,proposal,delta):
 
 
 def history_plan(proposal,before,tracking,snapshots,keys=None):
+    # Current-period settlement is an audited cash event, never a retroactive
+    # rewrite of saved NAV or of an external contribution.
+    if proposal['kind'] in ('COST_SETTLEMENT','BALANCE_SETTLEMENT'):return []
     delta=adjustment_delta(proposal,before)
     if abs(delta)<1e-9 or not tracking:return []
     day=str(proposal['event_date']);baseline=str(tracking['baseline_date']);out=[]

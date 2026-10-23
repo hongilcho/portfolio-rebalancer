@@ -2,6 +2,9 @@
 from decimal import Decimal, ROUND_CEILING
 import json
 from logic.usd_cost import number, positive
+from logic.trading_fees import estimate
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 PROTECTED = ('ISA','IRP','PENSION','연금','퇴직')
 def can_transfer_out(account):
@@ -33,10 +36,13 @@ def build_steps(plan, accounts, assets, setup, existing_quantities=None):
         qty=positive(line['qty']);price=positive(line['price'])
         filled=number((existing_quantities or {}).get(i,0))
         remaining=max(Decimal(0),qty-filled)
-        group=grouped.setdefault(account['id'],{'krw':Decimal(0),'usd':Decimal(0),'lines':[]})
+        group=grouped.setdefault(account['id'],{'krw':Decimal(0),'usd':Decimal(0),'fee_krw':Decimal(0),'fee_usd':Decimal(0),'lines':[]})
         currency='USD' if asset['market']=='US' else 'KRW'
         unit_price=price/fx if currency=='USD' else price  # saved calculator prices are KRW
         group['usd' if currency=='USD' else 'krw']+=remaining*unit_price
+        fee=estimate(account.get('fee_schedule') or {},asset,datetime.now(ZoneInfo('Asia/Seoul')).date(),remaining,unit_price)
+        if fee:
+            group['fee_krw']+=number(fee['krw']);group['fee_usd']+=number(fee['usd'])
         group['lines'].append(dict(key=f'trade:{i}',kind='BUY',line_no=i,account_id=account['id'],
             account_alias=account['account_alias'],asset_id=asset['id'],asset_name=asset['name'],currency=currency,
             title=f"{asset['name']} 매수",target_quantity=str(qty),estimated_price=str(unit_price),depends_on=[]))
@@ -49,13 +55,13 @@ def build_steps(plan, accounts, assets, setup, existing_quantities=None):
         fund_key='fund';steps.append(dict(key=fund_key,kind='DEPOSIT',account_id=main,account_alias=accounts[main]['account_alias'],
             currency='KRW',target_amount=str(incoming),title='대표 계좌에 투자금 준비',depends_on=[]))
     for aid,g in grouped.items():
-        required_domestic=(g['krw']*(1+price_buffer)).quantize(Decimal('1'),rounding=ROUND_CEILING)
-        usd_short=max(Decimal(0),g['usd']*(1+price_buffer)-max(Decimal(0),number(accounts[aid].get('deposit_usd') or 0)))
+        required_domestic=(g['krw']*(1+price_buffer)+g['fee_krw']).quantize(Decimal('1'),rounding=ROUND_CEILING)
+        usd_short=max(Decimal(0),g['usd']*(1+price_buffer)+g['fee_usd']-max(Decimal(0),number(accounts[aid].get('deposit_usd') or 0)))
         usd_short=usd_short.quantize(Decimal('0.01'),rounding=ROUND_CEILING)
         fx_krw=(usd_short*fx*(1+fx_buffer)).quantize(Decimal('1'),rounding=ROUND_CEILING)
         g['required_krw']=required_domestic+fx_krw
         g['funding']=dict(account_id=aid,account_alias=accounts[aid]['account_alias'],
-            estimated_buy_krw=str(g['krw']+g['usd']*fx),price_buffer_krw=str((g['krw']+g['usd']*fx)*price_buffer),
+            estimated_buy_krw=str(g['krw']+g['usd']*fx),estimated_fee_krw=str(g['fee_krw']+g['fee_usd']*fx),price_buffer_krw=str((g['krw']+g['usd']*fx)*price_buffer),
             fx_buffer_krw=str(usd_short*fx*fx_buffer),existing_krw=str(accounts[aid].get('deposit_krw') or 0),
             existing_usd=str(accounts[aid].get('deposit_usd') or 0),required_krw=str(g['required_krw']))
         needed[aid]=max(Decimal(0),g['required_krw']-max(Decimal(0),number(accounts[aid].get('deposit_krw') or 0)))

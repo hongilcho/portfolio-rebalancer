@@ -290,7 +290,7 @@ def read_context(db,pid,day):
         c.execute('''SELECT a.id,a.portfolio_id,a.account_alias,a.deposit_krw,a.deposit_usd,p.name AS portfolio_name
             FROM accounts a JOIN portfolios p ON p.id=a.portfolio_id''')
         transfer_accounts=c.fetchall()
-        c.execute('SELECT id,deposit_krw,deposit_usd FROM accounts WHERE portfolio_id=%s', (pid,))
+        c.execute('SELECT id,deposit_krw,deposit_usd,fee_schedule FROM accounts WHERE portfolio_id=%s', (pid,))
         accounts=c.fetchall()
         c.execute('''SELECT f.*,EXISTS(SELECT 1 FROM nh_notice_items n WHERE n.performance_flow_id=f.id AND n.reversed_at IS NULL) AS cash_handled
             FROM performance_flows f WHERE event_date=%s''', (day,))

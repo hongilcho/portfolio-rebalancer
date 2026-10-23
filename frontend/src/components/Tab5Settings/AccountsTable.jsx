@@ -103,7 +103,8 @@ export default function AccountsTable({
                               is_unlimited: a.annual_limit === 0 && a.tax_limit === 0,
                               priority: a.priority,
                               limit_preference: a.limit_preference || 'ANNUAL',
-                              notes: a.notes || ''
+                              notes: a.notes || '',
+                              fee_schedule:a.fee_schedule || {}
                             });
                           }}
                         >

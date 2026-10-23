@@ -33,7 +33,7 @@ def document(value):
 def expense(trade, currency):
     costs = document(trade.get('trade_costs'))
     krw, usd = costs.get('krw'), costs.get('usd')
-    known = krw is not None and (currency != 'USD' or usd is not None)
+    known = krw is not None and (currency != 'USD' or usd is not None) and costs.get('status') not in ('ESTIMATED','DEFERRED')
     fx = number(trade.get('exchange_rate') or 1)
     return number(krw) + number(usd) * fx, known
 
@@ -52,12 +52,14 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
             continue
         qty = cost = cost_usd = acquisition_expenses = ZERO
         known, expenses_known, period = True, True, None
+        expenses_available=True
         opening=openings.get((aid,sid));opening_invalid=False
         if opening:
             reason=validity(opening,history);opening_invalid=bool(reason)
             if reason:warnings.append(dict(account_id=aid,asset_id=sid,reason=reason))
             qty=number(opening['quantity']);cost=qty*number(opening['avg_krw']);cost_usd=qty*number(opening['avg_usd'])
             known=not opening_invalid;expenses_known=False
+            expenses_available=False
             reference=history[0] if history else {}
             period=dict(id='opening:'+opening['id'],account_id=aid,asset_id=sid,
                 asset_name=reference.get('asset_name',sid),ticker=reference.get('ticker',''),
@@ -70,6 +72,8 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
             currency = t.get('currency') or ('USD' if t.get('market') == 'US' else 'KRW')
             fx = number(t.get('exchange_rate') or 1) if currency == 'USD' else Decimal(1)
             day = str(t['trade_date']); fee, fee_known = expense(t, currency)
+            costs=document(t.get('trade_costs'))
+            fee_available=costs.get('krw') is not None and (currency!='USD' or costs.get('usd') is not None) and costs.get('status')!='DEFERRED'
             if amount <= 0 or price < 0 or fx <= 0:
                 warnings.append(dict(account_id=aid, asset_id=sid, reason='유효하지 않은 거래 이력'))
                 known = False
@@ -81,6 +85,7 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
                 qty = number(anchor['quantity']); cost = qty * number(anchor['avg_krw'])
                 cost_usd = qty * number(anchor.get('avg_usd'))
                 acquisition_expenses, expenses_known, known = ZERO, False, True
+                expenses_available=False
                 warnings.append(dict(account_id=aid, asset_id=sid, reason='매도 당시 장부 원가 기준 · 이전 매입비용 미확인'))
             if kind in ('INIT', 'BUY'):
                 if kind == 'INIT':
@@ -89,6 +94,7 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
                         period['basis_adjusted'] = True
                     qty = cost = cost_usd = acquisition_expenses = ZERO
                     known, expenses_known = True, False
+                    expenses_available=False
                 if period is None:
                     period = dict(id=t['id'], account_id=aid, asset_id=sid,
                                   asset_name=t.get('asset_name', sid), ticker=t.get('ticker', ''),
@@ -99,6 +105,7 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
                 if kind == 'BUY':
                     acquisition_expenses += fee
                     expenses_known = expenses_known and fee_known
+                    expenses_available=expenses_available and fee_available
                 continue
             if kind != 'SELL': continue
             if period is None:
@@ -113,6 +120,7 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
             allocated = acquisition_expenses * ratio if basis_known else None
             gross = amount * price * fx - basis if basis_known else None
             net = gross - allocated - fee if basis_known and expenses_known and fee_known else None
+            estimated_net=gross-allocated-fee if basis_known and expenses_available and fee_available and net is None else None
             usd_profit = amount * price - basis_usd if basis_usd is not None else None
             fx_profit = basis_usd * fx - basis if basis_usd is not None else ZERO if basis_known else None
             row = dict(trade_id=t['id'], account_id=aid, asset_id=sid,
@@ -122,6 +130,7 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
                        proceeds_krw=float(amount * price * fx), cost_basis_krw=float(basis) if basis is not None else None,
                        gross_profit_krw=float(gross) if gross is not None else None,
                        net_profit_krw=float(net) if net is not None else None,
+                       estimated_net_profit_krw=float(estimated_net) if estimated_net is not None else None,
                        sale_cost_krw=float(fee) if fee_known else None,
                        allocated_buy_cost_krw=float(allocated) if expenses_known and allocated is not None else None,
                        price_profit_usd=float(usd_profit) if usd_profit is not None else None,
@@ -137,6 +146,7 @@ def calculate(trades, holdings=(), start=None, end=None, account_id=None, asset_
                     period.update(end_date=day, status='CLOSED', remaining_quantity=0)
                     periods.append(period); period = None
                     expenses_known = True
+                    expenses_available=True
             else:
                 known = False
         if period:

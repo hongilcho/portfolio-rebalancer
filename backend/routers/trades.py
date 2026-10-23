@@ -43,7 +43,7 @@ class DeleteTradesRequest(BaseModel):
 
 @router.get('/capabilities')
 def capabilities():
-    return {'bookkeeping_protocol':1,'trade_costs_protocol':1}
+    return {'bookkeeping_protocol':1,'trade_costs_protocol':1,'account_fees_protocol':1}
 
 @router.get('/realized')
 def realized_report(portfolio_id: str, start_date: date | None=None, end_date: date | None=None,

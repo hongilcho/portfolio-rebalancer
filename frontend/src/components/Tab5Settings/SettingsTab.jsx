@@ -6,6 +6,7 @@
  */
 
 import React, { useState } from 'react';
+import {requireFeeProtocol} from '../../utils/tradingFees';
 
 import { api } from '../../utils/api';
 
@@ -80,10 +81,12 @@ export default function SettingsTab({
 
     setSaving(true);
     try {
+      await requireFeeProtocol(api,[accForm]);
       await api.createAccount({
         account_no: accForm.account_no.trim(),
         account_alias: accForm.account_alias.trim(),
         account_type: accForm.account_type,
+        fee_schedule: accForm.fee_schedule || {},
         annual_limit: accForm.is_unlimited ? 0 : Number(accForm.annual_limit),
         tax_limit: accForm.is_unlimited ? 0 : Number(accForm.tax_limit),
         priority: Number(accForm.priority),
@@ -107,10 +110,12 @@ export default function SettingsTab({
 
     setSaving(true);
     try {
+      await requireFeeProtocol(api,[accForm]);
       await api.updateAccount(editAccTarget.id, {
         account_no: accForm.account_no.trim(),
         account_alias: accForm.account_alias.trim(),
         account_type: accForm.account_type,
+        fee_schedule: accForm.fee_schedule || {},
         annual_limit: accForm.is_unlimited ? 0 : Number(accForm.annual_limit),
         tax_limit: accForm.is_unlimited ? 0 : Number(accForm.tax_limit),
         priority: Number(accForm.priority),

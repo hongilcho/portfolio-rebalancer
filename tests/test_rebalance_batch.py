@@ -64,6 +64,10 @@ def test_bulk_rebalance_matches_previous_results(monkeypatch, scenario, new_cash
     result = rebalance.calculate_plan(rebalance.CalculateRebalanceRequest(
         portfolio_id="selected", scenario=scenario, new_cash_krw=new_cash))
     baseline = json.loads((Path(__file__).parent / "fixtures/rebalance_before_batch.json").read_text(encoding="utf-8"))
+    fees=result.pop('fee_summary')
+    assert fees==dict(estimated_fee_krw=0.0,unconfigured_count=len(result['trade_plan']))
+    # Fee metadata is additive; every previous quantity, transfer and valuation
+    # remains exactly equal to the frozen pre-fee algorithm result.
     assert result == baseline[f"{scenario}_{new_cash}"]
     reader.assert_called_once_with("selected")
     prices.assert_called_once_with(force_refresh=True)

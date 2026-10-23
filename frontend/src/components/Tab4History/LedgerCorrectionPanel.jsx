@@ -188,7 +188,7 @@ export default function LedgerCorrectionPanel({portfolioId,accounts,assets,activ
     {pendingSummary}
     {pending && <p role="alert">저장 결과가 확정될 때까지 입력을 고정합니다. 동일 요청으로 재확인하면 중복 반영하지 않습니다.</p>}
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
-    <details><summary>이전 정정 중 추가 확인할 기록 · {waiting.length}건</summary>{waiting.map(a=><p key={a.id}>{a.event_date} · {labels[a.kind]} · 과거 성과 미확정 <button className="btn btn-secondary btn-sm" disabled={locked || Boolean(noticeSource)} onClick={()=>checkHistory(a.id)}>남은 기록 확인</button></p>)}</details>
-    <details><summary>최근 정정·취소</summary>{entries.slice(0,5).map(a=><p key={a.id}>{a.event_date} · {labels[a.kind]} · {a.reason} {a.reversed_at?'취소됨':<button className="btn btn-secondary btn-sm" disabled={locked || Boolean(noticeSource)} onClick={()=>undo(a.id)}>정정 취소</button>}</p>)}<p>이전 정정은 기록 조회에서 확인합니다.</p></details>
+    <details><summary>이전 정정 중 추가 확인할 기록 · {waiting.length}건</summary>{waiting.map(a=><p key={a.id}>{a.event_date} · {labels[a.kind] || (a.kind==='COST_SETTLEMENT'?'거래비용 차이 정산':'예수금 차이 정산')} · 과거 성과 미확정 <button className="btn btn-secondary btn-sm" disabled={locked || Boolean(noticeSource)} onClick={()=>checkHistory(a.id)}>남은 기록 확인</button></p>)}</details>
+    <details><summary>최근 정정·취소</summary>{entries.slice(0,5).map(a=><p key={a.id}>{a.event_date} · {labels[a.kind] || (a.kind==='COST_SETTLEMENT'?'거래비용 차이 정산':'예수금 차이 정산')} · {a.reason} {a.reversed_at?'취소됨':<button className="btn btn-secondary btn-sm" disabled={locked || Boolean(noticeSource)} onClick={()=>undo(a.id)}>정정 취소</button>}</p>)}<p>이전 정정은 기록 조회에서 확인합니다.</p></details>
   </details>;
 }

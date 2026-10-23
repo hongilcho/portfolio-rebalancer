@@ -108,6 +108,7 @@ def add_account(
     limit_preference='ANNUAL',
     current_year_deposit=0.0,
     portfolio_id='default',
+    fee_schedule=None,
 ):
     return accounts.add_account(
         _context(),
@@ -123,6 +124,7 @@ def add_account(
         limit_preference,
         current_year_deposit,
         portfolio_id,
+        fee_schedule,
     )
 
 
@@ -139,6 +141,7 @@ def update_account(
     priority=99,
     limit_preference='ANNUAL',
     current_year_deposit=0.0,
+    fee_schedule=None,
 ):
     return accounts.update_account(
         _context(),
@@ -154,6 +157,7 @@ def update_account(
         priority,
         limit_preference,
         current_year_deposit,
+        fee_schedule,
     )
 
 

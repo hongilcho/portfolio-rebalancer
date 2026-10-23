@@ -15,6 +15,7 @@ import { loadAccountHoldings } from '../../utils/accountHoldings';
 import PriceReference from './PriceReference';
 import TradeBatchForm from './TradeBatchForm';
 import {feePayload} from '../../utils/tradeCosts';
+import {requireFeeProtocol} from '../../utils/tradingFees';
 import ActivityHistory from './ActivityHistory';
 import {ClipboardPaste,PenLine,Wallet,History} from 'lucide-react';
 import UsdLedgerPanel from './UsdLedgerPanel';
@@ -22,6 +23,7 @@ import DepositLedgerPanel from './DepositLedgerPanel';
 import NamuhMessageImport from './NamuhMessageImport';
 import LedgerCorrectionPanel from './LedgerCorrectionPanel';
 import CmaIncomePanel from './CmaIncomePanel';
+import CashSettlementPanel from './CashSettlementPanel';
 import ExternalCashFlowPanel from './ExternalCashFlowPanel';
 import InternalTransferForm from './InternalTransferForm';
 import {executionRows,executionReferencePrice,seedExecutionPrice} from '../../utils/investmentInput';
@@ -130,6 +132,7 @@ export default function HistoryTab({
   const historyBusy=useCallback((value,writing=value)=>{setChildBusy(old=>({...old,history:value}));setChildWriting(old=>({...old,history:writing}));},[]);
   const correctionBusy=useCallback((value,writing=value)=>{setChildBusy(old=>({...old,correction:value}));setChildWriting(old=>({...old,correction:writing}));},[]);
   const cmaBusy=useCallback(value=>{setChildBusy(old=>({...old,cma:value}));setChildWriting(old=>({...old,cma:value}));},[]);
+  const settlementBusy=useCallback((value,writing=value)=>{setChildBusy(old=>({...old,settlement:value}));setChildWriting(old=>({...old,settlement:writing}));},[]);
   const navigationBusy=savingBatch || performance?.busy || Object.values(childWriting).some(Boolean);
   const busy=savingBatch || Boolean(pendingSubmission) || performance?.busy || Object.values(childBusy).some(Boolean);
   useEffect(()=>{onBusyChange?.(navigationBusy);},[navigationBusy,onBusyChange]);
@@ -295,7 +298,7 @@ export default function HistoryTab({
 
   const submitManual = async payload => {
     return singleSubmission(submitLock,async()=>{
-      try{await requireBookkeepingProtocol(api);}catch(error){alert(error.message);return;}
+      try{await requireBookkeepingProtocol(api);await requireFeeProtocol(api,accounts);}catch(error){alert(error.message);return;}
       if(payload.trades.some(r=>r.fees_krw!=null || r.fees_usd!=null)){
         try{if((await api.getBookkeepingCapabilities()).trade_costs_protocol!==1)throw Error('서버가 비용 기록을 지원하지 않습니다. 백엔드 업데이트 후 다시 저장해주세요.');}
         catch(error){alert(error.message);return;}
@@ -386,6 +389,7 @@ export default function HistoryTab({
         {!embedded && <LedgerCorrectionPanel hidden={embedded} key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
           resetRequest={correctionReset} noticeRequest={noticeCorrection?.source?.portfolioId===currentPortfolioId?noticeCorrection:null} onNoticeSettled={correctionCompleted}
           reviewRequest={reviewCorrection?.portfolioId===currentPortfolioId?reviewCorrection:null} active={active && !embedded && effectiveView==='input'} disabled={busy && !childBusy.correction} onBusyChange={correctionBusy} onChanged={changed}/>}
+        {!embedded && <CashSettlementPanel key={`settlement/${currentPortfolioId}`} portfolioId={currentPortfolioId} accounts={accounts} disabled={busy && !childBusy.settlement} onBusyChange={settlementBusy} onChanged={changed}/>}
         {!embedded && <CmaIncomePanel key={`cma/${currentPortfolioId}`} portfolioId={currentPortfolioId}
           active={active && effectiveView==='input'} disabled={busy && !childBusy.cma} onBusyChange={cmaBusy} onChanged={changed}/>}
       </div>

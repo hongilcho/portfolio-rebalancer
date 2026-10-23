@@ -226,7 +226,7 @@ export default function TradeBatchForm({
                     </div>
                   )}
                   {isUS && ledger && <p role="status">{ledger.needs_reconciliation ? '달러 잔고 대사가 필요합니다.' : `사용 가능한 달러 ${formatUSD(ledger.usd_balance)}. 부족하면 실제 환전 후 기록을 먼저 등록하세요.`}</p>}
-                  <TradeCosts row={row} isUS={isUS} onChange={(key,value)=>updateBuyRow(row.id,key,value)} />
+                  <TradeCosts row={row} isUS={isUS} account={accounts.find(a=>String(a.id)===String(row.accountId))} asset={assets.find(a=>String(a.id)===String(row.assetId))} day={tradeDate} onChange={(key,value)=>updateBuyRow(row.id,key,value)} />
                 </div>
               );
             })}
@@ -419,7 +419,7 @@ export default function TradeBatchForm({
                       </div>
                     </div>
                   )}
-                  <TradeCosts row={row} isUS={isUS} onChange={(key,value)=>updateSellRow(row.id,key,value)} />
+                  <TradeCosts row={row} isUS={isUS} tradeType="SELL" account={accounts.find(a=>String(a.id)===String(row.accountId))} asset={assets.find(a=>String(a.id)===String(row.assetId))} day={tradeDate} onChange={(key,value)=>updateSellRow(row.id,key,value)} />
                 </div>
               );
             })}

@@ -1,6 +1,7 @@
 /** AccountEditor: presentation only; state and API actions stay in the parent. */
 import React from 'react';
 import KoreanNumberInput from '../common/KoreanNumberInput';
+import AccountFees from './AccountFees';
 
 export default function AccountEditor({
   isAddAccOpen,
@@ -106,6 +107,7 @@ export default function AccountEditor({
                 </div>
               )}
 
+              <AccountFees value={accForm.fee_schedule} onChange={fee_schedule=>setAccForm({...accForm,fee_schedule})}/>
               <p>예수금·초기 잔고는 5번 탭의 장부 확인 및 정정에서 관리합니다.</p>
 
               <div className="form-group">

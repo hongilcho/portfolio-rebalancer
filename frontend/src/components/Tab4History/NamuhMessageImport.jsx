@@ -1,4 +1,5 @@
 import {draftStorage} from '../../utils/tradeDraft';
+import {requireFeeProtocol} from '../../utils/tradingFees';
 import {executionNotices,executionContextKey} from '../../utils/investmentInput';
 import React,{useEffect,useState,useMemo} from 'react';
 import {api} from '../../utils/api';
@@ -89,7 +90,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
     setRows(previous=>previous.map((r,i)=>i===index?{...r,applyCash:false,historicalCashChoice:'CORRECTION'}:r));
     setConfirmed(false);onCorrectionRequest(draft);
   };
-  const preview=previewNhNotices(ordinaryRows,contexts,ledgers || []);
+  const preview=previewNhNotices(ordinaryRows,contexts,ledgers || [],assets);
   const ready=rows.length>0 && confirmed && !loading && !contextError && !checks.some(c=>c.errors.length) && !preview.errors.length;
   const persist=(data)=>setStorageError(!writeNoticeDraft(portfolioId,data,storage));
   const save=async()=>{
@@ -99,6 +100,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
     setSaving(true);setMessage('');setPendingPayload(payload);persist({rows,requestId,pendingPayload:payload});
     let recorded=false;
     try{
+      await requireFeeProtocol(api,accounts);
       const result=await api.commitNhNotices(portfolioId,payload);
       recorded=true;setRows([]);setPendingPayload(null);setConfirmed(false);setRequestId(crypto.randomUUID());
       persist({rows:[]});setReload(n=>n+1);
@@ -143,6 +145,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
             <b>{i+1}. {names[row.kind]}{row.assetName?` · ${row.assetName}`:''}</b>
             <p>{row.kind==='BUY'?`${row.quantity}주 × ${formatKRW(row.price)} · 주문 ${row.brokerOrderNo || '확인 불가'}`:
               isCashNotice(row)?formatKRW(row.krwAmount):`${formatKRW(row.krwAmount)} → ${formatUSD(row.usdAmount)} · 고시환율 ${row.quotedRate}`}</p>
+            {preview.fees.filter(f=>f.id===row.id).map(f=><p key={f.id} className="fee-trade-summary">예상 수수료 {formatKRW(f.amount)}{f.deferred?' · 잔고 부족으로 비용은 정산 대기':' · 예수금에서 함께 차감'}</p>)}
             {row.kind==='WITHDRAW' && Number.isFinite(row.reportedAvailableKrw) && <small>알림의 출금가능금액 {formatKRW(row.reportedAvailableKrw)} · 참고값이며 잔고를 덮어쓰지 않습니다.</small>}
             {focused && <div className="history-row-context">{accounts.find(a=>String(a.id)===row.accountId)?.account_alias || '계좌 선택 필요'} · {row.eventDate} · 미반영</div>}
             {historical && <div className="history-help" aria-label={`알림 ${i+1} 과거 출금 처리`}>

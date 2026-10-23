@@ -266,6 +266,7 @@ export default function RebalanceTab({ currentPortfolioId = 'default',onStartInv
                   </div>
                 )}
 
+                {result.fee_summary && <p className="fee-trade-summary">예상 거래 수수료 합계 {formatKRW(result.fee_summary.estimated_fee_krw)} · 매도 세금 별도{result.fee_summary.unconfigured_count>0?` · 요율 미설정 ${result.fee_summary.unconfigured_count}건 제외`:''} · 투자 실행의 자금 준비에 반영합니다.</p>}
                 {result.trade_plan && result.trade_plan.length > 0 ? (
                   <div className="table-container">
                     <table className="custom-table">

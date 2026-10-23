@@ -52,7 +52,7 @@ class DatabaseAdapter:
             CREATE TABLE portfolios(id TEXT PRIMARY KEY,name TEXT DEFAULT 'Test');
             INSERT INTO portfolios(id) VALUES('p');
             CREATE TABLE performance_tracking(portfolio_id TEXT PRIMARY KEY,baseline_date TEXT,revision INT DEFAULT 0);
-            CREATE TABLE accounts (id TEXT PRIMARY KEY, deposit_krw REAL, deposit_usd REAL,portfolio_id TEXT DEFAULT 'p');
+            CREATE TABLE accounts (id TEXT PRIMARY KEY, deposit_krw REAL, deposit_usd REAL,portfolio_id TEXT DEFAULT 'p',fee_schedule TEXT DEFAULT '{}');
             CREATE TABLE assets (id TEXT PRIMARY KEY, market TEXT,portfolio_id TEXT DEFAULT 'p',
                 is_deposit INTEGER DEFAULT 0,allowed_accounts TEXT DEFAULT '["acc"]');
             CREATE TABLE bookkeeping_requests(sequence INTEGER PRIMARY KEY AUTOINCREMENT,scope TEXT,request_id TEXT,payload TEXT,result TEXT,UNIQUE(scope,request_id));

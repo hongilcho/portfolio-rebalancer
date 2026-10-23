@@ -33,6 +33,7 @@ class CreateAccountRequest(BaseModel):
     limit_preference: str = "ANNUAL"
     current_year_deposit: float = 0.0
     portfolio_id: Optional[str] = "default"
+    fee_schedule: Optional[dict] = None
 
 class UpdateAccountRequest(BaseModel):
     account_no: str
@@ -46,6 +47,7 @@ class UpdateAccountRequest(BaseModel):
     priority: int = 99
     limit_preference: str = "ANNUAL"
     current_year_deposit: float = 0.0
+    fee_schedule: Optional[dict] = None
 
 class UpdatePrioritiesRequest(BaseModel):
     priority_map: Dict[str, int]
@@ -74,7 +76,8 @@ def create_account(req: CreateAccountRequest):
         priority=req.priority,
         limit_preference=req.limit_preference,
         current_year_deposit=req.current_year_deposit,
-        portfolio_id=req.portfolio_id or "default"
+        portfolio_id=req.portfolio_id or "default",
+        fee_schedule=req.fee_schedule
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)
@@ -94,7 +97,8 @@ def edit_account(account_id: str, req: UpdateAccountRequest):
         notes=req.notes or "",
         priority=req.priority,
         limit_preference=req.limit_preference,
-        current_year_deposit=req.current_year_deposit
+        current_year_deposit=req.current_year_deposit,
+        fee_schedule=req.fee_schedule
     )
     if not success:
         raise HTTPException(status_code=400, detail=msg)

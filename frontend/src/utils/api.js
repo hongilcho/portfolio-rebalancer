@@ -76,6 +76,7 @@ export const api = {
   getLedgerCorrections: pid=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}`),
   getLedgerAccount: (pid,aid)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/account/${encodeURIComponent(aid)}`),
   previewLedgerCorrection: (pid,data)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/preview`,{method:'POST',body:JSON.stringify(data)}),
+  previewCashSettlement:(pid,data)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/settlement-preview`,{method:'POST',body:JSON.stringify(data)}),
   commitLedgerCorrection: (pid,data)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}`,{method:'POST',body:JSON.stringify(data)}),
   reviewLedgerCorrection: (pid,id)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}/review`),
   confirmLedgerHistory: (pid,id,data)=>request(`/api/ledger-adjustments/${encodeURIComponent(pid)}/${encodeURIComponent(id)}/review`,{method:'POST',body:JSON.stringify(data)}),

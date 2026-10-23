@@ -77,6 +77,7 @@ def calculate_plan(req: CalculateRebalanceRequest):
         if a.get('is_active', True) or portfolio_assets.get(str(a['id']), {}).get('qty', 0) > 0
     ]
     
+    fee_fx=market_service.request_snapshot()['usd_krw']
     t_plan, tr_plan, sim_assets, success, msg = calculate_rebalancing_plan(
         assets=active_assets,
         portfolio_assets=portfolio_assets,
@@ -84,7 +85,7 @@ def calculate_plan(req: CalculateRebalanceRequest):
         holdings=holdings_raw,
         price_map=price_map,
         total_krw_cash=total_krw_cash,
-        usd_krw_rate=market_service.request_snapshot()['usd_krw'],
+        usd_krw_rate=fee_fx,
         scenario=req.scenario,
         new_cash_krw=req.new_cash_krw,
         drift_threshold=req.drift_threshold
@@ -124,6 +125,10 @@ def calculate_plan(req: CalculateRebalanceRequest):
     scale_max = round(max_drift * 3.5, 1) if max_drift > 0 else 1.0
     
     realized_summary = compute_realized_summary(t_plan)
+    from logic.trading_fees import plan_summary
+    from data.repositories.forex import KST
+    from datetime import datetime
+    fee_summary=plan_summary(t_plan,accounts,assets,datetime.now(KST).date(),fee_fx)
     
     return {
         "success": True,
@@ -133,7 +138,8 @@ def calculate_plan(req: CalculateRebalanceRequest):
         "simulated_assets": sim_assets,
         "total_sim": total_sim_rebalance,
         "scale_max": scale_max,
-        "realized_summary": realized_summary
+        "realized_summary": realized_summary,
+        "fee_summary": fee_summary
     }
 
 @router.post("/apply-transfers")

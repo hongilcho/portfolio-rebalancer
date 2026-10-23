@@ -289,6 +289,7 @@ def _do_init_db_schema(db: RepositoryContext, conn, cursor):
         if row[1] and row[1] < current_year:
             cursor.execute("UPDATE accounts SET current_year_deposit = 0.0, last_updated_year = %s WHERE id = %s", (current_year, row[0]))
 
+    cursor.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS fee_schedule JSONB NOT NULL DEFAULT '{}'::jsonb")
     initialize_usd_ledger(cursor)
     initialize_workflow(cursor)
     initialize_security(cursor)

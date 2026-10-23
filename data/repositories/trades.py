@@ -8,6 +8,7 @@ from psycopg2.extras import RealDictCursor
 from logic.trade_accounting import cash_movement
 from data.repository_context import RepositoryContext
 from data.repositories import forex, bookkeeping, trade_costs
+from logic.trading_fees import estimate
 
 
 def replay_book(cursor, account_id, asset_id, rows, deleting=()):
@@ -42,7 +43,7 @@ def execute_trade(
         day = date.fromisoformat(str(trade_date))
         if day.isoformat() != str(trade_date) or day > datetime.now(forex.KST).date():
             raise ValueError('실제 체결일은 오늘까지의 올바른 날짜여야 합니다.')
-        cursor.execute("""SELECT a.market,a.is_deposit,a.allowed_accounts,a.portfolio_id,
+        cursor.execute("""SELECT a.*,
             c.portfolio_id AS account_portfolio FROM assets a
             JOIN accounts c ON c.id=%s WHERE a.id=%s""", (str(account_id),str(asset_id)))
         asset = cursor.fetchone()
@@ -59,10 +60,12 @@ def execute_trade(
         costs = trade_costs.normalize(fees_krw, fees_usd, currency)
 
         # Lock before reading balances; deletion takes the same account lock.
-        cursor.execute('SELECT deposit_krw, deposit_usd FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
+        cursor.execute('SELECT deposit_krw, deposit_usd, fee_schedule FROM accounts WHERE id = %s FOR UPDATE', (str(account_id),))
         acc_row = cursor.fetchone()
         if not acc_row:
             raise ValueError("존재하지 않는 계좌입니다.")
+        if trade_type in ('BUY','SELL') and fees_krw is None and fees_usd is None:
+            costs = estimate(acc_row.get('fee_schedule') or {},asset,trade_date,quantity,price) or costs
         cursor.execute('''SELECT t.trade_date FROM ledger_adjustments l JOIN trade_history t ON t.id=l.trade_id
             WHERE l.account_id=%s AND t.asset_id=%s AND l.reversed_at IS NULL''',(str(account_id),str(asset_id)))
         if any(str(trade_date)<str(r['trade_date']) for r in cursor.fetchall()):

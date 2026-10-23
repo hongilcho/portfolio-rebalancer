@@ -8,7 +8,7 @@ from data.repositories import ledger_adjustments
 router=APIRouter(prefix='/api/ledger-adjustments',tags=['ledger-adjustments'])
 class Proposal(BaseModel):
     model_config=ConfigDict(extra='forbid')
-    kind: Literal['PAST_WITHDRAWAL','CASH','HOLDING']
+    kind: Literal['PAST_WITHDRAWAL','CASH','HOLDING','COST_SETTLEMENT','BALANCE_SETTLEMENT']
     account_id: str=Field(min_length=1,max_length=100)
     event_date: date
     reason: str=Field(min_length=3,max_length=2000)
@@ -31,6 +31,17 @@ class Review(BaseModel):
     confirmed: Literal[True]
 class Adjustment(Review):
     proposal: Proposal
+class Settlement(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    account_id: str=Field(min_length=1,max_length=100)
+    currency: Literal['KRW','USD']
+    balance: float=Field(ge=0,le=1e15,allow_inf_nan=False)
+    classification: Literal['COST_SETTLEMENT','BALANCE_SETTLEMENT']
+    reason: str=Field(min_length=3,max_length=2000)
+    average_rate: float=Field(default=0,ge=0,le=1e6,allow_inf_nan=False)
+@router.post('/{pid}/settlement-preview')
+def settlement(pid:str,p:Settlement):
+    return perform(ledger_adjustments.settlement_preview,pid,p.account_id,p.currency,p.balance,p.classification,p.reason,p.average_rate)
 @router.get('/{pid}')
 def read(pid:str):return perform(ledger_adjustments.read,pid)
 @router.get('/{pid}/account/{aid}')

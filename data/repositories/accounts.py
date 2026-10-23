@@ -1,6 +1,7 @@
 """Account balances, limits and settings persistence."""
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor,Json
+from logic.trading_fees import schedule
 from data.repository_context import RepositoryContext
 
 def get_all_accounts(db: RepositoryContext, portfolio_id: str = None):
@@ -31,6 +32,7 @@ def add_account(
     limit_preference='ANNUAL',
     current_year_deposit=0.0,
     portfolio_id='default',
+    fee_schedule=None,
 ):
     conn = db.connect()
     cursor = conn.cursor()
@@ -41,6 +43,8 @@ def add_account(
             INSERT INTO accounts (id, account_no, account_alias, account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, portfolio_id)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (new_id, account_no.strip(), account_alias.strip(), account_type, deposit_krw, deposit_usd, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, target_pid))
+        if fee_schedule is not None:
+            cursor.execute('UPDATE accounts SET fee_schedule=%s WHERE id=%s',(Json(schedule(fee_schedule)),new_id))
         conn.commit()
         return True, "계좌가 성공적으로 추가되었습니다."
     except psycopg2.IntegrityError:
@@ -67,6 +71,7 @@ def update_account(
     priority=99,
     limit_preference='ANNUAL',
     current_year_deposit=0.0,
+    fee_schedule=None,
 ):
     conn = db.connect()
     cursor = conn.cursor()
@@ -82,6 +87,8 @@ def update_account(
             SET account_no = %s, account_alias = %s, account_type = %s, annual_limit = %s, tax_limit = %s, notes = %s, priority = %s, limit_preference = %s, current_year_deposit = %s
             WHERE id = %s
         ''', (account_no.strip(), account_alias.strip(), account_type, annual_limit, tax_limit, notes, priority, limit_preference, current_year_deposit, str(account_id)))
+        if fee_schedule is not None:
+            cursor.execute('UPDATE accounts SET fee_schedule=%s WHERE id=%s',(Json(schedule(fee_schedule)),str(account_id)))
         conn.commit()
         return True, "계좌 정보가 성공적으로 수정되었습니다."
     except Exception as e:
