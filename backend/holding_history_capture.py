@@ -1,6 +1,5 @@
 """Daily enrichment on the existing scheduler. No brokerage or ledger writes."""
 from datetime import timedelta
-from time import monotonic
 from logic.holding_history import financial,crypto
 from logic import close_calendar as trading
 
@@ -17,30 +16,37 @@ def enrich(inputs,day):
     return {**inputs,'holding_metrics':financial(inputs['ledger'],inputs['prices'],inputs['fx']['rate'],day)}
 
 class CryptoCapture:
-    def __init__(self,ctx,holdings=None,prices=None,status=None,repo=None):
-        from data.repositories import holding_history
-        from data.data_manager import get_crypto_holdings
-        from logic.crypto_price_fetcher import get_crypto_prices,get_crypto_status
-        self.ctx=ctx;self.holdings=holdings or get_crypto_holdings;self.prices=prices or get_crypto_prices
-        self.status=status or get_crypto_status;self.repo=repo or holding_history;self.next_at=None
+    def __init__(self,ctx,provider=None,repo=None):
+        from data.repositories import crypto_history
+        from logic.market_providers.crypto_history import UpbitHistory
+        self.ctx=ctx;self.provider=provider or UpbitHistory();self.repo=repo or crypto_history;self.next_at=None;self.retry_after={}
+
     def tick(self,now):
-        day=now.astimezone(trading.KST).date()
-        if not trading.is_session(day):return False
-        cutoff=trading.cutoff(day)
-        # Never turn a later live quote or today's holdings into an old record.
-        if not cutoff<=now<=cutoff+timedelta(minutes=10) or (self.next_at and now<self.next_at):return False
+        from logic import crypto_history as policy
+        if self.next_at and now<self.next_at:return False
         self.next_at=now+timedelta(minutes=1)
-        if self.repo.crypto_exists(self.ctx,day):
-            self.next_at=cutoff+timedelta(hours=12);return False
-        started=monotonic()
-        holdings=self.holdings();prices=self.prices();state=self.status()
-        observed_at=now+timedelta(seconds=monotonic()-started)
-        updated=state.get('updated_at')
-        if not updated or state.get('stale') or state.get('refresh_failed') or state.get('refreshing'):return False
-        # Cache timestamp is Unix seconds. Quotes before the cutoff are not a
-        # same-time observation, even when their prices happen to be unchanged.
-        if observed_at>cutoff+timedelta(minutes=10):return False
-        if not cutoff.timestamp()<=float(updated)<=observed_at.timestamp()+5:return False
-        metrics=crypto(holdings,prices)
-        return self.repo.capture_crypto(self.ctx,day,observed_at,{'metrics':metrics,'holdings':holdings,
-            'prices':prices,'quote_at':updated,'valuation_at':observed_at.isoformat(),'basis':'KRX_CLOSE_WINDOW_OBSERVATION'})
+        state=self.repo.state(self.ctx);current=policy.fingerprint(state['holdings'])
+        if not state['events']:
+            state['events']=[self.repo.observe(self.ctx,current,now)]
+        if state['events'][-1]['fingerprint']!=current:
+            raise ValueError('가상자산 보유 변경 이력 확인이 필요합니다.')
+        day=now.astimezone(trading.KST).date()
+        end=day if now>=policy.cutoff(day) else day-timedelta(days=1)
+        start=min(e.get('confirmed_start',policy.moment(e['at']).astimezone(trading.KST).date().isoformat()) for e in state['events'])
+        if start>str(end):return False
+        # One missing day per pass, including weekends; restart-safe and bounded.
+        for target in policy.days(start,end):
+            if str(target) in state['dates']:continue
+            if self.retry_after.get(target,now)>now:continue
+            seed=policy.basis_at(state['events'],target)
+            if not seed:continue
+            symbols={h['symbol'] for h in seed['holdings'] if h['quantity']>0}
+            try:
+                quotes=self.provider.prices(target,symbols)
+                source='RECORDED' if target==day else 'RECONSTRUCTED'
+                payload=policy.record(seed['holdings'],quotes,target,source=source,basis_fingerprint=seed['fingerprint'])
+                return self.repo.capture(self.ctx,target,payload,current)
+            except Exception:
+                self.retry_after[target]=now+timedelta(minutes=10)
+                raise  # The outer scheduler logs privately; other days can proceed.
+        return False

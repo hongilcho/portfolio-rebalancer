@@ -7,7 +7,14 @@ def read(ctx,scope,include_crypto=True):
         c.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         c.execute('SELECT id,name FROM portfolios ORDER BY created_at,id');portfolios=[dict(r) for r in c.fetchall()]
         ids=[p['id'] for p in portfolios]
-        if scope!='all' and scope not in ids:raise ValueError('포트폴리오를 찾을 수 없습니다.')
+        if scope not in ('all','crypto') and scope not in ids:raise ValueError('포트폴리오를 찾을 수 없습니다.')
+        crypto=[]
+        if scope=='crypto' or (scope=='all' and include_crypto):
+            c.execute("SELECT snapshot_date,valuation_at,jsonb_build_object('metrics',payload->'metrics','basis',payload->'basis') AS payload FROM portfolio_analytics.crypto_snapshots ORDER BY snapshot_date")
+            crypto=[dict(r) for r in c.fetchall()]
+        if scope=='crypto':
+            conn.rollback()
+            return {**history([],crypto,[],scope='crypto',include_crypto=True),'portfolios':portfolios}
         c.execute('''SELECT portfolio_id,snapshot_date,value_krw,
           CASE WHEN payload ? 'holding_metrics' THEN jsonb_build_object('holding_metrics',payload->'holding_metrics')
             ELSE payload END AS payload,record_kind,valuation_at FROM performance_snapshots
@@ -21,9 +28,6 @@ def read(ctx,scope,include_crypto=True):
             if (row['portfolio_id'],str(row['snapshot_date'])) in uncertain:
                 row['payload']={**row['payload'],'holding_metrics':{'status':'UNCONFIRMED','profit_krw':None,
                     'cost_krw':None,'return_pct':None,'warning':'장부 정정의 과거 기록 확인이 필요합니다.'}}
-        crypto=[]
-        if scope=='all' and include_crypto:
-            c.execute("SELECT snapshot_date,jsonb_build_object('metrics',payload->'metrics') AS payload FROM portfolio_analytics.crypto_snapshots ORDER BY snapshot_date");crypto=[dict(r) for r in c.fetchall()]
         # Reconstruction inputs stay private and never appear in the API response.
         c.execute('SELECT * FROM trade_history ORDER BY trade_date,trade_sequence,id');trades=[dict(r) for r in c.fetchall()]
         c.execute("SELECT key,data FROM market_cache WHERE key LIKE 'div_%%'")

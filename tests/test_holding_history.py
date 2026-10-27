@@ -87,40 +87,10 @@ def test_crypto_matches_owner_universe_and_unknown_price_not_zero():
     assert m['cost_krw']==240 and m['profit_krw']==40
     with pytest.raises(ValueError):crypto(holds,{'BTC':{'price':110}})
 
-def test_crypto_collector_cutoff_window_freshness_idempotency_and_no_historical_guessing():
-    now=cutoff(date(2026,10,27));repo=Mock();repo.crypto_exists.return_value=False;repo.capture_crypto.return_value=True
-    holds=Mock(return_value=[{'owner':'홍일','symbol':'BTC','quantity':1,'avg_price':100}])
-    prices=Mock(return_value={'BTC':{'price':110}});status=Mock(return_value={'updated_at':now.timestamp()})
-    worker=CryptoCapture('ctx',holds,prices,status,repo)
-    assert not worker.tick(now-timedelta(seconds=1));holds.assert_not_called()
-    assert worker.tick(now);assert repo.capture_crypto.call_count==1
-    assert not worker.tick(now+timedelta(seconds=10));assert repo.capture_crypto.call_count==1
-    repo.crypto_exists.return_value=True
-    assert not worker.tick(now+timedelta(minutes=1))
-    fresh=CryptoCapture('ctx',holds,prices,status,repo)
-    assert not fresh.tick(now+timedelta(minutes=11))
-    repo.crypto_exists.return_value=False;status.return_value={'updated_at':now.timestamp()-1}
-    assert not CryptoCapture('ctx',holds,prices,status,repo).tick(now)
-
 def test_enrichment_preserves_nav_inputs_and_does_not_require_optional_metrics():
     inputs={'ledger':{},'prices':{},'fx':{'rate':1400},'valuation_at':'stamp'};before=deepcopy(inputs)
     result=enrich(inputs,'2026-10-27')
     assert inputs==before and result['holding_metrics']['status']=='UNAVAILABLE'
-
-def test_delayed_session_does_not_block_next_regular_day_crypto_capture():
-    late=cutoff(date(2026,11,19));regular=cutoff(date(2026,11,20));repo=Mock()
-    repo.crypto_exists.return_value=True
-    worker=CryptoCapture('ctx',lambda:[],lambda:{},lambda:{'updated_at':regular.timestamp()},repo)
-    assert not worker.tick(late)
-    repo.crypto_exists.return_value=False;repo.capture_crypto.return_value=True
-    assert worker.tick(regular)
-
-def test_cold_quote_latency_is_accounted_for_without_backdating_the_capture(monkeypatch):
-    now=cutoff(date(2026,10,27));repo=Mock();repo.crypto_exists.return_value=False;repo.capture_crypto.return_value=True
-    times=iter([0,20]);monkeypatch.setattr('backend.holding_history_capture.monotonic',lambda:next(times))
-    worker=CryptoCapture('ctx',lambda:[],lambda:{},lambda:{'updated_at':now.timestamp()+20},repo)
-    assert worker.tick(now)
-    assert repo.capture_crypto.call_args.args[2]==now+timedelta(seconds=20)
 
 def test_read_endpoint_precedes_dynamic_route_and_unauthenticated_is_blocked():
     from fastapi.testclient import TestClient

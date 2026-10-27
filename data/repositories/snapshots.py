@@ -3,6 +3,7 @@ import json
 from typing import Dict, Any
 from data.normalization import sanitize_account_names, _normalize_asset
 from data.repository_context import RepositoryContext
+from logic.crypto_numbers import precise_holding
 
 
 def _overview_account_source(cursor):
@@ -103,7 +104,10 @@ def get_overview_batch_data(db: RepositoryContext) -> Dict[str, Any]:
             JOIN assets a ON h.asset_id = a.id
             JOIN accounts acc ON h.account_id = acc.id
         ) h), '[]'::json),
-        'crypto_holdings', COALESCE((SELECT json_agg(c) FROM crypto_holdings c), '[]'::json),
+        'crypto_holdings', COALESCE((SELECT json_agg(c) FROM (
+            SELECT h.*,h.quantity::double precision AS quantity_precise,
+                   h.avg_price::double precision AS avg_price_precise FROM crypto_holdings h
+        ) c), '[]'::json),
         'trade_history', COALESCE((SELECT json_agg(t ORDER BY t.trade_date ASC, t.id ASC) FROM trade_history t), '[]'::json),
         'realized_openings', COALESCE((SELECT json_agg(b.result ORDER BY b.sequence) FROM bookkeeping_requests b
             WHERE b.scope LIKE 'realized-opening:%' AND b.result IS NOT NULL), '[]'::json),
@@ -154,4 +158,5 @@ def get_overview_batch_data(db: RepositoryContext) -> Dict[str, Any]:
         r['is_dividend_cost_deduct'] = bool(r.get('is_dividend_cost_deduct', False))
         processed_assets.append(r)
     raw['assets'] = processed_assets
+    raw['crypto_holdings'] = [precise_holding(h) for h in raw.get('crypto_holdings',[])]
     return raw

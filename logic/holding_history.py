@@ -3,7 +3,7 @@
 No provider IO, no changes to existing NAV or period-return definitions.
 """
 import math
-from datetime import date
+from datetime import date,timedelta
 from backend.valuation_service import evaluate_portfolio
 from logic.portfolio_valuation import index_valuation_inputs
 from logic.dividend_calculator import dividend_lookup_key, calculate_holding_dividends
@@ -97,12 +97,13 @@ def combine(parts):
         'source':'RECONSTRUCTED' if any(p.get('source')=='RECONSTRUCTED' for p in parts) else 'RECORDED'}
 
 def history(financial_rows,crypto_rows,portfolio_ids,*,include_crypto=False,scope='all',reconstruction=None):
-    by_day={};ids=list(portfolio_ids) if scope=='all' else [scope]
+    by_day={};financial_days=set();ids=list(portfolio_ids) if scope=='all' else [scope]
     evidence=Evidence(financial_rows,(reconstruction or {}).get('trade_history',[]),
         (reconstruction or {}).get('realized_openings',[]))
     for s in financial_rows:
         pid=s['portfolio_id'];day=str(s['snapshot_date'])
         if pid not in ids:continue
+        financial_days.add(day)
         payload=s.get('payload') or {};m=payload.get('holding_metrics')
         if not m:
             ledger=payload.get('ledger') or {k:payload[k] for k in ('accounts','assets','holdings') if k in payload}
@@ -118,11 +119,17 @@ def history(financial_rows,crypto_rows,portfolio_ids,*,include_crypto=False,scop
             'record_kind':s.get('record_kind'),'valuation_at':s.get('valuation_at')}
     for row in crypto_rows:
         day=str(row['snapshot_date'])
-        by_day.setdefault(day,{})['crypto']=row['payload']['metrics']
+        by_day.setdefault(day,{})['crypto']={**row['payload']['metrics'],
+            'valuation_basis':row['payload'].get('basis') or 'LEGACY_OBSERVATION',
+            'valuation_at':str(row.get('valuation_at') or row['payload'].get('valuation_at') or '')}
     rows=[]
-    if by_day:
+    observed=set(by_day) if scope=='crypto' else financial_days
+    if observed and scope=='crypto':
+        first=date.fromisoformat(min(observed));last=date.fromisoformat(max(observed))
+        dates={(first+timedelta(days=i)).isoformat() for i in range((last-first).days+1)}
+    elif observed:
         from logic.close_calendar import sessions
-        dates=set(by_day)|{str(d) for d in sessions(date.fromisoformat(min(by_day)),date.fromisoformat(max(by_day)))}
+        dates=observed|{str(d) for d in sessions(date.fromisoformat(min(observed)),date.fromisoformat(max(observed)))}
     else:dates=set()
     required=ids+(['crypto'] if include_crypto and scope=='all' else [])
     for day in sorted(dates):
@@ -131,4 +138,7 @@ def history(financial_rows,crypto_rows,portfolio_ids,*,include_crypto=False,scop
         components={k:by_day.get(day,{}).get(k,dict(missing)) for k in required}
         total=combine(list(components.values())) if scope=='all' else dict(components[scope])
         rows.append({'date':day,**total,'components':components})
-    return {'scope':scope,'include_crypto':include_crypto,'rows':rows,'metric_version':VERSION}
+    return {'scope':scope,'include_crypto':include_crypto,'rows':rows,'metric_version':VERSION,
+        'coverage':{'total_dates':len(rows),'complete_dates':sum(r['status']=='COMPLETE' for r in rows),
+            'missing_components':[{'id':key,'dates':[r['date'] for r in rows if r['components'][key]['status']!='COMPLETE']}
+                for key in required if any(r['components'][key]['status']!='COMPLETE' for r in rows)]}}

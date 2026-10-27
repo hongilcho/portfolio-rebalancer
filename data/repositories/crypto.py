@@ -3,17 +3,18 @@ from datetime import datetime
 from typing import Optional
 from psycopg2.extras import RealDictCursor
 from data.repository_context import RepositoryContext
+from logic.crypto_numbers import precise_holding
 
 def get_crypto_holdings(db: RepositoryContext, owner: Optional[str] = None):
     conn = db.connect()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     try:
         if owner:
-            cursor.execute("SELECT * FROM crypto_holdings WHERE owner = %s ORDER BY symbol ASC", (owner,))
+            cursor.execute("SELECT c.*,c.quantity::double precision AS quantity_precise,c.avg_price::double precision AS avg_price_precise FROM crypto_holdings c WHERE owner = %s ORDER BY symbol ASC", (owner,))
         else:
-            cursor.execute("SELECT * FROM crypto_holdings ORDER BY owner ASC, symbol ASC")
+            cursor.execute("SELECT c.*,c.quantity::double precision AS quantity_precise,c.avg_price::double precision AS avg_price_precise FROM crypto_holdings c ORDER BY owner ASC, symbol ASC")
         rows = cursor.fetchall()
-        return [dict(r) for r in rows]
+        return [precise_holding(r) for r in rows]
     except Exception as e:
         print(f"Error fetching crypto holdings: {e}")
         return []
@@ -38,6 +39,8 @@ def save_crypto_holding(
     coin_name = '비트코인' if sym_clean == 'BTC' else ('이더리움' if sym_clean == 'ETH' else sym_clean)
 
     try:
+        from data.repositories import crypto_history
+        crypto_history.lock(cursor)
         cursor.execute('''
             INSERT INTO crypto_holdings (id, owner, symbol, name, quantity, avg_price, notes, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -56,6 +59,11 @@ def save_crypto_holding(
             notes or "",
             datetime.now()
         ))
+        # Same transaction as the existing edit; past valuations stay frozen.
+        # RealDictCursor is required by the private history journal reader.
+        history_cursor=conn.cursor(cursor_factory=RealDictCursor)
+        try:crypto_history.changed(history_cursor,db)
+        finally:history_cursor.close()
         conn.commit()
         return True, f"[{owner_clean}] {sym_clean} 보유 정보가 성공적으로 저장되었습니다."
     except Exception as e:

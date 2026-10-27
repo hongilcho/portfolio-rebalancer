@@ -43,4 +43,14 @@ try{
     assert.match(html,/3,000,000원/);assert.match(html,/4,000,000원/);assert.match(html,/현재 · 조회 시점/);
     assert.match(html,/기록 범위/);assert.match(html,/tabindex="0"/);
   });
+  test('crypto panel identifies the fixed cutoff and reconstructed history rather than a zero baseline',()=>{
+    const html=renderToStaticMarkup(React.createElement(Panel,{scope:'crypto',initialData:{rows:[{date:'2026-10-05',status:'COMPLETE',source:'RECONSTRUCTED',profit_krw:500,return_pct:5,cost_krw:10000,value_krw:10500}],coverage:{total_dates:1,complete_dates:1,missing_components:[]}}}));
+    assert.match(html,/가상자산 손익 추이/);assert.match(html,/매일 오후 4시 기준/);assert.match(html,/500원/);
+    assert.match(html,/확인된 당시 수량·원가/);assert.match(html,/3시 59분/);
+  });
+  test('aggregate missing components are explained visibly and do not become fake total points',()=>{
+    const html=renderToStaticMarkup(React.createElement(Panel,{scope:'all',initialData:{rows:[{date:'2026-10-05',status:'UNAVAILABLE',profit_krw:null,cost_krw:null,value_krw:null,return_pct:null}],coverage:{total_dates:1,complete_dates:0,missing_components:[{id:'crypto',dates:['2026-10-05']}]}}}));
+    assert.match(html,/과거 1일 중 0일 표시/);assert.match(html,/가상자산 기록이 없는 날짜는 합산하지 않습니다/);
+    assert.doesNotMatch(html,/<circle/);
+  });
 }finally{await server.close();globalThis.fetch=originalFetch;}

@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from logic.holding_history import history,combine
 from logic.close_calendar import is_session
+from logic import crypto_history as crypto_policy
 
 def metric(cost,profit,cash=0):
     return {'version':1,'status':'COMPLETE','source':'RECORDED','cost_krw':cost,'profit_krw':profit,
@@ -19,15 +20,25 @@ def main():
         b=metric(15000000,-1500000+offset*28000,400000)
         c=metric(7000000,800000+offset*7000)
         for pid,m in [('p',a),('q',b)]:
+            if pid=='q' and offset<2:continue
             snapshots.append({'portfolio_id':pid,'snapshot_date':day.isoformat(),'record_kind':'baseline' if not offset else 'close','payload':{'holding_metrics':m}})
         # Deliberate single-date crypto gap proves incomplete totals stay absent.
         if offset!=9:coins.append({'snapshot_date':day.isoformat(),'payload':{'metrics':c}})
         period.append({'label':day.isoformat(),'kind':'일','start':start.isoformat(),'end':day.isoformat(),
             'profit':offset*36000,'return_pct':offset*.034,'value_krw':a['value_krw'],'net_flow':0,'flow_count':0,
             'record_kind':'baseline' if not offset else 'close'})
+    # A complete daily crypto series, including weekends. Explicitly synthetic.
+    coins=[]
+    for offset in range(23):
+        day=start+timedelta(days=offset);at=crypto_policy.cutoff(day)-timedelta(minutes=1)
+        quote={'BTC':{'price':78000000+offset*70000,'source':'UPBIT','market':'KRW-BTC','unit':1,
+            'candle_at':at.isoformat(),'last_trade_at':(at+timedelta(seconds=59)).isoformat()}}
+        payload=crypto_policy.record([{'owner':'홍일','symbol':'BTC','quantity':.1,'avg_price':70000000}],quote,day,source='RECONSTRUCTED')
+        coins.append({'snapshot_date':str(day),'payload':payload})
     live={'p':metric(100000000,5900000,2000000),'q':metric(15000000,-810000,400000),'crypto':metric(7000000,1040000)}
     live['all']=combine([live['p'],live['q'],live['crypto']]);live['without_crypto']=combine([live['p'],live['q']])
     result={s:history(snapshots,coins,['p','q'],scope=s,include_crypto=True) for s in ['p','q','all']}
+    result['crypto_history']=history([],coins,[],scope='crypto',include_crypto=True)
     result.update(without_crypto=history(snapshots,coins,['p','q']),current=live,period=period,
         components=[{'id':'p','name':'장기 포트폴리오'},{'id':'q','name':'일반투자'},{'id':'crypto','name':'가상자산'}])
     path=ROOT/'frontend/dev/holding-history/synthetic.json';path.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')

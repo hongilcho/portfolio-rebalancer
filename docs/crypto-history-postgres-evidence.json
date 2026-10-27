@@ -1,0 +1,49 @@
+{
+  "status": "passed",
+  "production_connections": 0,
+  "external_calls": 0,
+  "checks": [
+    "repeated additive migration preserves every original financial row and saved NAV",
+    "concurrent crypto capture inserts exactly once and never overwrites a prior observation",
+    "repeatable read combines weighted costs and crypto once without ledger or NAV writes",
+    "real pooled wrapper reads safely and returns a writable connection without session leakage",
+    "anon authenticated and BYPASSRLS service role have no access to the private RLS table",
+    "caller rollback retains previous crypto observation and all financial records",
+    "legacy reconstruction reuses confirmed quantity without changing holdings cash trades receipts NAVs or period results",
+    "23 daily crypto dates include weekends while existing observations holdings cash trades and period performance stay unchanged",
+    "repeated backfill is idempotent and preserves both the prior daily values and confirmed basis",
+    "crypto-only and aggregate reads share daily records without exposing private holdings confirmation payloads",
+    "a failed change-journal insert rolls back the holding edit in the same transaction",
+    "later edits are journaled without rewriting historical profit and an obsolete restoration basis is rejected",
+    "capture checks current-book and asof-basis fingerprints before committing a historical observation",
+    "offline archived books are queried without modifying the source backup any restored financial row or original period calculation",
+    "crypto standalone aggregate and restoration preserve the same stored REAL precision even with extra_float_digits zero",
+    "actual offline backup plus public candles restores 23 crypto days and 14 combined financial days without altering original books or period results"
+  ],
+  "offline_archive": {
+    "source_sha256": "ff7409dc45cfa55f8aa5be4439902025995b798739fcd6feb901dc4436f54df5",
+    "portfolio_counts": [
+      {
+        "observations": 16,
+        "complete": 16
+      },
+      {
+        "observations": 14,
+        "complete": 14
+      }
+    ],
+    "protected_tables_unchanged": 8,
+    "period_results_unchanged": true,
+    "source_archive_unchanged": true
+  },
+  "archived_crypto_restore": {
+    "crypto_days": 23,
+    "combined_complete_days": 14,
+    "financial_only_complete_days": 14,
+    "protected_tables_unchanged": 8,
+    "original_period_results_unchanged": true,
+    "local_inserted": 23
+  },
+  "check_count": 16,
+  "isolated_cluster_stopped": true
+}

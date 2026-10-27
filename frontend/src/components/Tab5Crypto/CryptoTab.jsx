@@ -17,6 +17,8 @@ import CryptoCharts from './CryptoCharts';
 import CryptoOwnerCards from './CryptoOwnerCards';
 import CryptoCombinedCards from './CryptoCombinedCards';
 import CryptoComparisonTable from './CryptoComparisonTable';
+import HoldingsPerformance from '../Tab6Analysis/HoldingsPerformance';
+import {holdingCurrent} from '../../utils/holdingHistory';
 
 export default function CryptoTab({ 
   currentPortfolioId = 'default', forceRefreshOnMount = false
@@ -176,6 +178,9 @@ export default function CryptoTab({
         hongil={hongil}
         yoona={yoona}
       />
+
+      <HoldingsPerformance scope="crypto" includeCrypto revision={data}
+        current={holdingCurrent(cryptoTotal,true)}/>
 
       <CryptoCharts
         setChartView={setChartView}

@@ -13,6 +13,8 @@ from logic.close_calendar import KST
 qa.PORT=55447;qa.DB='holding_history_qa';qa.settings.update(port=qa.PORT,dbname=qa.DB,user='history_qa')
 qa.RUN=ROOT/'backups/local_validation'/('holding_history_'+uuid.uuid4().hex)
 q=qa.query;ctx=qa.ctx
+EXTRA_CHECKS=None
+EXTRA_ARCHIVE_CHECKS=None
 def main():
     with socket.socket() as s:assert s.connect_ex(('127.0.0.1',qa.PORT))!=0
     qa.RUN.mkdir(parents=True);cluster=qa.RUN/'cluster';pw=qa.RUN/'password';pw.write_text(qa.settings['password'])
@@ -112,6 +114,8 @@ def main():
         assert unchanged()==before and performance.read(ctx,'default')==period_before
         passed('legacy reconstruction reuses confirmed quantity without changing holdings cash trades receipts NAVs or period results')
 
+        if EXTRA_CHECKS:EXTRA_CHECKS(q,ctx,passed)
+
         # Optional prior release archive: an offline copy only. The original
         # archive is read, never modified; guarded() still permits only loopback.
         archive=os.environ.get('HISTORY_QA_BACKUP')
@@ -147,12 +151,13 @@ def main():
             report['offline_archive']={'source_sha256':archive_hash,'portfolio_counts':counts,
                 'protected_tables_unchanged':len(before),'period_results_unchanged':True,'source_archive_unchanged':True}
             passed('offline archived books are queried without modifying the source backup any restored financial row or original period calculation')
+            if EXTRA_ARCHIVE_CHECKS:EXTRA_ARCHIVE_CHECKS(q,ctx,passed,report)
         report.update(status='passed',check_count=len(report['checks']))
     finally:
         if pw.exists():pw.unlink()
         if started:
             p=subprocess.run([str(qa.BIN/'pg_ctl.exe'),'-D',str(cluster),'-m','fast','-w','stop'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags)
             report['isolated_cluster_stopped']=p.returncode==0
-        (ROOT/'docs/holding-history-postgres-evidence.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+        (ROOT/'docs'/os.environ.get('HISTORY_QA_REPORT','holding-history-postgres-evidence.json')).write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
         print(json.dumps(report,ensure_ascii=False),flush=True)
 if __name__=='__main__':main()
