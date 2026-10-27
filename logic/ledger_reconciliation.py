@@ -40,6 +40,9 @@ def correct_payload(payload,proposal,delta):
         value=quote.get('price_krw') if isinstance(quote,dict) else quote
         if q<0 or value is None: return None,'당시 수량·종가 기록이 부족합니다.'
         h['quantity']=q;change=delta*float(value)
+        # The old holding metric belongs to the original quantity/cost evidence.
+        # Reconstruct from the corrected historical book, never display it stale.
+        p.pop('holding_metrics',None)
     else:
         account=next((a for a in book.get('accounts',[]) if a.get('id')==proposal['account_id']),None)
         if not account: return None,'당시 계좌 예수금 기록이 없어 자동 보정할 수 없습니다.'
@@ -50,6 +53,8 @@ def correct_payload(payload,proposal,delta):
         fx=p.get('fx',{}).get('rate',p.get('usd_krw')) if proposal['currency']=='USD' else 1
         if fx is None: return None,'당시 환율이 없습니다.'
         change=delta*float(fx)
+        if isinstance(p.get('holding_metrics'),dict) and p['holding_metrics'].get('value_krw') is not None:
+            p['holding_metrics']['value_krw']+=change
     p['ledger_correction']=dict(event_date=proposal['event_date'],reason=proposal['reason'])
     return (p,change),''
 

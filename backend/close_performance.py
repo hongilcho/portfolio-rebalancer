@@ -30,7 +30,8 @@ class ClosePerformance:
     def __init__(self, ctx=None, prices=None, read_ledger=None, now=None, jobs=None):
         self.ctx = ctx or context()
         self.prices = prices or ClosingPrices()
-        self.read_ledger = read_ledger or dm.get_rebalance_batch_data
+        from backend.holding_history_capture import ledger
+        self.read_ledger = read_ledger or ledger
         self.now = now or clock
         self.jobs = jobs or close_jobs
 
@@ -80,7 +81,8 @@ class ClosePerformance:
         if errors:
             raise CloseUnavailable('종가 미수집: '+', '.join(errors)+' · 5분 뒤 재시도합니다.')
         value = current_nav(inputs['ledger'], {k: v['price_krw'] for k, v in inputs['prices'].items()}, fx)
-        self.jobs.finish(self.ctx, job, value, inputs, self.now())
+        from backend.holding_history_capture import enrich
+        self.jobs.finish(self.ctx, job, value, enrich(inputs,day), self.now())
         return True
 
     def tick(self, pid=None):
@@ -131,7 +133,13 @@ def start_scheduler():
         return stop, None
     def loop():
         worker = ClosePerformance()
+        from backend.holding_history_capture import CryptoCapture
+        crypto = CryptoCapture(worker.ctx)
         while not stop.is_set():
+            try:
+                crypto.tick(worker.now())
+            except Exception:
+                log.warning('Crypto history capture will retry; financial close is independent', exc_info=False)
             try:
                 worker.tick()
             except Exception:

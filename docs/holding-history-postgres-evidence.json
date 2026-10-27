@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "production_connections": 0,
+  "external_calls": 0,
+  "checks": [
+    "repeated additive migration preserves every original financial row and saved NAV",
+    "concurrent crypto capture inserts exactly once and never overwrites a prior observation",
+    "repeatable read combines weighted costs and crypto once without ledger or NAV writes",
+    "real pooled wrapper reads safely and returns a writable connection without session leakage",
+    "anon authenticated and BYPASSRLS service role have no access to the private RLS table",
+    "caller rollback retains previous crypto observation and all financial records"
+  ],
+  "check_count": 6,
+  "isolated_cluster_stopped": true
+}

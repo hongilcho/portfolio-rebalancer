@@ -197,6 +197,7 @@ export const api = {
 
   // Rebalancing
   getPerformance: pid => request(`/api/performance/${encodeURIComponent(pid)}`),
+  getHoldingHistory: (scope,includeCrypto=true) => request(`/api/performance/holding-history?scope=${encodeURIComponent(scope)}&include_crypto=${includeCrypto}`),
   getCmaIncome: pid => request(`/api/cma/${encodeURIComponent(pid)}`),
   observeCma: (pid,aid) => request(`/api/cma/${encodeURIComponent(pid)}/${encodeURIComponent(aid)}/observe`,{method:'POST'}),
   previewCmaIncome: (pid,aid,id) => request(`/api/cma/${encodeURIComponent(pid)}/${encodeURIComponent(aid)}/preview/${encodeURIComponent(id)}`),

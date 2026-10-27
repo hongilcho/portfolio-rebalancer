@@ -1,6 +1,7 @@
 {
   "source_commit": "b273a8a",
   "reviewed_updates": {
+    "holding_history": "2026-10-27: intentional holdings-history panel in the three overview variants. Existing KPI calculations and all unrelated presentation hashes are preserved. Shared component, date/metric selection, missing observations and mobile pointer selection verified separately.",
     "history": "2026-10-08: reviewed focus layout with input/history split, preserved hidden drafts, selected input methods, read-only paged history; all other snapshots unchanged; withdrawal/transfer support text reviewed, controls covered in nhNoticeControls tests",
     "dashboard": "2026-10-05: moved maturity, dividend and period panels to analysis tab 6; original dashboard markup restored and reviewed",
     "correction_simplification": "2026-10-09: reviewed NH reset and always-visible final correction action in collapsed history forms; only two history hashes changed. Decision/effect handlers covered by nhNoticeControls; unrelated screens unchanged",
@@ -25,9 +26,9 @@
     "settings/edit-deposit": "bab4e8d4b9825adffea6eb5b99d9615df29eaa96b26f62603185c66c4b06864d",
     "history/empty": "272862da9d407694b46f39865d9d2c3effcd36350374f33295d8521df7d357e3",
     "history/filled-forms": "9ee04ae9a3097b4a28a1ef2bfbf62c754ee2577e30c00d52796496e182cf849b",
-    "overview/KRW": "ad703d16caad5132a682394a3a358d7c6b709b6a5c15ecaa27f225d03020498b",
-    "overview/USD": "1162b5dc324691a7af8b194cd3733b1ece5c8ebaef1f4ddbb8ede45aa8b8d42f",
-    "overview/no-crypto": "ae95dc5b044bc5e8d2ff29079fd3ffacefa93491d0de2dd4756bf96d2ca7b242",
+    "overview/KRW": "c56c324b2a62efd9379db5a603632d5ed7928875319f816cc051640085698824",
+    "overview/USD": "6f2bbeb5cd9ee59c6e8530eda3d2782068592323dbd862363c63bdc4c695e030",
+    "overview/no-crypto": "b438201bafd11e200118cc102fdd19f38ab82e843ac579022532772793204052",
     "crypto/loaded": "d90c1c862c06abe1a7287ff79cf20dc073e002303ee7ce54c8a55e9907908c35",
     "crypto/empty": "3111a4745e1f203b6059cff20bdedafad3e3a5ef0b869e8402c85fa36e450136"
   }

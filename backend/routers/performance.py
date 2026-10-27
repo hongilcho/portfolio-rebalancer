@@ -55,6 +55,15 @@ def capture_current(pid,start=False):
         raise HTTPException(status_code=400,detail=str(exc)) from exc
 
 
+@router.get('/holding-history')
+def holding_history(scope: str='all',include_crypto: bool=True):
+    from data.repositories.holding_history import read
+    try:
+        return read(context(),scope,include_crypto)
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail=str(exc)) from None
+
+
 @router.get('/{pid}')
 def get_performance(pid:str):
     result = perform(performance.read,pid)

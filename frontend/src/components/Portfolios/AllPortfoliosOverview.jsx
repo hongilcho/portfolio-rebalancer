@@ -26,6 +26,8 @@ import OverviewCharts from './OverviewCharts';
 import PortfolioComparisonTable from './PortfolioComparisonTable';
 import AggregatedAssetsTable from './AggregatedAssetsTable';
 import OverviewSummaryCards from './OverviewSummaryCards';
+import HoldingsPerformance from '../Tab6Analysis/HoldingsPerformance';
+import {holdingCurrent} from '../../utils/holdingHistory';
 
 const overviewCache = createOverviewCache();
 
@@ -200,6 +202,10 @@ export default function AllPortfoliosOverview({
         grand={grand}
         portfolioColors={portfolioColors}
       />
+
+      <HoldingsPerformance scope="all" includeCrypto={includeCrypto} revision={data} current={holdingCurrent(grand,true)}
+        components={[...portfolios.map(p=>({id:p.id,name:p.name,metrics:holdingCurrent(p,true)})),
+          ...(includeCrypto&&crypto?[{id:'crypto',name:'가상자산',metrics:holdingCurrent(crypto,true)}]:[])]}/>
 
       <OverviewCharts
         setChartView={setChartView}

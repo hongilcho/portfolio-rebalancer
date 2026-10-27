@@ -32,6 +32,7 @@ node_modules/
 dist/
 frontend/dist/
 frontend/node_modules/
+frontend/dev/holding-history/synthetic.json
 .eslintcache
 
 # OS generated files
