@@ -28,9 +28,12 @@ def read(ctx,scope,include_crypto=True):
         c.execute('SELECT * FROM trade_history ORDER BY trade_date,trade_sequence,id');trades=[dict(r) for r in c.fetchall()]
         c.execute("SELECT key,data FROM market_cache WHERE key LIKE 'div_%%'")
         cache={r['key']:{'data':r['data']} for r in c.fetchall()}
+        c.execute('SELECT result FROM bookkeeping_requests WHERE scope=ANY(%s) AND result IS NOT NULL ORDER BY sequence',
+            (['realized-opening:'+pid for pid in (ids if scope=='all' else [scope])],))
+        openings=[r['result'] for r in c.fetchall()]
         conn.rollback()
     result=history(snapshots,crypto,ids,include_crypto=include_crypto,scope=scope,
-        reconstruction={'trade_history':trades,'dividend_cache':cache})
+        reconstruction={'trade_history':trades,'dividend_cache':cache,'realized_openings':openings})
     result['portfolios']=portfolios
     return result
 

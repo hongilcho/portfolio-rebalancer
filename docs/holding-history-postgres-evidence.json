@@ -8,8 +8,26 @@
     "repeatable read combines weighted costs and crypto once without ledger or NAV writes",
     "real pooled wrapper reads safely and returns a writable connection without session leakage",
     "anon authenticated and BYPASSRLS service role have no access to the private RLS table",
-    "caller rollback retains previous crypto observation and all financial records"
+    "caller rollback retains previous crypto observation and all financial records",
+    "legacy reconstruction reuses confirmed quantity without changing holdings cash trades receipts NAVs or period results",
+    "offline archived books are queried without modifying the source backup any restored financial row or original period calculation"
   ],
-  "check_count": 6,
+  "offline_archive": {
+    "source_sha256": "37c68aed1b059131881b44e6d3df1511b48efa5b6c74167bcfdcb25135d287a9",
+    "portfolio_counts": [
+      {
+        "observations": 16,
+        "complete": 16
+      },
+      {
+        "observations": 14,
+        "complete": 14
+      }
+    ],
+    "protected_tables_unchanged": 8,
+    "period_results_unchanged": true,
+    "source_archive_unchanged": true
+  },
+  "check_count": 8,
   "isolated_cluster_stopped": true
 }

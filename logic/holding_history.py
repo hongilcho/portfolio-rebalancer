@@ -8,6 +8,7 @@ from backend.valuation_service import evaluate_portfolio
 from logic.portfolio_valuation import index_valuation_inputs
 from logic.dividend_calculator import dividend_lookup_key, calculate_holding_dividends
 from logic.trade_accounting import trade_sort_key
+from logic.holding_history_evidence import Evidence, with_dividend_start, dividend_start
 
 VERSION=1
 
@@ -31,12 +32,12 @@ def quantity_matches(holding,trades):
         elif t['trade_type']=='SELL':qty-=float(t['quantity'])
     return abs(qty-float(holding['quantity']))<1e-6
 
-def financial(ledger,prices,fx,day,*,reconstructed=False):
+def financial(ledger,prices,fx,day,*,reconstructed=False,evidence=None):
     """Persist frozen dividend inputs for new records; old ones require evidence.
 
-    A current dividend cache/history may reconstruct an old holding only if the
-    dated transactions reconcile with its frozen quantity. Never apply today's
-    quantity, cost, manual dividend override, or a later valuation to an old day.
+    Frozen quantities/costs remain authoritative. Only dividend-dependent
+    reconstruction needs a reconciled trade path or independent corroboration.
+    Never apply today's quantity, cost or overrides to an old day.
     """
     try:
         if not isinstance(ledger,dict) or not isinstance(prices,dict):raise ValueError('당시 장부 기록 부족')
@@ -51,13 +52,19 @@ def financial(ledger,prices,fx,day,*,reconstructed=False):
             if float(h.get('quantity') or 0)>0 and price_map.get(h['asset_id'],0)<=0:
                 raise ValueError('당시 시세 기록 부족')
         def adjustment(h,a,usd_krw,account_type='',trades=None):
+            if reconstructed:h=with_dividend_start(h,trades or [])
             key=dividend_lookup_key(a);records=[]
             if key and float(h.get('quantity') or 0)>0 and h.get('manual_dividend_override') in (None,''):
                 row=ledger.get('dividend_cache',{}).get(f'div_{key[1]}_{key[0].upper()}')
                 if not row or not isinstance(row.get('data'),list):raise ValueError('당시 배당 근거 부족')
                 records=[d for d in row['data'] if str(d['date'])[:10]<=day]
-                if reconstructed and float(h.get('quantity') or 0)>0 and not quantity_matches(h,trades or []):
-                    raise ValueError('당시 보유 수량과 매매 이력 대조 필요')
+                if reconstructed and records:
+                    start=dividend_start(h)
+                    if not start:raise ValueError('당시 배당 시작일 근거 부족')
+                    records=[r for r in records if str(r['date'])[:10]>=start]
+                    if records and not quantity_matches(h,trades or []):
+                        if not evidence or not evidence.supports(h,trades or [],records,day):
+                            raise ValueError('당시 보유 수량과 매매 이력 대조 필요')
             return calculate_holding_dividends(h,a,usd_krw,account_type,trades,records)
         result=evaluate_portfolio(accounts,assets,index_valuation_inputs(holdings,trades,price_rows),price_map,fx,calculate_adjustment=adjustment)
         return {**from_kpi(result['kpi']),'source':'RECONSTRUCTED' if reconstructed else 'RECORDED'}
@@ -91,6 +98,8 @@ def combine(parts):
 
 def history(financial_rows,crypto_rows,portfolio_ids,*,include_crypto=False,scope='all',reconstruction=None):
     by_day={};ids=list(portfolio_ids) if scope=='all' else [scope]
+    evidence=Evidence(financial_rows,(reconstruction or {}).get('trade_history',[]),
+        (reconstruction or {}).get('realized_openings',[]))
     for s in financial_rows:
         pid=s['portfolio_id'];day=str(s['snapshot_date'])
         if pid not in ids:continue
@@ -103,7 +112,8 @@ def history(financial_rows,crypto_rows,portfolio_ids,*,include_crypto=False,scop
             prices=payload.get('prices',{})
             if isinstance(prices,list):
                 prices={p['id']:{**p,'price_krw':p.get('price_krw',p.get('price',0))} for p in prices}
-            m=financial(ledger,prices,(payload.get('fx') or {}).get('rate',payload.get('usd_krw',0)),day,reconstructed=True)
+            m=financial(ledger,prices,(payload.get('fx') or {}).get('rate',payload.get('usd_krw',0)),day,
+                reconstructed=True,evidence=evidence)
         by_day.setdefault(day,{})[pid]={**m,'value_krw':s.get('value_krw',m.get('value_krw')),
             'record_kind':s.get('record_kind'),'valuation_at':s.get('valuation_at')}
     for row in crypto_rows:

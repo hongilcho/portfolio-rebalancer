@@ -1,5 +1,5 @@
 """Disposable loopback PostgreSQL: history/read purity/privacy/duplicate capture."""
-import os,sys,json,subprocess,socket,uuid
+import os,sys,json,subprocess,socket,uuid,hashlib
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
@@ -19,7 +19,7 @@ def main():
     env={k:v for k,v in os.environ.items() if not k.startswith('PG')};flags=getattr(subprocess,'CREATE_NO_WINDOW',0)
     report={'status':'failed','production_connections':0,'external_calls':0,'checks':[]};started=False
     def passed(name):report['checks'].append(name);print('PASS:',name,flush=True)
-    def unchanged():return [q('SELECT row_to_json(t) FROM '+table+' t ORDER BY row_to_json(t)::text') for table in ['accounts','holdings','trade_history','performance_snapshots','performance_tracking','performance_flows']]
+    def unchanged():return [q('SELECT row_to_json(t) FROM '+table+' t ORDER BY row_to_json(t)::text') for table in ['accounts','assets','holdings','trade_history','bookkeeping_requests','performance_snapshots','performance_tracking','performance_flows']]
     try:
         with (qa.RUN/'init.log').open('wb') as log:
             subprocess.run([str(qa.BIN/'initdb.exe'),'-D',str(cluster),'-U',qa.settings['user'],'-A','scram-sha-256','--pwfile',str(pw),'--encoding=UTF8','--locale=C'],env=env,stdout=log,stderr=log,creationflags=flags,check=True)
@@ -82,6 +82,71 @@ def main():
         conn.rollback();conn.close()
         assert q('SELECT count(*) FROM portfolio_analytics.crypto_snapshots')==[(1,)]
         passed('caller rollback retains previous crypto observation and all financial records')
+
+        # Legacy INIT already includes same-day buys. Read-only reconstruction
+        # must consult a confirmed receipt without rewriting any old book/cost.
+        from logic.realized_opening import create
+        from data.repositories import performance
+        q("INSERT INTO assets(id,name,ticker,market,portfolio_id) VALUES('s','합성 ETF','QATEST','KR','default')")
+        q("INSERT INTO holdings(id,account_id,asset_id,quantity,avg_price,original_avg_price) VALUES('h','a','s',17,100,100)")
+        for ident,kind,qty in [('init','INIT',17),('buy','BUY',6)]:
+            q("INSERT INTO trade_history(id,account_id,asset_id,trade_date,trade_type,quantity,price,currency) VALUES(%s,'a','s','2026-09-28',%s,%s,100,'KRW')",(ident,kind,qty))
+        with ctx.connect() as conn,conn.cursor(cursor_factory=qa.psycopg2.extras.RealDictCursor) as c:
+            c.execute("SELECT h.*,s.name AS asset_name,s.ticker,s.market FROM holdings h JOIN assets s ON s.id=h.asset_id WHERE h.id='h'")
+            h=dict(c.fetchone())
+            c.execute("SELECT * FROM trade_history WHERE asset_id='s'");trades=[dict(r) for r in c.fetchall()]
+        seed=create('default',h,trades,'synthetic-opening',datetime(2026,10,17,tzinfo=KST))
+        q("INSERT INTO bookkeeping_requests(scope,request_id,payload,result) VALUES('realized-opening:default','synthetic-opening','{}',%s)",
+          (Json({'kind':'REALIZED_OPENING','positions':[seed]}),))
+        q("INSERT INTO market_cache(key,data) VALUES('div_KR_QATEST',%s)",(Json([{'date':'2026-09-30','amount':1}]),))
+        book={'accounts':[dict(id='a',account_no='QA',account_alias='합성',account_type='ISA',deposit_krw=20,deposit_usd=0)],
+              'assets':[dict(id='s',name='합성 ETF',ticker='QATEST',market='KR',target_weight=100,is_active=True)],'holdings':[h]}
+        old={'ledger':book,'prices':{'s':dict(id='s',price_krw=110,price_native=110)},'fx':{'rate':1400}}
+        q("INSERT INTO performance_snapshots(portfolio_id,snapshot_date,value_krw,payload,record_kind) VALUES('default','2026-10-05',1890,%s,'baseline')",(Json(old),))
+        before=unchanged();period_before=performance.read(ctx,'default')
+        for _ in range(2):
+            restored=repo.read(ctx,'default',False)['rows'][0]
+            assert restored['status']=='COMPLETE' and restored['profit_krw']==187 and restored['cost_krw']==1700
+            public_result=json.dumps(restored,default=str)
+            assert 'covered_trades' not in public_result and 'account_no' not in public_result
+        assert unchanged()==before and performance.read(ctx,'default')==period_before
+        passed('legacy reconstruction reuses confirmed quantity without changing holdings cash trades receipts NAVs or period results')
+
+        # Optional prior release archive: an offline copy only. The original
+        # archive is read, never modified; guarded() still permits only loopback.
+        archive=os.environ.get('HISTORY_QA_BACKUP')
+        if archive:
+            archive=Path(archive).resolve();assert archive.is_file() and archive.suffix=='.dump'
+            archive_hash=hashlib.sha256(archive.read_bytes()).hexdigest()
+            admin=qa.guarded(**{**qa.settings,'dbname':'postgres'});admin.autocommit=True
+            with admin.cursor() as c:
+                c.execute('DROP DATABASE '+qa.DB)
+                c.execute('CREATE DATABASE '+qa.DB)
+            admin.close()
+            # pg_dump includes CREATE SCHEMA public; the new empty database
+            # already has it. No CASCADE: this must be the empty local schema.
+            q('DROP SCHEMA public')
+            restore_env={**env,'PGPASSWORD':qa.settings['password'],'PGPASSFILE':'NUL','PGSSLMODE':'disable'}
+            with (qa.RUN/'archive-restore.log').open('wb') as log:
+                subprocess.run([str(qa.BIN/'pg_restore.exe'),'--no-owner','--no-privileges','--exit-on-error',
+                    '-h','127.0.0.1','-p',str(qa.PORT),'-U',qa.settings['user'],'-d',qa.DB,str(archive)],
+                    env=restore_env,stdout=log,stderr=log,creationflags=flags,check=True)
+            before=unchanged()
+            pids=[r[0] for r in q('SELECT id FROM portfolios ORDER BY id')]
+            periods_before=[performance.read(ctx,pid) for pid in pids]
+            counts=[]
+            for pid in pids:
+                result=repo.read(ctx,pid,False)
+                observed={str(r[0]) for r in q('SELECT snapshot_date FROM performance_snapshots WHERE portfolio_id=%s',(pid,))}
+                rows=[r for r in result['rows'] if r['date'] in observed]
+                counts.append({'observations':len(rows),'complete':sum(r['status']=='COMPLETE' for r in rows)})
+            assert all(row['observations']==row['complete'] for row in counts), 'Archived observations remain unverified'
+            assert unchanged()==before
+            assert [performance.read(ctx,pid) for pid in pids]==periods_before
+            assert hashlib.sha256(archive.read_bytes()).hexdigest()==archive_hash
+            report['offline_archive']={'source_sha256':archive_hash,'portfolio_counts':counts,
+                'protected_tables_unchanged':len(before),'period_results_unchanged':True,'source_archive_unchanged':True}
+            passed('offline archived books are queried without modifying the source backup any restored financial row or original period calculation')
         report.update(status='passed',check_count=len(report['checks']))
     finally:
         if pw.exists():pw.unlink()

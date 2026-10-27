@@ -50,6 +50,7 @@ def test_future_dividends_are_filtered_and_manual_value_uses_frozen_holding():
 
 def test_reconstruction_refuses_unreconciled_trade_quantity():
     batch,prices,fx=sample();batch['trade_history']=[]
+    for row in batch['dividend_cache'].values():row['data']=[{'date':'2026-10-01','amount':1}]
     assert financial(batch,prices,fx,'2026-10-27',reconstructed=True)['status']=='UNAVAILABLE'
 
 def metric(cost,profit,value=None):
