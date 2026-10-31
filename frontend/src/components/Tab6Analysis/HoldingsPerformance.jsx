@@ -1,6 +1,8 @@
 import React,{useEffect,useId,useState,useRef} from 'react';
 import {api} from '../../utils/api';
 import {holdingSeries,holdingValue,holdingDomain,holdingSegments} from '../../utils/holdingHistory';
+import {profitColor,splitProfitSegment,zeroReference} from '../../utils/profitChartSignals';
+import {ProfitStatus,ZeroLine,ZeroOutside,SignedSelection} from '../common/ProfitChartSignals';
 import './HoldingsPerformance.css';
 
 export default function HoldingsPerformance({scope,current,components=[],includeCrypto=false,revision,initialData}){
@@ -30,6 +32,9 @@ export default function HoldingsPerformance({scope,current,components=[],include
   const x=i=>rows.length>1?left+i/(rows.length-1)*(right-left):(left+right)/2;
   const y=v=>bottom-(v-low)/(high-low)*(bottom-top);
   const val=(r,key)=>key?r.components?.[key]?.[metric]:r[metric];
+  const reference=zeroReference(low,high,metric,rows.flatMap(r=>[r[metric],...(breakdown?Object.values(r.components||{}).map(c=>c[metric]):[])]));
+  const statusRow=rows.find(r=>r.current)||rows.at(-1);
+  const signed=metric!=='value_krw';
   const colors=['#a5b4fc','#34d399','#fbbf24','#f472b6'];
   function choosePointer(e){
     const bounds=e.currentTarget.getBoundingClientRect();
@@ -53,15 +58,23 @@ export default function HoldingsPerformance({scope,current,components=[],include
     {coverage&&coverage.complete_dates<coverage.total_dates&&<p role="status">과거 {coverage.total_dates}일 중 {coverage.complete_dates}일 표시 · {[...new Set(missingNames)].join(', ')} 기록이 없는 날짜는 {scope==='all'?'합산하지 않습니다':'비워 둡니다'}.</p>}
     {!data&&!initialData&&!error&&<p role="status">과거 기록 조회 중…</p>}
     {!rows.length?<p>아직 평가 기록이 없습니다. 종가 수집 후 추이가 표시됩니다.</p>:<>
+      {signed&&statusRow&&<ProfitStatus profit={statusRow.profit_krw} rate={statusRow.return_pct} caption={statusRow.current?'현재':`최근 기록 · ${statusRow.date}`}/>}
+      <ZeroOutside reference={reference} position="above"/>
       <svg ref={chartRef} viewBox={`0 0 ${chartWidth} 250`} className="holdings-trend-svg" role="group" aria-label="보유자산 손익 연결선 그래프" tabIndex={0}
         onPointerDown={choosePointer} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?rows.length-1:Math.max(0,Math.min(rows.length-1,index+(e.key==='ArrowLeft'?-1:1)));setSelected(rows[next].key);}}}>
         {[0,.5,1].map(t=>{const v=low+(high-low)*t;return <g key={t}><line x1={left} x2={right} y1={y(v)} y2={y(v)} stroke="var(--border-color)"/><text x={left-8} y={y(v)+4} textAnchor="end" fill="var(--text-secondary)" fontSize="11">{metric==='return_pct'?v.toFixed(1)+'%':Math.abs(v)>=10000?(v/10000).toFixed(1)+'만':Math.round(v)}</text></g>;})}
-        {curves.map(curve=><g key={curve.id||'total'}>{holdingSegments(rows,metric,curve.id).map(s=><line key={s.to} x1={x(s.from)} x2={x(s.to)} y1={y(val(rows[s.from],curve.id))} y2={y(val(rows[s.to],curve.id))} stroke={curve.color} strokeWidth={curve.id?1.6:2.8} strokeDasharray={s.live?'5 4':undefined}/>)}</g>)}
-        {rows.map((r,i)=>{const v=r[metric];return typeof v==='number'&&<circle key={r.key} cx={x(i)} cy={y(v)} r={choice?.key===r.key?5:3} fill={r.current?'var(--bg-card)':'var(--accent-primary)'} stroke="var(--accent-primary)" strokeWidth="2"><title>{r.label} {holdingValue(v,metric)}</title></circle>;})}
+        <ZeroLine reference={reference} left={left} right={right} y={y(0)} top={top} bottom={bottom}/>
+        {curves.map(curve=><g key={curve.id||'total'}>{holdingSegments(rows,metric,curve.id).flatMap(s=>{
+          const from={x:x(s.from),value:val(rows[s.from],curve.id)},to={x:x(s.to),value:val(rows[s.to],curve.id)};
+          const parts=signed&&!breakdown?splitProfitSegment(from,to):[{from,to,color:curve.color}];
+          return parts.map((part,i)=><line key={`${s.to}-${i}`} x1={part.from.x} x2={part.to.x} y1={y(part.from.value)} y2={y(part.to.value)} stroke={part.color} strokeWidth={curve.id?1.6:2.8} strokeDasharray={s.live?'5 4':undefined}/>);
+        })}</g>)}
+        {rows.map((r,i)=>{const v=r[metric],color=signed&&!breakdown?profitColor(v):'var(--accent-primary)';return Number.isFinite(v)&&<circle key={r.key} cx={x(i)} cy={y(v)} r={choice?.key===r.key?5:3} fill={r.current?'var(--bg-card)':color} stroke={color} strokeWidth="2"><title>{`${r.label} ${holdingValue(v,metric)}`}</title></circle>;})}
         {rows.filter((r,i)=>i===0||i===rows.length-1||(i<rows.length-2&&i%Math.max(1,Math.ceil(rows.length/4))===0)).map(r=><text key={r.key} x={x(rows.indexOf(r))} y={235} textAnchor={r===rows[0]?'start':r===rows.at(-1)?'end':'middle'} fill="var(--text-secondary)" fontSize="11">{r.current?'현재':r.date.slice(5).replace('-','/')}</text>)}
       </svg>
+      <ZeroOutside reference={reference} position="below"/>
       {breakdown&&<div className="holdings-trend-legend">{curves.map(c=><span key={c.id||'total'} style={{color:c.color}}>● {c.name}</span>)}</div>}
-      {choice&&<div className="holdings-selected" aria-live="polite"><div><strong>{choice.current?'현재 · 조회 시점':choice.date}</strong><strong>{holdingValue(choice[metric],metric)}</strong></div>
+      {choice&&<div className="holdings-selected" aria-live="polite"><div><strong>{choice.current?'현재 · 조회 시점':choice.date}</strong><SignedSelection value={choice[metric]} metric={metric}>{holdingValue(choice[metric],metric)}</SignedSelection></div>
         <small>{choice.current?(cryptoOnly?'현재 시세 · 오후 4시 평가와 구분':'현황 카드와 같은 값 · 종가 확정 전'):choice.source==='RECONSTRUCTED'?(cryptoOnly?'확인된 당시 수량·원가와 오후 4시 기준 과거 시세로 복원':'저장된 당시 장부·시세와 확인 가능한 배당 이력으로 재계산'):choice.status==='COMPLETE'?(cryptoOnly?'오후 4시 기준 평가':'종가 기준 기록'):'일부 기록 부족 · 합산하지 않음'}</small>
         <div className="holdings-trend-controls"><button className="btn btn-secondary btn-sm" disabled={index<=0} onClick={()=>setSelected(rows[index-1].key)}>이전</button><button className="btn btn-secondary btn-sm" disabled={index>=rows.length-1} onClick={()=>setSelected(rows[index+1].key)}>다음</button></div>
         <details><summary>선택한 기록 상세</summary><p>매입원가 {holdingValue(choice.cost_krw,'cost_krw')} · 손익 {holdingValue(choice.profit_krw,'profit_krw')} · 수익률 {holdingValue(choice.return_pct,'return_pct')}</p>{Object.entries(choice.components||{}).map(([id,c])=><p key={id}>{components.find(p=>p.id===id)?.name||id}: {holdingValue(c.profit_krw,'profit_krw')} / {holdingValue(c.return_pct,'return_pct')}</p>)}{choice.warning&&<p>{choice.warning}</p>}</details>

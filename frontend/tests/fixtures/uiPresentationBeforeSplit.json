@@ -1,6 +1,7 @@
 {
   "source_commit": "b273a8a",
   "reviewed_updates": {
+    "profit_signals": "2026-10-31: reviewed current profit/loss status, signed curve segments and named zero reference. Only three overview and the loaded crypto snapshot change. Existing axes and accounting values remain untouched; geometry, null gaps and real component rendering covered by profitChartSignals tests.",
     "holding_history": "2026-10-27: intentional holdings-history panel in the three overview variants. Existing KPI calculations and all unrelated presentation hashes are preserved. Shared component, date/metric selection, missing observations and mobile pointer selection verified separately.",
     "history": "2026-10-08: reviewed focus layout with input/history split, preserved hidden drafts, selected input methods, read-only paged history; all other snapshots unchanged; withdrawal/transfer support text reviewed, controls covered in nhNoticeControls tests",
     "dashboard": "2026-10-05: moved maturity, dividend and period panels to analysis tab 6; original dashboard markup restored and reviewed",
@@ -27,10 +28,10 @@
     "settings/edit-deposit": "bab4e8d4b9825adffea6eb5b99d9615df29eaa96b26f62603185c66c4b06864d",
     "history/empty": "272862da9d407694b46f39865d9d2c3effcd36350374f33295d8521df7d357e3",
     "history/filled-forms": "9ee04ae9a3097b4a28a1ef2bfbf62c754ee2577e30c00d52796496e182cf849b",
-    "overview/KRW": "1d8b6832b43f5051012341deb4f50541aa4710f6a9bce6f2b65f5f00dac73edb",
-    "overview/USD": "28e3e19642fc8389a4c37f3beb3b8a4661a826f6a55c9450c59a6eafc66cf5f8",
-    "overview/no-crypto": "c28f5cfc370cf55a305b204fe7748680786c03142a3dfffb25bfab6f24daf2a8",
-    "crypto/loaded": "bad5bb750ddd977630439090473e86f637b65021f41d93f230380a41ba7058d1",
+    "overview/KRW": "36bcf64cd04957710a23fccca7ec023e584a3730aaaa204bda9475b9e14e3927",
+    "overview/USD": "78e604f6f6173ad9010f4e12c626f74afed72f219fb1a6bf662417690b807c3a",
+    "overview/no-crypto": "ff8e9f2607e37b248495e37b0c56b13fbad01007f883d1e07931d68c983d80d8",
+    "crypto/loaded": "f3953e3f669ddfc4217354c1fe7d77ae4245a7285edbd2daf7d4d77f4008e40a",
     "crypto/empty": "5917b2370330e36cd9b82aaeb8e3c785b9759559b9ccc96506b80288adde9c3f"
   }
 }

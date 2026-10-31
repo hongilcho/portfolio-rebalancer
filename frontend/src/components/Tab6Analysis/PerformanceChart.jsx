@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { performanceSeries, performanceValue, performanceAxisValue, performanceDomain, performanceDay,
   dailyPerformanceSeries, dailyPerformanceSegments,performanceChartLayout,nearestPerformanceRecord } from '../../utils/performanceChart';
+import {profitColor,splitProfitSegment,zeroReference} from '../../utils/profitChartSignals';
+import {ProfitStatus,ZeroLine,SignedSelection} from '../common/ProfitChartSignals';
 
 export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate }) {
   const [kind, setKind] = useState(dailyReports.length ? '일' : '월');
@@ -47,6 +49,9 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
   const tooltipWidth=Math.min(210,right-left);
   const tooltipX=Math.max(left,Math.min(right-tooltipWidth,selectedX-tooltipWidth/2));
   const segments = daily ? dailyPerformanceSegments(series) : [];
+  const signed=metric!=='value_krw';
+  const reference=zeroReference(minimum,maximum,metric,series.map(r=>r.value));
+  const latest=series.at(-1);
   const ticks = [];
   if (daily && series.length) {
     ticks.push(series[0]);
@@ -81,8 +86,9 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
       {daily && baselineDate && <small className="performance-chart-baseline">기준일 <time dateTime={baselineDate}>{baselineDate}</time></small>}
     </p>
     {!series.length ? <p>표시할 기간 성과 기록이 없습니다. 시작 기준 등록 이후의 평가 기록을 확인해주세요.</p> : <>
+      {signed&&latest&&<ProfitStatus profit={latest.profit} rate={latest.return_pct} caption={`최근 ${daily?'기록':'기간'} · ${latest.label}`}/>}
       {selected && <p className="performance-chart-value" aria-live="polite" aria-atomic="true">
-        <strong>{selected.label} · {performanceValue(selected.value, metric)}</strong>
+        <span>{selected.label} · </span><SignedSelection value={selected.value} metric={metric}>{performanceValue(selected.value, metric)}</SignedSelection>
       </p>}
       <div ref={chartRef} className="performance-chart-scroll" role="region" aria-label={`기간 성과 ${daily ? '연결선' : '막대'}그래프, 선택 기간 전체 표시`} tabIndex={0}>
         <svg viewBox={`0 0 ${width} ${height}`} style={{height}} onClick={selectAtPointer} role="group" aria-label={`${daily ? '일별 누적' : kind === '월' ? `${selectedYear}년 월별` : '연간'} ${metricLabel} 그래프`}>
@@ -91,10 +97,14 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
           {(compact?[0,0.5,1]:[0,0.25,0.5,0.75,1]).map(factor => <g key={factor}>
             <line x1={left} x2={right} y1={y(minimum + factor * (maximum - minimum))} y2={y(minimum + factor * (maximum - minimum))} stroke="var(--border-color)" strokeWidth={factor === 0.5 && metric !== 'value_krw' ? 2 : 1} />
           </g>)}
+          <ZeroLine reference={reference} left={left} right={right} y={zero} top={top} bottom={bottom}/>
           {daily ? <>
             {selected && <line x1={selectedX} x2={selectedX} y1={top} y2={bottom} stroke="var(--accent-primary)" strokeDasharray="3 3" />}
-            {segments.map(segment => <line key={segment.to.key} x1={dailyX(segment.from)} x2={dailyX(segment.to)}
-              y1={y(segment.from.value)} y2={y(segment.to.value)} stroke="var(--accent-primary)" strokeWidth="2.5" />)}
+            {segments.flatMap(segment => {
+              const from={x:dailyX(segment.from),value:segment.from.value},to={x:dailyX(segment.to),value:segment.to.value};
+              const parts=signed?splitProfitSegment(from,to):[{from,to,color:'var(--accent-primary)'}];
+              return parts.map((part,i)=><line key={`${segment.to.key}-${i}`} x1={part.from.x} x2={part.to.x} y1={y(part.from.value)} y2={y(part.to.value)} stroke={part.color} strokeWidth="2.5"/>);
+            })}
             {series.map((row, index) => {
               const x = dailyX(row), pointY = row.value === null ? top : y(row.value);
               const label = `${row.label} ${metricLabel} ${performanceValue(row.value, metric)}`;
@@ -113,7 +123,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
                 <title>{`${label}${row.warning ? ` · ${row.warning}` : ''}`}</title>
                 {!compact && <circle cx={x} cy={pointY} r="22" fill="transparent" pointerEvents="all" />}
                 {row.value === null ? <text x={x} y={pointY + 4} textAnchor="middle" fill="var(--text-secondary)" fontSize="12">×</text>
-                  : (!compact || series.length<=12 || selected?.key===row.key || index===0 || index===series.length-1) && <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill="var(--accent-primary)" stroke="var(--accent-primary)" strokeWidth="2" />}
+                  : (!compact || series.length<=12 || selected?.key===row.key || index===0 || index===series.length-1) && <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill={signed?profitColor(row.value):'var(--accent-primary)'} stroke={signed?profitColor(row.value):'var(--accent-primary)'} strokeWidth="2" />}
               </g>;
             })}
             {ticks.map(row => <text key={row.key} x={dailyX(row)} y={bottom + 35}
