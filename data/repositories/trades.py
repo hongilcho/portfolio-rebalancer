@@ -1,11 +1,17 @@
 """Trade execution, reversal and transfers; no nested connection leases."""
 import math
 import json
-import re
-from datetime import date, datetime
+from datetime import datetime
 from typing import Tuple
 from psycopg2.extras import RealDictCursor
 from logic.trade_accounting import cash_movement
+from logic.trade_entry import (
+    position_after_trade,
+    selected_asset_currency,
+    validate_notice_asset,
+    validate_notice_fields,
+    validate_trade_day,
+)
 from data.repository_context import RepositoryContext
 from data.repositories import forex, bookkeeping, trade_costs
 from logic.trading_fees import estimate
@@ -40,23 +46,12 @@ def execute_trade(
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     new_trade_id = db.new_id()
     try:
-        day = date.fromisoformat(str(trade_date))
-        if day.isoformat() != str(trade_date) or day > datetime.now(forex.KST).date():
-            raise ValueError('실제 체결일은 오늘까지의 올바른 날짜여야 합니다.')
+        validate_trade_day(trade_date, datetime.now(forex.KST).date())
         cursor.execute("""SELECT a.*,
             c.portfolio_id AS account_portfolio FROM assets a
             JOIN accounts c ON c.id=%s WHERE a.id=%s""", (str(account_id),str(asset_id)))
         asset = cursor.fetchone()
-        if not asset or asset['portfolio_id'] != asset['account_portfolio'] or asset['is_deposit']:
-            raise ValueError('계좌와 같은 포트폴리오의 주식·ETF·금 종목을 선택해주세요.')
-        allowed = asset['allowed_accounts'] or []
-        if isinstance(allowed, str): allowed = json.loads(allowed)
-        if str(account_id) not in map(str, allowed):
-            raise ValueError('이 계좌에 허용된 종목이 아닙니다.')
-        is_us = asset['market'] == 'US'
-        currency = currency or ('USD' if is_us else 'KRW')
-        if currency != ('USD' if is_us else 'KRW'):
-            raise ValueError('미국 종목은 달러 단가, 국내 종목은 원화 단가로 입력해주세요.')
+        is_us, currency = selected_asset_currency(asset, account_id, currency)
         costs = trade_costs.normalize(fees_krw, fees_usd, currency)
 
         # Lock before reading balances; deletion takes the same account lock.
@@ -71,23 +66,14 @@ def execute_trade(
         if any(str(trade_date)<str(r['trade_date']) for r in cursor.fetchall()):
             raise ValueError('보유 원가 정정 이전 날짜의 매매는 새로 입력할 수 없습니다. 정정 기준과 실제 거래 순서를 확인해주세요.')
         if import_source is not None or broker_order_no is not None:
-            if import_source != 'NAMUH_KAKAO' or not re.fullmatch(r'[0-9]{1,10}', broker_order_no or ''):
-                raise ValueError('가져오기 출처 또는 주문번호를 확인해주세요.')
-            if trade_type != 'BUY' or currency != 'KRW' or quantity != int(quantity):
-                raise ValueError('체결 메시지 가져오기는 국내 원화 매수만 지원합니다.')
-            if date.fromisoformat(trade_date).isoformat() != trade_date:
-                raise ValueError('체결일을 확인해주세요.')
+            validate_notice_fields(
+                import_source, broker_order_no, trade_type, currency, quantity, trade_date
+            )
             cursor.execute('''SELECT a.market, a.is_deposit, a.ticker, a.allowed_accounts,
                 a.portfolio_id, c.portfolio_id AS account_portfolio FROM assets a
                 JOIN accounts c ON c.id=%s WHERE a.id=%s''', (str(account_id), str(asset_id)))
             imported_asset = cursor.fetchone()
-            if not imported_asset or imported_asset['market'] != 'KR' or imported_asset['is_deposit'] or imported_asset['portfolio_id'] != imported_asset['account_portfolio']:
-                raise ValueError('계좌와 같은 포트폴리오의 국내 종목을 선택해주세요.')
-            allowed = imported_asset['allowed_accounts'] or []
-            if isinstance(allowed, str):
-                allowed = json.loads(allowed)
-            if str(account_id) not in map(str, allowed):
-                raise ValueError('이 계좌에 허용된 종목이 아닙니다.')
+            validate_notice_asset(imported_asset, account_id)
             cursor.execute('''SELECT id FROM trade_history WHERE account_id=%s AND trade_date=%s
                 AND import_source=%s AND broker_order_no=%s''', (str(account_id), trade_date, import_source, broker_order_no))
             if cursor.fetchone():
@@ -178,59 +164,9 @@ def execute_trade(
         row = cursor.fetchone()
         
         if row:
-            curr_qty = float(row['quantity'] or 0.0)
-            curr_avg_price = float(row['avg_price'] or 0.0)
-            curr_avg_usd = float(row.get('avg_price_usd') or 0.0)
-            curr_buy_fx = float(row.get('buy_fx_rate') or 0.0)
-            if curr_buy_fx == 0.0 and curr_avg_usd > 0 and curr_avg_price > 0:
-                curr_buy_fx = curr_avg_price / curr_avg_usd
-            
-            if trade_type == 'INIT':
-                new_qty = quantity
-                if is_us or currency == 'USD':
-                    new_avg_usd = price
-                    new_buy_fx = exchange_rate
-                    new_avg_price = round(new_avg_usd * new_buy_fx, 2)
-                else:
-                    new_avg_price = price
-                    new_avg_usd = 0.0
-                    new_buy_fx = 0.0
-            elif trade_type == 'BUY':
-                new_qty = curr_qty + quantity
-                if new_qty > 0:
-                    if is_us or currency == 'USD':
-                        c_usd_0 = curr_qty * curr_avg_usd
-                        c_krw_0 = c_usd_0 * curr_buy_fx
-                        c_usd_new = quantity * price
-                        c_krw_new = c_usd_new * exchange_rate
-                        
-                        total_c_usd = c_usd_0 + c_usd_new
-                        total_c_krw = c_krw_0 + c_krw_new
-                        
-                        new_avg_usd = total_c_usd / new_qty
-                        new_buy_fx = (total_c_krw / total_c_usd) if total_c_usd > 0 else exchange_rate
-                        new_avg_price = total_c_krw / new_qty
-                    else:
-                        new_avg_price = ((curr_qty * curr_avg_price) + (quantity * price)) / new_qty
-                        new_avg_usd = 0.0
-                        new_buy_fx = 0.0
-                else:
-                    new_avg_price = price
-                    new_avg_usd = price if (is_us or currency == 'USD') else 0.0
-                    new_buy_fx = exchange_rate if (is_us or currency == 'USD') else 0.0
-            else: # SELL
-                if quantity > curr_qty + 1e-9:
-                    raise ValueError("매도할 보유 수량이 부족합니다.")
-                new_qty = curr_qty - quantity
-                new_avg_price = curr_avg_price
-                new_avg_usd = curr_avg_usd
-                new_buy_fx = curr_buy_fx
-                if new_qty <= 0:
-                    new_qty = 0.0
-                    new_avg_price = 0.0
-                    new_avg_usd = 0.0
-                    new_buy_fx = 0.0
-                    
+            new_qty, new_avg_price, new_avg_usd, new_buy_fx = position_after_trade(
+                row, trade_type, quantity, price, currency, exchange_rate, is_us
+            )
             if trade_type in ('BUY', 'INIT'):
                 cursor.execute('''
                     UPDATE holdings
@@ -248,14 +184,9 @@ def execute_trade(
         else:
             if trade_type in ('BUY', 'INIT'):
                 new_h_id = db.new_id()
-                if is_us or currency == 'USD':
-                    new_avg_usd = price
-                    new_buy_fx = exchange_rate
-                    new_avg_price = round(price * exchange_rate, 2)
-                else:
-                    new_avg_price = price
-                    new_avg_usd = 0.0
-                    new_buy_fx = 0.0
+                _, new_avg_price, new_avg_usd, new_buy_fx = position_after_trade(
+                    None, trade_type, quantity, price, currency, exchange_rate, is_us
+                )
                 cursor.execute('''
                     INSERT INTO holdings (id, account_id, asset_id, quantity, avg_price, avg_price_usd, buy_fx_rate, original_avg_price, original_avg_price_usd)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)

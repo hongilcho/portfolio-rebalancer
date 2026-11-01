@@ -202,6 +202,35 @@ def read_checks(ctx,report):
     report['reads']['protected_tables_unchanged']=True
 
 
+def legacy_read_checks(ctx, report):
+    from data.repositories import snapshots, holding_history
+    from psycopg2.extras import Json
+    batch = snapshots.get_overview_batch_data(ctx, 'default')
+    account = next(a for a in batch['accounts'] if a['id']=='default-a0')
+    asset = next(a for a in batch['assets'] if a['id']=='default-s0')
+    holding = deepcopy(next(h for h in batch['holdings'] if h['account_id']==account['id']))
+    holding.update(quantity=30, avg_price=100, original_avg_price=100, first_buy_date='2026-01-01')
+    payload = dict(ledger=dict(accounts=[account], assets=[asset], holdings=[holding]),
+                   prices={asset['id']:dict(id=asset['id'],price_krw=120)}, fx={'rate':1400})
+    with ctx.connect() as conn, conn.cursor() as c:
+        c.execute("UPDATE market_cache SET data=%s WHERE key='div_KR_QADEFAULT0'",(Json([{'date':'2026-09-01','amount':1}]),))
+        c.execute("INSERT INTO performance_snapshots(portfolio_id,snapshot_date,value_krw,payload,record_kind) VALUES('default','2026-10-21',12000,%s,'close')",(Json(payload),))
+        conn.commit()
+    protected = fingerprint(ctx)
+    before = baseline_module('data/repositories/holding_history.py').read(ctx,'default',False)
+    queries=[]
+    after = holding_history.read(context(pg,queries=queries),'default',False)
+    assert before == after, 'Legacy scoped reconstruction changed'
+    row = next(r for r in after['rows'] if r['date']=='2026-10-21')
+    assert row['status']=='COMPLETE' and row['source']=='RECONSTRUCTED'
+    assert row['dividend_krw']>0, 'Pre-period trade/dividend inputs were lost'
+    cache_params=next(params for query,params in queries if 'FROM market_cache WHERE key=ANY' in query)
+    assert cache_params==(['div_KR_QADEFAULT0'],), cache_params
+    assert fingerprint(ctx)==protected
+    report['legacy_history'] = dict(full_result_equal=True,pre_period_dividends_preserved=True,
+                                   scoped_cache_keys=True,protected_tables_unchanged=True)
+
+
 def main():
     global pg
     EVIDENCE.mkdir(parents=True,exist_ok=True)
@@ -209,6 +238,7 @@ def main():
     ctx=prepare(pg,DB);seed_reads(ctx)
     report={'baseline':BASE,'environment':'fresh synthetic PostgreSQL, loopback only','port':PORT,'production_access':False}
     read_checks(ctx,report)
+    legacy_read_checks(ctx,report)
     (EVIDENCE/'postgres-results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(report,ensure_ascii=True))
 
