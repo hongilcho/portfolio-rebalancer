@@ -1,23 +1,17 @@
 import React,{useEffect,useId,useState,useRef} from 'react';
-import {api} from '../../utils/api';
+import {useHoldingHistory} from '../../utils/useHoldingHistory';
 import {holdingSeries,holdingValue,holdingDomain,holdingSegments} from '../../utils/holdingHistory';
 import {profitColor,splitProfitSegment,zeroReference} from '../../utils/profitChartSignals';
 import {ProfitStatus,ZeroLine,ZeroOutside,SignedSelection} from '../common/ProfitChartSignals';
 import './HoldingsPerformance.css';
 
-export default function HoldingsPerformance({scope,current,components=[],includeCrypto=false,revision,initialData}){
-  const [data,setData]=useState(initialData||null),[error,setError]=useState('');
+export default function HoldingsPerformance({scope,current,components=[],includeCrypto=false,initialData}){
+  const {data,loading,error}=useHoldingHistory(scope,includeCrypto,initialData);
   const [metric,setMetric]=useState('profit_krw'),[range,setRange]=useState('90'),[period,setPeriod]=useState('day');
   const [selected,setSelected]=useState(null),[breakdown,setBreakdown]=useState(false);
   const heading=useId();
   const chartRef=useRef(null),[chartWidth,setChartWidth]=useState(600);
-  useEffect(()=>{
-    let active=true;
-    if(initialData){setData(initialData);return ()=>{active=false;};}
-    setData(null);setError('');setSelected(null);
-    api.getHoldingHistory(scope,includeCrypto).then(r=>{if(active)setData(r);}).catch(()=>{if(active)setError('과거 기록을 불러오지 못했습니다. 현재 값은 아래에 표시합니다.');});
-    return ()=>{active=false;};
-  },[scope,includeCrypto,revision,initialData]);
+  useEffect(()=>{setSelected(null);},[scope,includeCrypto]);
   const live=current?{...current,components:Object.fromEntries(components.filter(c=>c.metrics).map(c=>[c.id,c.metrics]))}:null;
   const rows=holdingSeries(data?.rows||[],live,{range,period});
   const hasRows=rows.length>0;
@@ -46,7 +40,7 @@ export default function HoldingsPerformance({scope,current,components=[],include
   const coverage=data?.coverage;
   const missingNames=coverage?.missing_components?.map(c=>c.id==='crypto'?'가상자산':components.find(p=>p.id===c.id)?.name||data?.portfolios?.find(p=>p.id===c.id)?.name||'일부 포트폴리오');
   return <section className="section-card holdings-trend" aria-labelledby={heading}>
-    <div className="holdings-trend-title"><h3 id={heading}>{scope==='all'?'전체 자산 손익 추이':cryptoOnly?'가상자산 손익 추이':'보유자산 손익 추이'}</h3><span className="badge">{cryptoOnly?'매일 오후 4시 기준':'현황과 같은 기준'}</span></div>
+    <div className="holdings-trend-title"><h3 id={heading}>{scope==='all'?'전체 자산 손익 추이':cryptoOnly?'가상자산 손익 추이':'보유자산 손익 추이'}</h3><span className="badge" role={loading&&data?'status':undefined}>{loading&&data?'기록 갱신 중…':cryptoOnly?'매일 오후 4시 기준':'현황과 같은 기준'}</span></div>
     <div className="holdings-trend-options" role="group" aria-label="손익 추이 항목">
       {[['profit_krw','손익'],['return_pct','수익률'],['value_krw','평가액']].map(([key,label])=><button type="button" className={`btn btn-sm ${metric===key?'btn-primary':'btn-secondary'}`} aria-pressed={metric===key} key={key} onClick={()=>setMetric(key)}>{label}</button>)}
       <label>범위 <select value={range} onChange={e=>setRange(e.target.value)}><option value="30">최근 30일</option><option value="90">최근 90일</option><option value="all">전체</option></select></label>
@@ -57,7 +51,7 @@ export default function HoldingsPerformance({scope,current,components=[],include
     {coverage&&coverage.total_dates===0&&<p role="status">{cryptoOnly?'오후 4시 기준 평가 기록이 아직 없습니다.':'과거 평가 기록이 아직 없습니다.'} 현재 값만 표시합니다.</p>}
     {coverage&&coverage.complete_dates<coverage.total_dates&&<p role="status">과거 {coverage.total_dates}일 중 {coverage.complete_dates}일 표시 · {[...new Set(missingNames)].join(', ')} 기록이 없는 날짜는 {scope==='all'?'합산하지 않습니다':'비워 둡니다'}.</p>}
     {!data&&!initialData&&!error&&<p role="status">과거 기록 조회 중…</p>}
-    {!rows.length?<p>아직 평가 기록이 없습니다. 종가 수집 후 추이가 표시됩니다.</p>:<>
+    {!rows.length?(data?<p>아직 평가 기록이 없습니다. 종가 수집 후 추이가 표시됩니다.</p>:null):<>
       {signed&&statusRow&&<ProfitStatus profit={statusRow.profit_krw} rate={statusRow.return_pct} caption={statusRow.current?'현재':`최근 기록 · ${statusRow.date}`}/>}
       <ZeroOutside reference={reference} position="above"/>
       <svg ref={chartRef} viewBox={`0 0 ${chartWidth} 250`} className="holdings-trend-svg" role="group" aria-label="보유자산 손익 연결선 그래프" tabIndex={0}

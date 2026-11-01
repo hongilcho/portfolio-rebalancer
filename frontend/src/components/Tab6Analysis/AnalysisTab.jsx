@@ -13,7 +13,7 @@ export default function AnalysisTab({ portfolioId, assets, dashboardData, perfor
       <h2>분석 및 확인</h2>
       <p>선택한 포트폴리오의 기간 성과, 예금 만기와 배당 계산 내역을 확인합니다.</p>
     </div>
-    <HoldingsPerformance scope={portfolioId} current={holdingCurrent(dashboardData?.kpi)} revision={dashboardData}/>
+    <HoldingsPerformance scope={portfolioId} current={holdingCurrent(dashboardData?.kpi)}/>
     <details className="section-card"><summary style={{cursor:'pointer',fontWeight:700}}>기준일 이후 운용 성과</summary>
       <PeriodPerformance portfolioId={portfolioId} performance={performance} onOpenHistory={onOpenHistory} />
     </details>

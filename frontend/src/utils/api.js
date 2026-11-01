@@ -1,5 +1,6 @@
+import {createHoldingHistoryStore, affectsHoldingHistory} from './holdingHistoryStore';
 import {requireInvestmentProtocol} from './investmentInput';
-import { authHeaders, saveAuthSession, clearAuthSession } from './authSession';
+import { authHeaders, saveAuthSession, clearAuthSession, onAuthExpired } from './authSession';
 
 /**
  * 포트폴리오 리밸런서 프론트엔드 REST API 클라이언트 모듈
@@ -46,7 +47,9 @@ async function request(endpoint, options = {}, format = 'json') {
       if (response.status === 401 && usedToken) clearAuthSession(usedToken);
       throw error;
     }
-    return format === 'blob' ? await response.blob() : await response.json();
+    const result = format === 'blob' ? await response.blob() : await response.json();
+    if (affectsHoldingHistory(endpoint, options.method)) holdingHistoryStore.invalidate();
+    return result;
   } catch (error) {
     if (error.status !== 401) console.error(`Fetch error on ${endpoint}:`, error);
     throw error;
@@ -255,3 +258,6 @@ export const api = {
   // System Diagnostics & Benchmark
   getSystemBenchmark: () => request('/api/system/benchmark'),
 };
+
+export const holdingHistoryStore = createHoldingHistoryStore((scope, includeCrypto) => api.getHoldingHistory(scope, includeCrypto));
+onAuthExpired(() => holdingHistoryStore.clear());

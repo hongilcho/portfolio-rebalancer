@@ -203,7 +203,7 @@ export default function AllPortfoliosOverview({
         portfolioColors={portfolioColors}
       />
 
-      <HoldingsPerformance scope="all" includeCrypto={includeCrypto} revision={data} current={holdingCurrent(grand,true)}
+      <HoldingsPerformance scope="all" includeCrypto={includeCrypto} current={holdingCurrent(grand,true)}
         components={[...portfolios.map(p=>({id:p.id,name:p.name,metrics:holdingCurrent(p,true)})),
           ...(includeCrypto&&crypto?[{id:'crypto',name:'가상자산',metrics:holdingCurrent(crypto,true)}]:[])]}/>
 

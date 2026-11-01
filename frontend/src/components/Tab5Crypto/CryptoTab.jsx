@@ -179,7 +179,7 @@ export default function CryptoTab({
         yoona={yoona}
       />
 
-      <HoldingsPerformance scope="crypto" includeCrypto revision={data}
+      <HoldingsPerformance scope="crypto" includeCrypto
         current={holdingCurrent(cryptoTotal,true)}/>
 
       <CryptoCharts

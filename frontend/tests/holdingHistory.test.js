@@ -43,6 +43,10 @@ try{
     assert.match(html,/3,000,000원/);assert.match(html,/4,000,000원/);assert.match(html,/현재 · 조회 시점/);
     assert.match(html,/기록 범위/);assert.match(html,/tabindex="0"/);
   });
+  test('initial history loading does not incorrectly report an empty history',()=>{
+    const html=renderToStaticMarkup(React.createElement(Panel,{scope:'p'}));
+    assert.match(html,/과거 기록 조회 중/);assert.doesNotMatch(html,/아직 평가 기록이 없습니다/);
+  });
   test('crypto panel identifies the fixed cutoff and reconstructed history rather than a zero baseline',()=>{
     const html=renderToStaticMarkup(React.createElement(Panel,{scope:'crypto',initialData:{rows:[{date:'2026-10-05',status:'COMPLETE',source:'RECONSTRUCTED',profit_krw:500,return_pct:5,cost_krw:10000,value_krw:10500}],coverage:{total_dates:1,complete_dates:1,missing_components:[]}}}));
     assert.match(html,/가상자산 손익 추이/);assert.match(html,/매일 오후 4시 기준/);assert.match(html,/500원/);
