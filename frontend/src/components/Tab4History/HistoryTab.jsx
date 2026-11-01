@@ -15,6 +15,7 @@ import {readPendingRequest,requireBookkeepingProtocol,singleSubmission} from '..
 import { groupAccountHoldings } from '../../utils/accountHoldings';
 import PriceReference from './PriceReference';
 import TradeBatchForm from './TradeBatchForm';
+import {updateTradeRow} from '../../utils/tradeForm';
 import {feePayload} from '../../utils/tradeCosts';
 import {requireFeeProtocol} from '../../utils/tradingFees';
 import ActivityHistory from './ActivityHistory';
@@ -149,26 +150,8 @@ export default function HistoryTab({
     setBuyRows((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const updateBuyRow = (id, field, value) => {
-    setBuyRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== id) return r;
-        const updated = { ...r, [field]: value };
-        if(field==='assetId'||field==='accountId'){updated.costsConfirmed=false;updated.feesKrw=0;updated.feesUsd=0;}
-        if (field === 'assetId' && value) {
-          const ast = assets.find((a) => String(a.id) === String(value));
-          if (ast?.market === 'US') {
-            updated.price = usdPriceMap[String(value)] || (priceMap[String(value)] ? Number((priceMap[String(value)] / (usdKrw || 1380)).toFixed(2)) : 0);
-            updated.exchangeRate = r.exchangeRate || usdKrw;
-          } else {
-            updated.price = priceMap[String(value)] || 0;
-            updated.exchangeRate = 1.0;
-          }
-        }
-        return updated;
-      })
-    );
-  };
+  const rowContext={assets,usdPriceMap,priceMap,usdKrw};
+  const updateBuyRow=(id,field,value)=>setBuyRows(rows=>rows.map(row=>updateTradeRow(row,id,field,value,rowContext)));
 
   // Add/Remove Sell Row
   const addSellRow = () => {
@@ -183,26 +166,7 @@ export default function HistoryTab({
     setSellRows((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const updateSellRow = (id, field, value) => {
-    setSellRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== id) return r;
-        const updated = { ...r, [field]: value };
-        if(field==='assetId'||field==='accountId'){updated.costsConfirmed=false;updated.feesKrw=0;updated.feesUsd=0;}
-        if (field === 'assetId' && value) {
-          const ast = assets.find((a) => String(a.id) === String(value));
-          if (ast?.market === 'US') {
-            updated.price = usdPriceMap[String(value)] || (priceMap[String(value)] ? Number((priceMap[String(value)] / (usdKrw || 1380)).toFixed(2)) : 0);
-            updated.exchangeRate = r.exchangeRate || usdKrw;
-          } else {
-            updated.price = priceMap[String(value)] || 0;
-            updated.exchangeRate = 1.0;
-          }
-        }
-        return updated;
-      })
-    );
-  };
+  const updateSellRow=(id,field,value)=>setSellRows(rows=>rows.map(row=>updateTradeRow(row,id,field,value,rowContext)));
 
   // Submit Batch Trades
   const handleSaveBatchTrades = async () => {

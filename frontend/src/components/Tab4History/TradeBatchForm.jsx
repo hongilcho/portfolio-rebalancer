@@ -1,8 +1,10 @@
 /** TradeBatchForm: presentation only; state and API actions stay in the parent. */
-import React,{useState} from 'react';
+import React,{useState,useMemo} from 'react';
 import { Plus, Save } from 'lucide-react';
 import { formatKRW, formatUSD } from '../../utils/formatters';
 import TradeCosts from './TradeCosts';
+import TradeRowInputs from './TradeRowInputs';
+import {tradeFormLookups} from '../../utils/tradeForm';
 import {remainingSellQuantity} from '../../utils/tradeCosts';
 
 export default function TradeBatchForm({
@@ -29,6 +31,7 @@ export default function TradeBatchForm({
   focused=false,
   executionStep=null,
 }) {
+  const lookups=useMemo(()=>tradeFormLookups(assets,accounts,usdLedgers),[assets,accounts,usdLedgers]);
   const locked=savingBatch || disabled;
   const [direction,setDirection]=useState(executionStep?.kind==='SELL'?'SELL':'BUY');
   const pendingBuys=buyRows.filter(r=>r.assetId || r.quantity>0);
@@ -65,130 +68,17 @@ export default function TradeBatchForm({
             </h4>
 
             {buyRows.map((row) => {
-              const allowedForAcc = assets.filter((ast) =>
-                (ast.allowed_accounts || []).map(String).includes(String(row.accountId))
-              );
-              const selectedAst = assets.find((a) => String(a.id) === String(row.assetId));
+              const allowedForAcc=lookups.allowedByAccount.get(String(row.accountId)) || [];
+              const assetOptions=allowedForAcc.map(ast=><option key={ast.id} value={ast.id}>{ast.market==='US'?'🇺🇸 ':''}{ast.name}</option>);
+              const selectedAst = lookups.assets.get(String(row.assetId));
               const isUS = selectedAst?.market === 'US';
-              const ledger = usdLedgers.find(s => String(s.account_id) === String(row.accountId));
+              const ledger = lookups.ledgers.get(String(row.accountId));
               const appliedRate = ledger ? Number(ledger.average_rate) : (row.exchangeRate || usdKrw);
 
               return (
                 <div key={row.id} className="trade-row-card">
                   {row.importSource && <p style={{ fontSize: '0.85rem' }}>카카오톡 가져오기 · 주문 {row.brokerOrderNo} · {row.importDate}</p>}
-                  {/* Desktop Layout */}
-                  <div className="trade-row-desktop">
-                    <select
-                      className="input-select"
-                      style={{ fontSize: '0.82rem', padding: '6px' }}
-                      value={row.accountId}
-                      onChange={(e) => updateBuyRow(row.id, 'accountId', e.target.value)}
-                    >
-                      {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
-                      ))}
-                    </select>
-
-                    <select
-                      className="input-select"
-                      style={{ fontSize: '0.82rem', padding: '6px' }}
-                      value={row.assetId}
-                      onChange={(e) => updateBuyRow(row.id, 'assetId', e.target.value)}
-                    >
-                      <option value="">종목 선택</option>
-                      {allowedForAcc.map((ast) => (
-                        <option key={ast.id} value={ast.id}>{ast.market === 'US' ? '🇺🇸 ' : ''}{ast.name}</option>
-                      ))}
-                    </select>
-
-                    <input
-                      type="number"
-                      placeholder="수량"
-                      className="input-number"
-                      style={{ fontSize: '0.82rem', padding: '6px' }}
-                      value={row.quantity || ''}
-                      onChange={(e) => updateBuyRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
-                      min={0}
-                      step={1}
-                    />
-
-                    <input
-                      type="number"
-                      placeholder={isUS ? '단가($ USD)' : '단가(원)'}
-                      className="input-number"
-                      style={{ fontSize: '0.82rem', padding: '6px' }}
-                      value={row.price || ''}
-                      onChange={(e) => updateBuyRow(row.id, 'price', parseFloat(e.target.value) || 0)}
-                      min={0}
-                      step={isUS ? 0.01 : 100}
-                    />
-
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '6px 8px' }}
-                      onClick={() => removeBuyRow(row.id)}
-                      title="행 삭제"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  {/* Mobile Layout */}
-                  <div className="trade-row-mobile">
-                    <div className="trade-row-mobile-line1">
-                      <select
-                        className="input-select"
-                        value={row.accountId}
-                        onChange={(e) => updateBuyRow(row.id, 'accountId', e.target.value)}
-                      >
-                        {accounts.map((a) => (
-                          <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
-                        ))}
-                      </select>
-
-                      <select
-                        className="input-select"
-                        value={row.assetId}
-                        onChange={(e) => updateBuyRow(row.id, 'assetId', e.target.value)}
-                      >
-                        <option value="">종목 선택</option>
-                        {allowedForAcc.map((ast) => (
-                          <option key={ast.id} value={ast.id}>{ast.market === 'US' ? '🇺🇸 ' : ''}{ast.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="trade-row-mobile-line2">
-                      <input
-                        type="number"
-                        placeholder="수량 (주)"
-                        className="input-number"
-                        value={row.quantity || ''}
-                        onChange={(e) => updateBuyRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
-                        min={0}
-                        step={1}
-                      />
-
-                      <input
-                        type="number"
-                        placeholder={isUS ? '단가 ($ USD)' : '체결단가 (원)'}
-                        className="input-number"
-                        value={row.price || ''}
-                        onChange={(e) => updateBuyRow(row.id, 'price', parseFloat(e.target.value) || 0)}
-                        min={0}
-                        step={isUS ? 0.01 : 100}
-                      />
-
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: '8px 12px' }}
-                        onClick={() => removeBuyRow(row.id)}
-                        title="행 삭제"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
+                  <TradeRowInputs row={row} accounts={accounts} assetOptions={assetOptions} assetPlaceholder="종목 선택" isUS={isUS} onUpdate={updateBuyRow} onRemove={removeBuyRow}/>
 
                   {/* US Asset Applied FX Rate Card & Preview */}
                   {isUS && (
@@ -227,7 +117,7 @@ export default function TradeBatchForm({
                     </div>
                   )}
                   {isUS && ledger && <p role="status">{ledger.needs_reconciliation ? '달러 잔고 대사가 필요합니다.' : `사용 가능한 달러 ${formatUSD(ledger.usd_balance)}. 부족하면 실제 환전 후 기록을 먼저 등록하세요.`}</p>}
-                  <TradeCosts row={row} isUS={isUS} account={accounts.find(a=>String(a.id)===String(row.accountId))} asset={assets.find(a=>String(a.id)===String(row.assetId))} day={tradeDate} onChange={(key,value)=>updateBuyRow(row.id,key,value)} />
+                  <TradeCosts row={row} isUS={isUS} account={lookups.accounts.get(String(row.accountId))} asset={lookups.assets.get(String(row.assetId))} day={tradeDate} onChange={(key,value)=>updateBuyRow(row.id,key,value)} />
                 </div>
               );
             })}
@@ -252,137 +142,19 @@ export default function TradeBatchForm({
 
             {sellRows.map((row) => {
               const accHoldings = (accountHoldingsMap[String(row.accountId)] || []).filter((h) => h.quantity > 0);
+              const assetOptions=accHoldings.map(h=>{
+                const holdingAst=lookups.assets.get(String(h.asset_id));
+                return <option key={h.asset_id} value={h.asset_id}>{holdingAst?.market==='US'?'🇺🇸 ':''}{h.asset_name} (잔고: {h.quantity})</option>;
+              });
               const remaining=remainingSellQuantity(row,sellRows,accHoldings);
-              const ledger = usdLedgers.find(s => String(s.account_id) === String(row.accountId));
-              const selectedAst = assets.find((a) => String(a.id) === String(row.assetId));
+              const ledger = lookups.ledgers.get(String(row.accountId));
+              const selectedAst = lookups.assets.get(String(row.assetId));
               const isUS = selectedAst?.market === 'US';
 
               return (
                 <div key={row.id} className="trade-row-card">
                   {row.assetId && <p><button type="button" className="btn btn-secondary btn-sm" disabled={locked || balancesPending || holdingsError || remaining<=0} onClick={()=>updateSellRow(row.id,'quantity',remaining)}>전량 {remaining}주</button><small> 다른 매도 대기 행을 제외한 수량 · 실제 체결 단가는 직접 확인해주세요.</small></p>}
-                  {/* Desktop Layout */}
-                  <div className="trade-row-desktop">
-                    <select
-                      className="input-select"
-                      style={{ fontSize: '0.82rem', padding: '6px' }}
-                      value={row.accountId}
-                      onChange={(e) => updateSellRow(row.id, 'accountId', e.target.value)}
-                    >
-                      {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
-                      ))}
-                    </select>
-
-                    <select
-                      className="input-select"
-                      style={{ fontSize: '0.82rem', padding: '6px' }}
-                      value={row.assetId}
-                      onChange={(e) => updateSellRow(row.id, 'assetId', e.target.value)}
-                    >
-                      <option value="">보유 종목 선택</option>
-                      {accHoldings.map((h) => {
-                        const holdingAst = assets.find(a => String(a.id) === String(h.asset_id));
-                        return (
-                          <option key={h.asset_id} value={h.asset_id}>
-                            {holdingAst?.market === 'US' ? '🇺🇸 ' : ''}{h.asset_name} (잔고: {h.quantity})
-                          </option>
-                        );
-                      })}
-                    </select>
-
-                    <input
-                      type="number"
-                      placeholder="수량"
-                      className="input-number"
-                      style={{ fontSize: '0.82rem', padding: '6px' }}
-                      value={row.quantity || ''}
-                      onChange={(e) => updateSellRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
-                      min={0}
-                      step={1}
-                    />
-
-                    <input
-                      type="number"
-                      placeholder={isUS ? '단가($ USD)' : '단가(원)'}
-                      className="input-number"
-                      style={{ fontSize: '0.82rem', padding: '6px' }}
-                      value={row.price || ''}
-                      onChange={(e) => updateSellRow(row.id, 'price', parseFloat(e.target.value) || 0)}
-                      min={0}
-                      step={isUS ? 0.01 : 100}
-                    />
-
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '6px 8px' }}
-                      onClick={() => removeSellRow(row.id)}
-                      title="행 삭제"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  {/* Mobile Layout */}
-                  <div className="trade-row-mobile">
-                    <div className="trade-row-mobile-line1">
-                      <select
-                        className="input-select"
-                        value={row.accountId}
-                        onChange={(e) => updateSellRow(row.id, 'accountId', e.target.value)}
-                      >
-                        {accounts.map((a) => (
-                          <option key={a.id} value={a.id}>[{a.account_type}] {a.account_alias}</option>
-                        ))}
-                      </select>
-
-                      <select
-                        className="input-select"
-                        value={row.assetId}
-                        onChange={(e) => updateSellRow(row.id, 'assetId', e.target.value)}
-                      >
-                        <option value="">보유 종목 선택</option>
-                        {accHoldings.map((h) => {
-                          const holdingAst = assets.find(a => String(a.id) === String(h.asset_id));
-                          return (
-                            <option key={h.asset_id} value={h.asset_id}>
-                              {holdingAst?.market === 'US' ? '🇺🇸 ' : ''}{h.asset_name} (잔고: {h.quantity})
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-
-                    <div className="trade-row-mobile-line2">
-                      <input
-                        type="number"
-                        placeholder="수량 (주)"
-                        className="input-number"
-                        value={row.quantity || ''}
-                        onChange={(e) => updateSellRow(row.id, 'quantity', parseFloat(e.target.value) || 0)}
-                        min={0}
-                        step={1}
-                      />
-
-                      <input
-                        type="number"
-                        placeholder={isUS ? '단가 ($ USD)' : '체결단가 (원)'}
-                        className="input-number"
-                        value={row.price || ''}
-                        onChange={(e) => updateSellRow(row.id, 'price', parseFloat(e.target.value) || 0)}
-                        min={0}
-                        step={isUS ? 0.01 : 100}
-                      />
-
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: '8px 12px' }}
-                        onClick={() => removeSellRow(row.id)}
-                        title="행 삭제"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
+                  <TradeRowInputs row={row} accounts={accounts} assetOptions={assetOptions} assetPlaceholder="보유 종목 선택" isUS={isUS} onUpdate={updateSellRow} onRemove={removeSellRow}/>
 
                   {/* US Asset Applied FX Rate Card & Preview */}
                   {isUS && (
@@ -420,7 +192,7 @@ export default function TradeBatchForm({
                       </div>
                     </div>
                   )}
-                  <TradeCosts row={row} isUS={isUS} tradeType="SELL" account={accounts.find(a=>String(a.id)===String(row.accountId))} asset={assets.find(a=>String(a.id)===String(row.assetId))} day={tradeDate} onChange={(key,value)=>updateSellRow(row.id,key,value)} />
+                  <TradeCosts row={row} isUS={isUS} tradeType="SELL" account={lookups.accounts.get(String(row.accountId))} asset={lookups.assets.get(String(row.assetId))} day={tradeDate} onChange={(key,value)=>updateSellRow(row.id,key,value)} />
                 </div>
               );
             })}
