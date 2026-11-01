@@ -4,8 +4,13 @@ from functools import lru_cache
 from zoneinfo import ZoneInfo
 import exchange_calendars as xcals
 import os
+from threading import RLock
 
 KST = ZoneInfo('Asia/Seoul')
+# exchange-calendars/pandas mutate shared construction caches on a cold miss.
+# The lru_cache protects its dictionary, but allows concurrent cache misses.
+# Serialize only construction; cached calendars and all market rules stay intact.
+_calendar_build_lock = RLock()
 # Corrections missing in exchange-calendars 4.13.2. Sources and maintenance
 # policy are documented in docs/closing-performance.md.
 DELAYED_CLOSES = {date(2026, 11, 19)}
@@ -22,7 +27,8 @@ def extra_holiday(day):
 
 @lru_cache(maxsize=8)
 def calendar(name, year):
-    return xcals.get_calendar(name, start=f'{year-1}-01-01', end=f'{year+1}-12-31')
+    with _calendar_build_lock:
+        return xcals.get_calendar(name, start=f'{year-1}-01-01', end=f'{year+1}-12-31')
 
 
 def is_session(day):
