@@ -51,8 +51,22 @@ def dividends():
     return {'trades':len(trades),'observations':120,'before':before,'after':after,'sorts_before':120,'sorts_after':1}
 
 
+def rebalance():
+    from logic.rebalance_calculator import calculate_rebalancing_plan
+    spec = importlib.util.spec_from_file_location('rebalance_cases', ROOT/'tests/test_rebalance_stages.py')
+    cases = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cases)
+    case = cases.synthetic_case(91, asset_count=80, account_count=24)
+    case['scenario'] = 'PERIODIC'
+    before = measure(lambda:cases._legacy.calculate_rebalancing_plan(**case))
+    after = measure(lambda:calculate_rebalancing_plan(**case))
+    assert before['sha256'] == after['sha256'], 'Rebalance result changed'
+    return {'assets':80, 'accounts':24, 'holdings':len(case['holdings']),
+            'before':before, 'after':after}
+
+
 def main():
-    report={'environment':'CPU-only synthetic, not production latency','dividends':dividends()}
+    report={'environment':'CPU-only synthetic, not production latency','dividends':dividends(),'rebalance':rebalance()}
     output=ROOT/'backups/maintenance-refactor/cpu-results.json';output.parent.mkdir(parents=True,exist_ok=True)
     output.write_text(json.dumps(report,indent=2),encoding='utf-8')
     print(json.dumps(report))
