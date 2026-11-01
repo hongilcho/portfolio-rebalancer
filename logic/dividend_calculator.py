@@ -3,7 +3,7 @@
 All quotes, FX and dividend records are supplied by the caller. No DB/provider IO.
 """
 from typing import List, Dict, Any, Optional
-from logic.trade_accounting import trade_sort_key
+from logic.dividend_quantity import DividendQuantityIndex
 
 
 def dividend_lookup_key(asset):
@@ -35,7 +35,8 @@ def calculate_holding_dividends_from_history(
     div_records: List[Dict[str, Any]],
     start_date: str = '',
     tax_rate: float = 0.0,
-    is_us: bool = False
+    is_us: bool = False,
+    quantity_index=None,
 ) -> Dict[str, Any]:
     """
     매매 기록(trade_history)을 시계열로 역추적하여 각 배당락일(Ex-Dividend Date) 당시에
@@ -51,36 +52,13 @@ def calculate_holding_dividends_from_history(
     total_tax = 0.0
     history = []
 
-    sorted_trades = sorted(trades, key=trade_sort_key)
+    quantities = quantity_index if quantity_index is not None else DividendQuantityIndex(trades)
 
     for d in qualifying_divs:
         ex_date = d['date']
         amt = float(d['amount'])
 
-        # 배당락일 전 거래 내역 필터링
-        prior_trades = [t for t in sorted_trades if str(t.get('trade_date', '')) < ex_date]
-        if not prior_trades:
-            continue
-
-        init_trades = [t for t in prior_trades if t.get('trade_type') == 'INIT']
-        if init_trades:
-            latest_init = init_trades[-1]
-            qty_at_ex = float(latest_init.get('quantity') or 0.0)
-            init_date = str(latest_init.get('trade_date', ''))
-            for t in prior_trades:
-                if str(t.get('trade_date', '')) > init_date:
-                    t_type = t.get('trade_type', '')
-                    if t_type == 'BUY':
-                        qty_at_ex += float(t.get('quantity') or 0.0)
-                    elif t_type == 'SELL':
-                        qty_at_ex -= float(t.get('quantity') or 0.0)
-        else:
-            qty_at_ex = sum(
-                float(t.get('quantity') or 0.0) if t.get('trade_type') == 'BUY' else -float(t.get('quantity') or 0.0)
-                for t in prior_trades if t.get('trade_type') in ('BUY', 'SELL')
-            )
-
-        qty_at_ex = max(0.0, qty_at_ex)
+        qty_at_ex = quantities.before(ex_date)
         if qty_at_ex > 0:
             gross = qty_at_ex * amt
             tax = round(gross * tax_rate, 4 if is_us else 1)
@@ -111,7 +89,8 @@ def calculate_holding_dividends(
     usd_krw: float = 1380.0,
     account_type: str = '',
     trades: Optional[List[Dict[str, Any]]] = None,
-    dividend_records: Optional[List[Dict[str, Any]]] = None
+    dividend_records: Optional[List[Dict[str, Any]]] = None,
+    quantity_index=None,
 ) -> Dict[str, Any]:
     """
     개별 보유 종목의 배당금(Dividend Income)을 자동으로 산출하고 MTS 순수 매입단가를 보존합니다.
@@ -171,7 +150,8 @@ def calculate_holding_dividends(
             div_records=div_records,
             start_date=first_buy_date,
             tax_rate=tax_rate,
-            is_us=is_us
+            is_us=is_us,
+            quantity_index=quantity_index,
         )
         total_div_profit = hist_res['total_net']
         total_gross_div_profit = hist_res['total_gross']

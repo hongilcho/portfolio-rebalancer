@@ -83,6 +83,7 @@ def purchase_history_quantity(trades, ex_date):
 
 class Evidence:
     def __init__(self, snapshots=(), trades=(), receipts=()):
+        self._expected_cache = {}
         self.trades = defaultdict(list)
         self.books = {}
         for trade in trades:
@@ -97,6 +98,12 @@ class Evidence:
         self.openings = {pair(p): p for p in active(receipts)}
 
     def expected(self, holding, day):
+        key = pair(holding), str(day)
+        if key not in self._expected_cache:
+            self._expected_cache[key] = self._calculate_expected(holding, day)
+        return self._expected_cache[key]
+
+    def _calculate_expected(self, holding, day):
         """Independent quantity, with no intervening reset or conflicting proof."""
         key = pair(holding)
         rows = self.trades[key]

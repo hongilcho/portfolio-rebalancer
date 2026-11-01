@@ -8,6 +8,7 @@ from backend.valuation_service import evaluate_portfolio
 from logic.portfolio_valuation import index_valuation_inputs
 from logic.dividend_calculator import dividend_lookup_key, calculate_holding_dividends
 from logic.trade_accounting import trade_sort_key
+from logic.dividend_quantity import DividendHistoryContext
 from logic.holding_history_evidence import Evidence, with_dividend_start, dividend_start
 
 VERSION=1
@@ -32,7 +33,7 @@ def quantity_matches(holding,trades):
         elif t['trade_type']=='SELL':qty-=float(t['quantity'])
     return abs(qty-float(holding['quantity']))<1e-6
 
-def financial(ledger,prices,fx,day,*,reconstructed=False,evidence=None):
+def financial(ledger,prices,fx,day,*,reconstructed=False,evidence=None,dividend_context=None):
     """Persist frozen dividend inputs for new records; old ones require evidence.
 
     Frozen quantities/costs remain authoritative. Only dividend-dependent
@@ -45,7 +46,8 @@ def financial(ledger,prices,fx,day,*,reconstructed=False,evidence=None):
         day=str(day);fx=number(fx)
         if fx<=0:raise ValueError('환율 기록 부족')
         assets=ledger['assets'];accounts=ledger['accounts'];holdings=ledger['holdings']
-        trades=[t for t in ledger.get('trade_history',[]) if str(t['trade_date'])[:10]<=day]
+        trade_source=ledger.get('trade_history',[])
+        trades=[t for t in trade_source if str(t['trade_date'])[:10]<=day]
         price_rows=[{'id':p['id'],'price_usd':p.get('price_native',0)} for p in prices.values()]
         price_map={k:number(v['price_krw']) for k,v in prices.items()}
         for h in holdings:
@@ -65,7 +67,8 @@ def financial(ledger,prices,fx,day,*,reconstructed=False,evidence=None):
                     if records and not quantity_matches(h,trades or []):
                         if not evidence or not evidence.supports(h,trades or [],records,day):
                             raise ValueError('당시 보유 수량과 매매 이력 대조 필요')
-            return calculate_holding_dividends(h,a,usd_krw,account_type,trades,records)
+            index=dividend_context.index(trade_source,h['account_id'],h['asset_id']) if dividend_context else None
+            return calculate_holding_dividends(h,a,usd_krw,account_type,trades,records,quantity_index=index)
         result=evaluate_portfolio(accounts,assets,index_valuation_inputs(holdings,trades,price_rows),price_map,fx,calculate_adjustment=adjustment)
         return {**from_kpi(result['kpi']),'source':'RECONSTRUCTED' if reconstructed else 'RECORDED'}
     except (KeyError,TypeError,ValueError,OverflowError):
@@ -97,6 +100,7 @@ def combine(parts):
         'source':'RECONSTRUCTED' if any(p.get('source')=='RECONSTRUCTED' for p in parts) else 'RECORDED'}
 
 def history(financial_rows,crypto_rows,portfolio_ids,*,include_crypto=False,scope='all',reconstruction=None):
+    dividend_context=DividendHistoryContext()
     by_day={};financial_days=set();ids=list(portfolio_ids) if scope=='all' else [scope]
     evidence=Evidence(financial_rows,(reconstruction or {}).get('trade_history',[]),
         (reconstruction or {}).get('realized_openings',[]))
@@ -114,7 +118,7 @@ def history(financial_rows,crypto_rows,portfolio_ids,*,include_crypto=False,scop
             if isinstance(prices,list):
                 prices={p['id']:{**p,'price_krw':p.get('price_krw',p.get('price',0))} for p in prices}
             m=financial(ledger,prices,(payload.get('fx') or {}).get('rate',payload.get('usd_krw',0)),day,
-                reconstructed=True,evidence=evidence)
+                reconstructed=True,evidence=evidence,dividend_context=dividend_context)
         by_day.setdefault(day,{})[pid]={**m,'value_krw':s.get('value_krw',m.get('value_krw')),
             'record_kind':s.get('record_kind'),'valuation_at':s.get('valuation_at')}
     for row in crypto_rows:
