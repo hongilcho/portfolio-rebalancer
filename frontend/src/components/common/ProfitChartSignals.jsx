@@ -8,12 +8,10 @@ export function ProfitStatus({profit,rate,caption}){
     <div className="profit-chart-status-values"><strong>{signedProfit(profit,'profit')}</strong><span>{signedProfit(rate,'return_pct')}</span></div>
   </div>;
 }
-export function ZeroLine({reference,left,right,y,top,bottom}){
+export function ZeroLine({reference,left,right,y}){
   if(reference?.position!=='inside')return null;
-  const labelY=Math.max(top+13,Math.min(bottom-6,y-7));
   return <g className="profit-chart-zero-line" aria-label={reference.label}>
     <line x1={left} x2={right} y1={y} y2={y} stroke="var(--text-secondary)" strokeWidth="1.6" strokeDasharray="5 4"/>
-    <text x={right-3} y={labelY} textAnchor="end" fill="var(--text-primary)" stroke="var(--bg-card)" strokeWidth="4" paintOrder="stroke" fontSize="11">{reference.label}</text>
   </g>;
 }
 export function ZeroOutside({reference,position}){
