@@ -70,47 +70,49 @@ def get_rebalance_batch_data(db: RepositoryContext, portfolio_id: str) -> Dict[s
     return raw
 
 
-def get_overview_batch_data(db: RepositoryContext) -> Dict[str, Any]:
+def get_overview_batch_data(db: RepositoryContext, portfolio_id: str = None) -> Dict[str, Any]:
     """
     전체 포트폴리오 요약에 필요한 모든 테이블(portfolios, accounts, assets, holdings, crypto_holdings)을
-    CMA 스키마 존재 확인 후 단일 SQL 스냅샷으로 잔고와 누적 이자를 함께 조회.
+    CMA 스키마 확인 후 단일 SQL 스냅샷으로 조회. 개별 조회는 해당 장부만 읽되
+    헤더에 필요한 포트폴리오 목록은 유지하고 과거 거래 날짜를 제한하지 않는다.
     """
     sql = """
+    WITH scoped_accounts AS (
+        SELECT * FROM __ACCOUNT_SOURCE__ acc
+        WHERE %(portfolio_id)s::text IS NULL OR acc.portfolio_id = %(portfolio_id)s
+    ), scoped_assets AS (
+        SELECT * FROM assets WHERE %(portfolio_id)s::text IS NULL OR portfolio_id = %(portfolio_id)s
+    ), scoped_trades AS (
+        SELECT t.* FROM trade_history t JOIN scoped_accounts acc ON acc.id=t.account_id
+    ), trade_starts AS (
+        SELECT account_id, asset_id,
+            CASE WHEN BOOL_OR(trade_date <= '2000-01-01') THEN '2026-07-01'
+                 ELSE MIN(trade_date) END AS min_trade_date
+        FROM scoped_trades GROUP BY account_id,asset_id
+    )
     SELECT json_build_object(
         'portfolios', COALESCE((SELECT json_agg(p ORDER BY p.is_default DESC, p.created_at ASC) FROM portfolios p), '[]'::json),
-        'accounts', COALESCE((SELECT json_agg(acc ORDER BY acc.account_alias ASC) FROM __ACCOUNT_SOURCE__ acc), '[]'::json),
-        'assets', COALESCE((SELECT json_agg(ast ORDER BY ast.name ASC) FROM assets ast), '[]'::json),
+        'accounts', COALESCE((SELECT json_agg(acc ORDER BY acc.account_alias ASC) FROM scoped_accounts acc), '[]'::json),
+        'assets', COALESCE((SELECT json_agg(ast ORDER BY ast.name ASC) FROM scoped_assets ast), '[]'::json),
         'holdings', COALESCE((SELECT json_agg(h) FROM (
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
                    a.is_dividend_cost_deduct,
                    acc.account_alias, acc.account_type,
-                   (
-                       SELECT 
-                           CASE 
-                               WHEN EXISTS (
-                                   SELECT 1 FROM trade_history t0 
-                                   WHERE t0.account_id = h.account_id 
-                                     AND t0.asset_id = h.asset_id 
-                                     AND t0.trade_date <= '2000-01-01'
-                               ) THEN '2026-07-01'
-                               ELSE MIN(t.trade_date)
-                           END
-                       FROM trade_history t 
-                       WHERE t.account_id = h.account_id 
-                         AND t.asset_id = h.asset_id
-                   ) as min_trade_date
+                   starts.min_trade_date
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
-            JOIN accounts acc ON h.account_id = acc.id
+            JOIN scoped_accounts acc ON h.account_id = acc.id
+            LEFT JOIN trade_starts starts ON starts.account_id=h.account_id AND starts.asset_id=h.asset_id
         ) h), '[]'::json),
         'crypto_holdings', COALESCE((SELECT json_agg(c) FROM (
             SELECT h.*,h.quantity::double precision AS quantity_precise,
-                   h.avg_price::double precision AS avg_price_precise FROM crypto_holdings h
+                   h.avg_price::double precision AS avg_price_precise FROM crypto_holdings h WHERE %(portfolio_id)s::text IS NULL
         ) c), '[]'::json),
-        'trade_history', COALESCE((SELECT json_agg(t ORDER BY t.trade_date ASC, t.id ASC) FROM trade_history t), '[]'::json),
+        'trade_history', COALESCE((SELECT json_agg(t ORDER BY t.trade_date ASC, t.id ASC) FROM scoped_trades t), '[]'::json),
         'realized_openings', COALESCE((SELECT json_agg(b.result ORDER BY b.sequence) FROM bookkeeping_requests b
-            WHERE b.scope LIKE 'realized-opening:%' AND b.result IS NOT NULL), '[]'::json),
+            WHERE b.scope LIKE 'realized-opening:%%' AND b.result IS NOT NULL
+              AND (%(portfolio_id)s::text IS NULL OR b.scope='realized-opening:' || %(portfolio_id)s)), '[]'::json),
         'dividend_cache', COALESCE((
             SELECT json_object_agg(mc.key, json_build_object(
                 'data', mc.data,
@@ -119,6 +121,7 @@ def get_overview_batch_data(db: RepositoryContext) -> Dict[str, Any]:
             WHERE mc.key IN (
                 SELECT 'div_' || a.market || '_' || UPPER(TRIM(a.ticker))
                 FROM assets a JOIN holdings h ON h.asset_id = a.id
+                JOIN scoped_accounts acc ON acc.id=h.account_id
                 WHERE NOT COALESCE(a.is_deposit, FALSE)
                   AND COALESCE(a.ticker, '') NOT IN ('', '-', '없음', 'M04020000')
             )
@@ -129,7 +132,7 @@ def get_overview_batch_data(db: RepositoryContext) -> Dict[str, Any]:
     cursor = conn.cursor()
     try:
         sql = sql.replace('__ACCOUNT_SOURCE__', _overview_account_source(cursor))
-        cursor.execute(sql)
+        cursor.execute(sql, {"portfolio_id": None if portfolio_id is None else str(portfolio_id)})
         row = cursor.fetchone()
         raw = row[0] if row else {}
     finally:

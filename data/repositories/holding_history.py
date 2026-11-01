@@ -1,6 +1,7 @@
 """Read history without writing NAVs; crypto captures are insert-once."""
 from psycopg2.extras import RealDictCursor,Json
 from logic.holding_history import history
+from logic.dividend_calculator import dividend_lookup_key
 
 def read(ctx,scope,include_crypto=True):
     with ctx.connect() as conn,conn.cursor(cursor_factory=RealDictCursor) as c:
@@ -22,19 +23,33 @@ def read(ctx,scope,include_crypto=True):
         snapshots=[dict(r) for r in c.fetchall()]
         c.execute("""SELECT l.portfolio_id,h->>'date' AS date FROM ledger_adjustments l
           CROSS JOIN LATERAL jsonb_array_elements(l.history) h
-          WHERE l.reversed_at IS NULL AND h->>'decision'='UNKNOWN'""")
+          WHERE l.reversed_at IS NULL AND h->>'decision'='UNKNOWN'
+            AND l.portfolio_id=ANY(%s)""", (ids if scope=='all' else [scope],))
         uncertain={(r['portfolio_id'],r['date']) for r in c.fetchall()}
         for row in snapshots:
             if (row['portfolio_id'],str(row['snapshot_date'])) in uncertain:
                 row['payload']={**row['payload'],'holding_metrics':{'status':'UNCONFIRMED','profit_krw':None,
                     'cost_krw':None,'return_pct':None,'warning':'장부 정정의 과거 기록 확인이 필요합니다.'}}
-        # Reconstruction inputs stay private and never appear in the API response.
-        c.execute('SELECT * FROM trade_history ORDER BY trade_date,trade_sequence,id');trades=[dict(r) for r in c.fetchall()]
-        c.execute("SELECT key,data FROM market_cache WHERE key LIKE 'div_%%'")
-        cache={r['key']:{'data':r['data']} for r in c.fetchall()}
-        c.execute('SELECT result FROM bookkeeping_requests WHERE scope=ANY(%s) AND result IS NOT NULL ORDER BY sequence',
-            (['realized-opening:'+pid for pid in (ids if scope=='all' else [scope])],))
-        openings=[r['result'] for r in c.fetchall()]
+        # Frozen metrics require no replay inputs. Legacy days retain ALL earlier
+        # trades in this scope: a graph's visible range is never a cost-basis cutoff.
+        trades=[];cache={};openings=[]
+        legacy=[r for r in snapshots if not (r.get('payload') or {}).get('holding_metrics')]
+        if legacy:
+            selected=ids if scope=='all' else [scope]
+            c.execute('''SELECT t.* FROM trade_history t JOIN accounts a ON a.id=t.account_id
+                WHERE a.portfolio_id=ANY(%s) ORDER BY t.trade_date,t.trade_sequence,t.id''', (selected,))
+            trades=[dict(r) for r in c.fetchall()]
+            keys=set()
+            for row in legacy:
+                payload=row.get('payload') or {};ledger=payload.get('ledger') or payload
+                for asset in ledger.get('assets',[]):
+                    key=dividend_lookup_key(asset)
+                    if key:keys.add(f'div_{key[1]}_{key[0].upper()}')
+            c.execute('SELECT key,data FROM market_cache WHERE key=ANY(%s)', (sorted(keys),))
+            cache={r['key']:{'data':r['data']} for r in c.fetchall()}
+            c.execute('SELECT result FROM bookkeeping_requests WHERE scope=ANY(%s) AND result IS NOT NULL ORDER BY sequence',
+                (['realized-opening:'+pid for pid in selected],))
+            openings=[r['result'] for r in c.fetchall()]
         conn.rollback()
     result=history(snapshots,crypto,ids,include_crypto=include_crypto,scope=scope,
         reconstruction={'trade_history':trades,'dividend_cache':cache,'realized_openings':openings})

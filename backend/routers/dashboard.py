@@ -9,7 +9,7 @@
    - 프론트엔드가 대시보드를 그리기 위해 필요한 5가지 데이터(포트폴리오 목록, 대시보드 요약,
      자산 목록, 계좌 목록, 실시간 시세/환율)를 단 1회의 HTTP 요청으로 통합 반환하여 왕복 지연시간(RTT) 최소화.
 2. PostgreSQL 1회 배치 쿼리:
-   - `get_overview_batch_data()`로 필요한 데이터를 한 번에 조회하고 계산 서비스에 전달.
+   - `get_overview_batch_data(portfolio_id=portfolio_id)`로 필요한 데이터를 한 번에 조회하고 계산 서비스에 전달.
 """
 
 from fastapi import APIRouter
@@ -35,7 +35,7 @@ def get_dashboard_bundle(portfolio_id: str = "default", force_refresh: bool = Fa
     Returns:
         dict: portfolios, dashboard, assets, accounts, prices_data, usd_krw, rate_source
     """
-    batch_data = get_overview_batch_data()
+    batch_data = get_overview_batch_data(portfolio_id=portfolio_id)
     prepare_dividend_cache(batch_data)
     portfolios = batch_data.get("portfolios", [])
     all_accounts = batch_data.get("accounts", [])
@@ -101,7 +101,7 @@ def get_dashboard_summary(
     - 파라미터 미전달 시 단 1회의 PostgreSQL 배치 조회 사용
     """
     if accounts is None or assets is None or all_holdings is None:
-        batch_data = get_overview_batch_data()
+        batch_data = get_overview_batch_data(portfolio_id=portfolio_id)
         prepare_dividend_cache(batch_data)
         all_accounts = batch_data.get("accounts", [])
         all_assets = batch_data.get("assets", [])

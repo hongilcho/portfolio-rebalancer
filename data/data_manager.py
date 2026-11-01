@@ -360,8 +360,8 @@ def get_rebalance_batch_data(portfolio_id: str) -> Dict[str, Any]:
     return snapshots.get_rebalance_batch_data(_context(), portfolio_id)
 
 
-def get_overview_batch_data() -> Dict[str, Any]:
-    return snapshots.get_overview_batch_data(_context())
+def get_overview_batch_data(portfolio_id=None) -> Dict[str, Any]:
+    return snapshots.get_overview_batch_data(_context(), portfolio_id=portfolio_id)
 
 
 def save_market_cache(key: str, data: Any) -> bool:
