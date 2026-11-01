@@ -1,20 +1,15 @@
-import React,{useEffect,useState} from 'react';
+import React,{useState} from 'react';
+import {useLedgerRead} from '../../utils/useLedgerRead';
 import {api} from '../../utils/api';
 import {formatKRW,formatUSD,getProfitColor} from '../../utils/formatters';
 
 const amount=v=>v==null?'확인 필요':formatKRW(v);
 const names={CONFIRMED:'비용 확인 완료',COSTS_PENDING:'비용 확인 전',BASIS_PENDING:'원가 확인 필요'};
 const knownSum=(rows,key)=>{const values=rows.map(r=>r[key]).filter(v=>v!=null);return values.length||!rows.length?values.reduce((s,v)=>s+v,0):null;};
-export default function RealizedGainsPanel({portfolioId,accounts=[],assets=[],revision=0,initialData=null,client=api}){
-  const [data,setData]=useState(initialData),[error,setError]=useState(''),[loading,setLoading]=useState(false);
+export default function RealizedGainsPanel({portfolioId,accounts=[],assets=[],initialData=null,client=api}){
   const [filters,setFilters]=useState({start_date:'',end_date:'',account_id:'',asset_id:''});
-  const [view,setView]=useState('sales'),[page,setPage]=useState(1),[refresh,setRefresh]=useState(0);
-  useEffect(()=>{
-    if(initialData)return;let cancelled=false;setLoading(true);setError('');setData(null);
-    const params=Object.fromEntries(Object.entries(filters).filter(([,v])=>v));
-    client.getRealizedGains(portfolioId,params).then(d=>{if(!cancelled)setData(d);}).catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setLoading(false);});
-    return()=>{cancelled=true;};
-  },[portfolioId,filters,revision,refresh,initialData,client]);
+  const [view,setView]=useState('sales'),[page,setPage]=useState(1);
+  const {data,loading,error,refresh}=useLedgerRead('realized',portfolioId,{filters,initialData,client});
   const change=(k,v)=>{setFilters(f=>({...f,[k]:v}));setPage(1);};
   const sales=data?.sales||[],periods=(data?.periods||[]).filter(p=>view!=='closed'||p.status==='CLOSED');
   const stats=view==='sales'?data?.summary:{gross_profit_krw:knownSum(periods,'gross_profit_krw'),confirmed_net_profit_krw:knownSum(periods,'confirmed_net_profit_krw'),pending_count:periods.reduce((n,p)=>n+p.pending_count,0)};
@@ -27,9 +22,9 @@ export default function RealizedGainsPanel({portfolioId,accounts=[],assets=[],re
       <label>매도 종료일<input className="input-text" type="date" disabled={view!=='sales'} value={filters.end_date} onChange={e=>change('end_date',e.target.value)}/></label>
       <label>계좌<select className="input-select" value={filters.account_id} onChange={e=>change('account_id',e.target.value)}><option value="">전체 계좌</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.account_alias}</option>)}</select></label>
       <label>종목<select className="input-select" value={filters.asset_id} onChange={e=>change('asset_id',e.target.value)}><option value="">전체 종목</option>{assets.filter(a=>!a.is_deposit).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
-      <button className="btn btn-secondary btn-sm" type="button" onClick={()=>setRefresh(n=>n+1)}>다시 조회</button>
+      <button className="btn btn-secondary btn-sm" type="button" disabled={loading} onClick={()=>{void refresh(true).catch(()=>{});}}>다시 조회</button>
     </div>
-    {error&&<p role="alert">{error}</p>}{loading&&<p role="status">손익 조회 중…</p>}
+    {error&&<p role="alert">{data?'이전 조회 결과를 표시합니다. ':''}{error}</p>}{loading&&<p role="status">{data?'손익 갱신 중…':'손익 조회 중…'}</p>}
     {data&&<>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12,margin:'16px 0'}}>
         <div><small>{view==='closed'?'전량 매도 완료분':'계산 가능한 매도손익'} · 비용 전</small><p style={{color:getProfitColor(stats.gross_profit_krw)}}>{amount(stats.gross_profit_krw)}</p></div>

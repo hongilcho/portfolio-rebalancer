@@ -53,9 +53,9 @@ test('a write during an old read discards its response and coalesces writes into
  const gates=[];const store=createHoldingHistoryStore(()=>{const gate=deferred();gates.push(gate);return gate.promise;});
  const r=store.resource('p');const unsub=r.subscribe(()=>{});
  const old=r.refresh();await tick();store.invalidate();store.invalidate();store.invalidate();
- gates[0].resolve(history(1));await old;await tick();
+ gates[0].resolve(history(1));await tick();
  assert.equal(r.getSnapshot().data,null);assert.equal(r.getSnapshot().loading,true);assert.equal(gates.length,2);
- gates[1].resolve(history(4));await tick();assert.equal(r.getSnapshot().data.rows[0].profit_krw,4);unsub();
+ gates[1].resolve(history(4));await old;assert.equal(r.getSnapshot().data.rows[0].profit_krw,4);unsub();
 });
 test('unmount during an invalidated read queues no hidden request; next mount reads fresh data',async()=>{
  let calls=0;const gate=deferred();const store=createHoldingHistoryStore(()=>++calls===1?gate.promise:history(2));

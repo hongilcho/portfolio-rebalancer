@@ -1,3 +1,4 @@
+import {ledgerReadFixtureEdit} from './helpers/ledgerReadFixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
@@ -15,6 +16,7 @@ plugins:[{name:'focus-controls-fixture',enforce:'pre',transform(source,id,option
  const name=path.basename(id,'.jsx');if(!options?.ssr || !modules.includes(name))return;
  const {program,errors}=parseSync(id,source);assert.equal(errors.length,0);const edits=[];
  function walk(node){if(!node || typeof node!=='object')return;
+ if(name==='HistoryTab'){const edit=ledgerReadFixtureEdit(node,source,"(globalThis.__focusSeeds.HistoryTab||{})");if(edit)edits.push(edit);}
  if(node.type==='VariableDeclarator' && node.id.type==='ArrayPattern' && node.init?.callee?.name==='useState'){
  const key=node.id.elements[0]?.name,arg=node.init.arguments[0];if(arg)edits.push({start:arg.start,end:arg.end,text:`(Object.hasOwn(globalThis.__focusSeeds['${name}']||{},'${key}')?globalThis.__focusSeeds['${name}'].${key}:(${source.slice(arg.start,arg.end)}))`});}
  for(const v of Object.values(node))if(Array.isArray(v))v.forEach(walk);else if(v && typeof v==='object')walk(v);

@@ -7,11 +7,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
+import {useLedgerRead} from '../../utils/useLedgerRead';
 import { api } from '../../utils/api';
 import {refreshBookkeeping} from '../../utils/bookkeepingRefresh';
 import {readPendingRequest,requireBookkeepingProtocol,singleSubmission} from '../../utils/bookkeepingRequest';
 
-import { loadAccountHoldings } from '../../utils/accountHoldings';
+import { groupAccountHoldings } from '../../utils/accountHoldings';
 import PriceReference from './PriceReference';
 import TradeBatchForm from './TradeBatchForm';
 import {feePayload} from '../../utils/tradeCosts';
@@ -67,23 +68,15 @@ export default function HistoryTab({
     const blank = () => ({ id: crypto.randomUUID(), accountId: String(accounts[0]?.id || ''), assetId: '', quantity: 0, price: 0, exchangeRate: usdKrw });
     setBuyRows([embedded?blankTrade('BUY'):blank()]); setSellRows([embedded?blankTrade('SELL'):blank()]); setDraftReviewed(true); setUncertainSubmission(false);
   };
-  const [usdLedgers, setUsdLedgers] = useState(null);
-  const [ledgerError, setLedgerError] = useState('');
-  const ledgerScope = useRef(currentPortfolioId);
-  useEffect(() => {
-    let cancelled = false;
-    if(!active)return;
-    if (ledgerScope.current !== currentPortfolioId) setUsdLedgers(null);
-    ledgerScope.current = currentPortfolioId;
-    setLedgerError('');
-    api.getUsdLedgers(currentPortfolioId).then(res => { if (!cancelled) setUsdLedgers(res.ledgers); })
-      .catch(error => { if (!cancelled) setLedgerError(error.message); });
-    return () => { cancelled = true; };
-  }, [currentPortfolioId, accounts,active]);
-  const refreshLedgers = async () => {
-    const res = await api.getUsdLedgers(currentPortfolioId);
-    setUsdLedgers(res.ledgers);setLedgerError('');
-  };
+  const usdRead=useLedgerRead('usd',currentPortfolioId,{active});
+  const holdingsRead=useLedgerRead('holdings',currentPortfolioId,{active:active && accounts.length>0});
+  const usdLedgers=usdRead.data?.ledgers ?? null;
+  const ledgerError=usdRead.error;
+  const accountHoldingsMap=useMemo(()=>groupAccountHoldings(accounts,holdingsRead.data?.holdings || []),[accounts,holdingsRead.data]);
+  const holdingsError=Boolean(holdingsRead.error);
+  const balancesPending=holdingsRead.stale || holdingsRead.loading;
+  const {refresh:refreshUsd}=usdRead,{refresh:refreshHoldings}=holdingsRead;
+  const refreshLedgers=useCallback(async()=>{await Promise.all([refreshUsd(),...(accounts.length?[refreshHoldings()]:[])]);},[refreshUsd,refreshHoldings,accounts.length]);
 
   // Price map lookup for USD native prices
   const usdPriceMap = useMemo(() => {
@@ -95,10 +88,6 @@ export default function HistoryTab({
     }
     return map;
   }, [pricesData]);
-
-  // Account Holdings Map for Sell Validation
-  const [accountHoldingsMap, setAccountHoldingsMap] = useState({});
-  const [holdingsError, setHoldingsError] = useState(false);
 
   // Reference Prices Collapsible
   const [isPriceRefOpen, setIsPriceRefOpen] = useState(false);
@@ -136,21 +125,6 @@ export default function HistoryTab({
   const navigationBusy=savingBatch || performance?.busy || Object.values(childWriting).some(Boolean);
   const busy=savingBatch || Boolean(pendingSubmission) || performance?.busy || Object.values(childBusy).some(Boolean);
   useEffect(()=>{onBusyChange?.(navigationBusy);},[navigationBusy,onBusyChange]);
-  // Load account holdings for sell validation
-  useEffect(() => {
-    let cancelled = false;
-    if(!active)return;
-    setAccountHoldingsMap({});
-    setHoldingsError(false);
-    loadAccountHoldings(accounts, currentPortfolioId, api.getAllHoldings).then((grouped) => {
-      if (!cancelled) setAccountHoldingsMap(grouped);
-    }).catch(() => {
-      if (!cancelled) setHoldingsError(true);
-    });
-    // Discard a response from a previous portfolio or account refresh.
-    return () => { cancelled = true; };
-  }, [accounts, currentPortfolioId,active]);
-
   const loadTrades=useCallback(async()=>{setRecordRevision(n=>n+1);},[]);
   // A manual cash flow already runs inside the performance queue.
   // Do not enqueue and await another job behind that same running job.
@@ -344,7 +318,7 @@ export default function HistoryTab({
         <div className="history-methods" aria-label="입력 방법">
           {(embedded?[['nh','체결 알림 붙여넣기',ClipboardPaste],['manual','직접 입력',PenLine]]:[['nh','NH 알림 가져오기',ClipboardPaste],['manual','직접 입력',PenLine],['usd','달러 관리',Wallet]]).filter(([id])=>!(embedded && id==='nh' && task?.currency==='USD' && ['BUY','SELL'].includes(task.kind))).map(([id,label,Icon])=><button key={id} className="btn btn-secondary" type="button" aria-pressed={method===id || (embedded && method==='usd' && id==='manual')} disabled={navigationBusy} onClick={()=>id==='manual'?manualMode():setMethod(id)}><Icon size={16}/>{embedded && !['BUY','SELL'].includes(task?.kind) && id==='nh'?'NH 알림 붙여넣기':label}</button>)}
         </div>
-        {ledgerError && method!=='usd' && <p role="alert">달러 원가 조회 실패: {ledgerError}</p>}
+        {active && (ledgerError || holdingsError) && <p role="alert">잔고 갱신을 마치지 못했습니다. 이전 조회값은 참고용입니다. <button className="btn btn-secondary btn-sm" disabled={usdRead.loading || holdingsRead.loading} onClick={()=>{void refreshLedgers().catch(()=>{});}}>잔고 다시 조회</button></p>}
         <div hidden={method!=='nh'}>
           <NamuhMessageImport key={currentPortfolioId} accounts={accounts} assets={assets} portfolioId={currentPortfolioId}
             tradeDate={tradeDate} buyRows={buyRows} disabled={busy && !childBusy.nh} ledgers={usdLedgers} focused
@@ -368,7 +342,7 @@ export default function HistoryTab({
             </div>
             <TradeBatchForm tradeDate={tradeDate} setTradeDate={setTradeDate} buyRows={buyRows} assets={embedded?assets.filter(a=>String(a.id)===String(task?.asset_id)):assets}
               updateBuyRow={updateBuyRow} accounts={embedded?accounts.filter(a=>String(a.id)===String(task?.account_id)):accounts} removeBuyRow={removeBuyRow} usdKrw={usdKrw} addBuyRow={addBuyRow}
-              sellRows={sellRows} holdingsError={holdingsError} accountHoldingsMap={accountHoldingsMap} updateSellRow={updateSellRow}
+              sellRows={sellRows} holdingsError={holdingsError} balancesPending={balancesPending} accountHoldingsMap={accountHoldingsMap} updateSellRow={updateSellRow}
               removeSellRow={removeSellRow} addSellRow={addSellRow} handleSaveBatchTrades={handleSaveBatchTrades}
               savingBatch={savingBatch} disabled={busy && !savingBatch} usdLedgers={usdLedgers || []} executionStep={task} focused/>
             {!embedded && <PriceReference setIsPriceRefOpen={setIsPriceRefOpen} isPriceRefOpen={isPriceRefOpen}

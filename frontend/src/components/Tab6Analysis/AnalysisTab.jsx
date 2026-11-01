@@ -17,7 +17,7 @@ export default function AnalysisTab({ portfolioId, assets, dashboardData, perfor
     <details className="section-card"><summary style={{cursor:'pointer',fontWeight:700}}>기준일 이후 운용 성과</summary>
       <PeriodPerformance portfolioId={portfolioId} performance={performance} onOpenHistory={onOpenHistory} />
     </details>
-    <RealizedGainsPanel portfolioId={portfolioId} assets={assets || []} accounts={accounts} revision={dashboardData} />
+    <RealizedGainsPanel portfolioId={portfolioId} assets={assets || []} accounts={accounts} />
     <DepositMaturities assets={assets || []} accounts={accounts} />
     <DividendDetails accounts={accounts} />
   </div>;

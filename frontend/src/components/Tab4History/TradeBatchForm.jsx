@@ -17,6 +17,7 @@ export default function TradeBatchForm({
   addBuyRow,
   sellRows,
   holdingsError,
+  balancesPending=false,
   accountHoldingsMap,
   updateSellRow,
   removeSellRow,
@@ -258,7 +259,7 @@ export default function TradeBatchForm({
 
               return (
                 <div key={row.id} className="trade-row-card">
-                  {row.assetId && <p><button type="button" className="btn btn-secondary btn-sm" disabled={locked || remaining<=0} onClick={()=>updateSellRow(row.id,'quantity',remaining)}>전량 {remaining}주</button><small> 다른 매도 대기 행을 제외한 수량 · 실제 체결 단가는 직접 확인해주세요.</small></p>}
+                  {row.assetId && <p><button type="button" className="btn btn-secondary btn-sm" disabled={locked || balancesPending || holdingsError || remaining<=0} onClick={()=>updateSellRow(row.id,'quantity',remaining)}>전량 {remaining}주</button><small> 다른 매도 대기 행을 제외한 수량 · 실제 체결 단가는 직접 확인해주세요.</small></p>}
                   {/* Desktop Layout */}
                   <div className="trade-row-desktop">
                     <select

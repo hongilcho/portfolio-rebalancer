@@ -1,3 +1,4 @@
+import {ledgerReadFixtureEdit} from './helpers/ledgerReadFixture.js';
 // Compare complete rendered markup before/after splitting the presentation UI.
 // Hooks are seeded only in this SSR transform to exercise loaded views/forms.
 import test from 'node:test';
@@ -59,6 +60,7 @@ const server = await createServer({ root, logLevel: 'error',
       const edits = [];
       const walk = (node) => {
         if (!node || typeof node !== 'object') return;
+        if(name==='HistoryTab'){const edit=ledgerReadFixtureEdit(node,source,'globalThis.__presentationState');if(edit)edits.push(edit);}
         if (node.type === 'VariableDeclarator' && node.id.type === 'ArrayPattern'
             && node.init?.callee?.name === 'useState') {
           const state = node.id.elements[0]?.name;

@@ -1,4 +1,6 @@
-import {createHoldingHistoryStore, affectsHoldingHistory} from './holdingHistoryStore';
+import {affectsHoldingHistory, affectsLedgerReads} from './readInvalidation';
+import {getLedgerReadStore} from './ledgerReadStore';
+import {createHoldingHistoryStore} from './holdingHistoryStore';
 import {requireInvestmentProtocol} from './investmentInput';
 import { authHeaders, saveAuthSession, clearAuthSession, onAuthExpired } from './authSession';
 
@@ -48,7 +50,10 @@ async function request(endpoint, options = {}, format = 'json') {
       throw error;
     }
     const result = format === 'blob' ? await response.blob() : await response.json();
-    if (affectsHoldingHistory(endpoint, options.method)) holdingHistoryStore.invalidate();
+    if (affectsHoldingHistory(endpoint, options.method)) {
+      holdingHistoryStore.invalidate();
+    }
+    if (affectsLedgerReads(endpoint, options.method)) ledgerReadStore.invalidate();
     return result;
   } catch (error) {
     if (error.status !== 401) console.error(`Fetch error on ${endpoint}:`, error);
@@ -260,4 +265,5 @@ export const api = {
 };
 
 export const holdingHistoryStore = createHoldingHistoryStore((scope, includeCrypto) => api.getHoldingHistory(scope, includeCrypto));
-onAuthExpired(() => holdingHistoryStore.clear());
+export const ledgerReadStore = getLedgerReadStore(api);
+onAuthExpired(() => {holdingHistoryStore.clear();ledgerReadStore.clear();});
