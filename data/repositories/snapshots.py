@@ -6,14 +6,32 @@ from data.repository_context import RepositoryContext
 from logic.crypto_numbers import precise_holding
 
 
-def _overview_account_source(cursor):
-    """Optional private journal; never create tables or change cash on a read."""
+def _detect_cma_support(cursor):
+    """Read optional schema capability; an incomplete journal must fail visibly."""
     cursor.execute("SELECT to_regclass('portfolio_cma.income'), to_regclass('portfolio_cma.openings')")
     income, openings = cursor.fetchone()
     if not income and not openings:
-        return 'accounts'
+        return False
     if not income or not openings:
         raise RuntimeError('CMA income schema is incomplete')
+    return True
+
+
+def get_overview_cma_support(db):
+    """Startup-only capability probe; never retain or cache financial rows."""
+    conn = db.connect()
+    try:
+        return _detect_cma_support(conn.cursor())
+    finally:
+        conn.close()
+
+
+def _overview_account_source(cursor, cma_support=None):
+    """Use startup capability, with a safe probe for standalone legacy callers."""
+    if cma_support is None:
+        cma_support = _detect_cma_support(cursor)
+    if not cma_support:
+        return 'accounts'
     # Aggregate first: joining individual daily rows to openings multiplies income.
     # Both portfolio and account must match, including after an account is moved.
     return '''(SELECT a.*, COALESCE(i.amount_krw, 0) AS cma_interest_krw
@@ -70,7 +88,7 @@ def get_rebalance_batch_data(db: RepositoryContext, portfolio_id: str) -> Dict[s
     return raw
 
 
-def get_overview_batch_data(db: RepositoryContext, portfolio_id: str = None) -> Dict[str, Any]:
+def get_overview_batch_data(db: RepositoryContext, portfolio_id: str = None, *, cma_support=None) -> Dict[str, Any]:
     """
     전체 포트폴리오 요약에 필요한 모든 테이블(portfolios, accounts, assets, holdings, crypto_holdings)을
     CMA 스키마 확인 후 단일 SQL 스냅샷으로 조회. 개별 조회는 해당 장부만 읽되
@@ -131,7 +149,7 @@ def get_overview_batch_data(db: RepositoryContext, portfolio_id: str = None) -> 
     conn = db.connect()
     cursor = conn.cursor()
     try:
-        sql = sql.replace('__ACCOUNT_SOURCE__', _overview_account_source(cursor))
+        sql = sql.replace('__ACCOUNT_SOURCE__', _overview_account_source(cursor, cma_support))
         cursor.execute(sql, {"portfolio_id": None if portfolio_id is None else str(portfolio_id)})
         row = cursor.fetchone()
         raw = row[0] if row else {}

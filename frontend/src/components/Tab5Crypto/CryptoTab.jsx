@@ -7,7 +7,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Coins, RefreshCw, Edit3 } from 'lucide-react';
-import { api } from '../../utils/api';
+import { api, holdingHistoryStore } from '../../utils/api';
+import {startSummaryAndHistory} from '../../utils/viewLoading';
 
 import EditCryptoModal from './EditCryptoModal';
 import MarketStatus from '../common/MarketStatus';
@@ -104,7 +105,10 @@ export default function CryptoTab({
   }, [currentPortfolioId]);
 
   useEffect(() => {
-    loadCryptoSummary(forceRefreshOnMount);
+    void startSummaryAndHistory(
+      () => loadCryptoSummary(forceRefreshOnMount),
+      holdingHistoryStore.resource('crypto', true),
+    );
     return () => { requestSequence.current += 1; };
   }, [loadCryptoSummary, forceRefreshOnMount]);
 

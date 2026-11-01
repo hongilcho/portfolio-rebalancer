@@ -44,7 +44,7 @@ export function createPerformanceStore(portfolioId, client) {
   return {
     getSnapshot: () => state,
     subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
-    setEnabled: value => { enabled = value; },
+    setEnabled: value => { enabled = value; if (value) update({ busy: pending > 0 }); },
     // Viewing the app is read-only; the backend owns closing collection.
     refresh: () => enqueue(read),
     run: action => enqueue(async () => {

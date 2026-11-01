@@ -2,9 +2,9 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { api } from './api';
 import { createPerformanceStore } from './performanceStore';
 
-export function usePortfolioPerformance(portfolioId, loadedBundle, authenticated) {
+export function usePortfolioPerformance(portfolioId, loadedBundle, authenticated, active = true) {
   const store = useMemo(() => createPerformanceStore(portfolioId, api), [portfolioId]);
-  const enabled = authenticated && !['all', 'crypto'].includes(portfolioId)
+  const enabled = active && authenticated && !['all', 'crypto'].includes(portfolioId)
     && loadedBundle?.portfolioId === portfolioId;
   useEffect(() => {
     store.setEnabled(enabled);

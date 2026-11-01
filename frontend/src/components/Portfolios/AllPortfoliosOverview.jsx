@@ -16,7 +16,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Sparkles, RefreshCw, CheckSquare, Square } from 'lucide-react';
-import { api } from '../../utils/api';
+import { api, holdingHistoryStore } from '../../utils/api';
+import {startSummaryAndHistory} from '../../utils/viewLoading';
 
 import { createOverviewCache } from '../../utils/overviewCache';
 import MarketStatus from '../common/MarketStatus';
@@ -108,7 +109,10 @@ export default function AllPortfoliosOverview({
   useEffect(() => {
     const force = initialRefresh.current;
     initialRefresh.current = false;
-    loadOverview(force, includeCrypto);
+    void startSummaryAndHistory(
+      () => loadOverview(force, includeCrypto),
+      holdingHistoryStore.resource('all', includeCrypto),
+    );
     return () => { requestSequence.current += 1; };
   }, [loadOverview, includeCrypto]);
 

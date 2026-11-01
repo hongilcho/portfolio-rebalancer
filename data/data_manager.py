@@ -17,6 +17,9 @@ from data.repositories import (
     portfolios, accounts, assets, holdings, trades, crypto, snapshots, market_cache, forex,
 )
 
+# Schema capability only: holdings, cash, income and fees are always read live.
+_overview_cma_support = None
+
 PoolConnectionWrapper = connection.PoolConnectionWrapper
 get_connection_pool = connection.get_connection_pool
 
@@ -60,7 +63,11 @@ def _exchange_rate():
 
 
 def init_db():
-    return schema.init_db(_context(), schema_initializer=_do_init_db_schema)
+    global _overview_cma_support
+    _overview_cma_support = None
+    result = schema.init_db(_context(), schema_initializer=_do_init_db_schema)
+    _overview_cma_support = snapshots.get_overview_cma_support(_context())
+    return result
 
 
 def _do_init_db_schema(conn, cursor):
@@ -361,7 +368,9 @@ def get_rebalance_batch_data(portfolio_id: str) -> Dict[str, Any]:
 
 
 def get_overview_batch_data(portfolio_id=None) -> Dict[str, Any]:
-    return snapshots.get_overview_batch_data(_context(), portfolio_id=portfolio_id)
+    return snapshots.get_overview_batch_data(
+        _context(), portfolio_id=portfolio_id, cma_support=_overview_cma_support
+    )
 
 
 def save_market_cache(key: str, data: Any) -> bool:

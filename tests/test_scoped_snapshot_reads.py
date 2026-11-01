@@ -6,9 +6,9 @@ def test_facade_forwards_scope_without_changing_default_overview(mocker):
     ctx=object();mocker.patch.object(data_manager,'_context',return_value=ctx)
     read=mocker.patch.object(data_manager.snapshots,'get_overview_batch_data',return_value={})
     data_manager.get_overview_batch_data('p')
-    read.assert_called_with(ctx,portfolio_id='p')
+    read.assert_called_with(ctx,portfolio_id='p',cma_support=None)
     data_manager.get_overview_batch_data()
-    read.assert_called_with(ctx,portfolio_id=None)
+    read.assert_called_with(ctx,portfolio_id=None,cma_support=None)
 
 
 def test_bundle_requests_only_the_selected_financial_book(mocker):

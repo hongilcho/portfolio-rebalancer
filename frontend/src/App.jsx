@@ -1,3 +1,4 @@
+import {performanceViewActive} from './utils/viewLoading';
 /**
  * 포트폴리오 리밸런서 메인 루트 컴포넌트 (App.jsx)
  * =================================================
@@ -114,7 +115,9 @@ export default function App() {
   const [usdKrw, setUsdKrw] = useState(1380.0);
   const [rateSource, setRateSource] = useState('');
   const [loadedBundle, setLoadedBundle] = useState(null);
-  const performance = usePortfolioPerformance(currentPortfolioId, loadedBundle, isAuthenticated);
+  const performance = usePortfolioPerformance(
+    currentPortfolioId, loadedBundle, isAuthenticated, performanceViewActive(activeTab, executionInput),
+  );
   const updateMarketHeader = useCallback((snapshot) => {
     if (snapshot?.usd_krw) setUsdKrw(snapshot.usd_krw);
     if (snapshot?.rate_source) setRateSource(snapshot.rate_source);
