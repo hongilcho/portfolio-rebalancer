@@ -1,5 +1,6 @@
 import {parseNamuhMessages,resolveNamuhDraft,validateNamuhDraft} from './namuhMessage.js';
 import {estimateFee} from './tradingFees.js';
+import {parseNhDividend,resolveDividendAsset,chosenDividendDate,sameDividend} from './nhDividends.js';
 
 const normalized = text => String(text || '').normalize('NFKC').replace(/\r\n?/g,'\n').replace(/[\u200b-\u200d\ufeff]/g,'').trim();
 export const validNoticeDate = day => /^\d{4}-\d{2}-\d{2}$/.test(day || '') && Number.isFinite(Date.parse(day+'T00:00:00Z'))
@@ -11,6 +12,8 @@ const dayOf = (year,month,day) => `${year}-${String(month).padStart(2,'0')}-${St
 export function parseNhNotifications(text,anchor) {
   return normalized(text).split(/(?=\[NH투자증권\])/).map(s=>s.replace(/^\s*[-─]{3,}\s*$/gm,'').trim()).filter(Boolean).map(raw=>{
     const common={raw,eventDate:anchor,occurredAt:null,external:true,applyCash:true,duplicateConfirmed:false,accountId:'',assetId:'',accountMask:'',errors:[]};
+    const dividend=parseNhDividend(raw);
+    if(dividend)return {...common,...dividend};
     if (/^\[NH투자증권\]\s*(입금|출금)안내/.test(raw)) {
       const kind=/^\[NH투자증권\]\s*출금안내/.test(raw)?'WITHDRAW':'DEPOSIT';
       const stamp=raw.match(/\[(\d{1,2})\/(\d{1,2})\s+(\d{2}):(\d{2})\]/);
@@ -48,6 +51,7 @@ export async function noticeFingerprint(raw) {
 
 export function resolveNhNotice(parsed,accounts,assets,pid,previous=[]) {
   const resolved=resolveNamuhDraft({...parsed,ticker:parsed.ticker || ''},accounts,assets,pid);
+  if(parsed.kind==='DIVIDEND')return {...resolved,assetId:resolveDividendAsset(parsed,assets,pid)};
   if (parsed.kind==='EXCHANGE_IN' && !resolved.accountId) {
     const prior=[...previous].reverse().find(r=>r.kind==='DEPOSIT' && r.eventDate===parsed.eventDate && r.accountId);
     if (prior) return {...resolved,accountId:prior.accountId,accountWarning:'앞선 입금 계좌를 추천했습니다. 환전 계좌가 맞는지 확인해주세요.'};
@@ -85,6 +89,12 @@ export function validateNhNotice(row,context,accounts,assets,pid,pending,earlier
     errors.push(...check.errors);
     duplicate=check.manualDuplicate;
     if (earlier.some(r=>r.kind==='BUY' && r.accountId===row.accountId && r.eventDate===row.eventDate && r.brokerOrderNo===row.brokerOrderNo)) errors.push('목록에 같은 주문번호가 있습니다.');
+  } else if(row.kind==='DIVIDEND') {
+    const asset=assets.find(a=>String(a.id)===row.assetId&&(!a.portfolio_id||String(a.portfolio_id)===String(pid)));
+    if(!asset||asset.market!=='KR'||asset.is_deposit||asset.ticker==='M04020000')errors.push('배당을 지급한 국내 상장 종목을 선택해주세요.');
+    if(!validNoticeDate(row.referenceDate)||row.referenceDate>row.eventDate||row.dividendPaymentDate!==row.eventDate)errors.push('알림의 기준일·입금일을 확인해주세요.');
+    if(!Number.isSafeInteger(row.krwAmount)||row.krwAmount<=0)errors.push('실수령 배당금을 확인해주세요.');
+    if(earlier.some(r=>sameDividend(r,row))||(context?.notices||[]).some(n=>n.payload?.kind==='DIVIDEND'&&String(n.account_id)===row.accountId&&n.payload.asset_id===row.assetId&&n.payload.reference_date===row.referenceDate))errors.push('이 종목·기준일의 배당이 이미 목록이나 장부에 있습니다.');
   } else if (isCashNotice(row)) {
     const all=context?.transfer_accounts || accounts;
     const peer=all.find(a=>String(a.id)===peerAccount(row));
@@ -113,7 +123,7 @@ export function validateNhNotice(row,context,accounts,assets,pid,pending,earlier
 
 export function noticeApiRow(row,context) {
   const occurrence=row.occurredAt ? row.eventDate+row.occurredAt.slice(10):null;
-  return {kind:row.kind,account_id:row.accountId,event_date:row.eventDate,occurred_at:occurrence,
+  return {...(row.kind==='DIVIDEND'?{reference_date:row.referenceDate,dividend_ex_date:chosenDividendDate(row,context),gross_amount:row.grossAmount??null,tax_amount:row.taxAmount??null}:{}),kind:row.kind,account_id:row.accountId,event_date:row.eventDate,occurred_at:occurrence,
     source_account_id:row.sourceAccountId || null,destination_account_id:row.destinationAccountId || null,cross_portfolio:Boolean(row.crossPortfolio),counterparty_flow_id:row.crossPortfolio?chosenFlow(row,context,true):null,external:row.external,apply_cash:row.applyCash,
     existing_flow_id:isCashNotice(row)?chosenFlow(row,context):null,duplicate_confirmed:Boolean(row.duplicateConfirmed),
     fingerprint:row.fingerprint,asset_id:row.assetId || '',quantity:row.quantity || 0,price:row.price || 0,
@@ -143,6 +153,7 @@ export function previewNhNotices(rows,contexts,ledgers=[],assets=[]) {
       const fee=estimateFee(account,asset,row.eventDate,row.quantity,row.price);
       if(fee){const deferred=cash.deposit_krw<fee.amount;if(!deferred)cash.deposit_krw-=fee.amount;fees.push({id:row.id,...fee,deferred});}
     }
+    if(row.kind==='DIVIDEND'&&row.applyCash)cash.deposit_krw+=row.krwAmount;
     if (isCashNotice(row) && row.applyCash) {
       cash.deposit_krw+=cashSign(row)*row.krwAmount;
       if (!row.external && balances[peerAccount(row)]) balances[peerAccount(row)].deposit_krw-=cashSign(row)*row.krwAmount;
@@ -158,7 +169,7 @@ export function previewNhNotices(rows,contexts,ledgers=[],assets=[]) {
       else {cost.balance+=row.usdAmount;cost.cost+=row.krwAmount;cost.lastDate=row.eventDate;}
       cash.deposit_krw-=row.krwAmount;cash.deposit_usd+=row.usdAmount;
     }
-    if ([row.accountId,...(!row.external?[peerAccount(row)]:[])].some(aid=>balances[aid]?.deposit_krw < -0.000001) && !(isCashNotice(row) && !row.applyCash)) errors.push('처리 순서상 원화가 부족합니다. 입금 알림을 먼저 배치하거나 원화 잔고를 확인해주세요.');
+    if (row.kind!=='DIVIDEND' && [row.accountId,...(!row.external?[peerAccount(row)]:[])].some(aid=>balances[aid]?.deposit_krw < -0.000001) && !(isCashNotice(row) && !row.applyCash)) errors.push('처리 순서상 원화가 부족합니다. 입금 알림을 먼저 배치하거나 원화 잔고를 확인해주세요.');
   }
   return {expected,balances,costs,fees,errors:[...new Set(errors)]};
 }
@@ -167,7 +178,7 @@ const key=pid=>`nh-notice-draft/v1/${pid}`;
 export function readNoticeDraft(pid,storage) {
   try {
     const data=JSON.parse((storage || globalThis.localStorage).getItem(key(pid)));
-    if (data && Date.now()-data.savedAt < 30*86400000 && data.rows?.length<=50 && data.rows.every(r=>r && ['BUY','DEPOSIT','WITHDRAW','EXCHANGE_IN'].includes(r.kind) && typeof r.id==='string' && validNoticeDate(r.eventDate) && typeof r.accountId==='string' && Array.isArray(r.errors))) return data;
+    if (data && Date.now()-data.savedAt < 30*86400000 && data.rows?.length<=50 && data.rows.every(r=>r && ['BUY','DEPOSIT','WITHDRAW','EXCHANGE_IN','DIVIDEND'].includes(r.kind) && typeof r.id==='string' && validNoticeDate(r.eventDate) && typeof r.accountId==='string' && Array.isArray(r.errors))) return data;
   } catch { /* optional local drafts */ }
   return null;
 }

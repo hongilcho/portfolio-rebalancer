@@ -62,6 +62,7 @@ async function request(endpoint, options = {}, format = 'json') {
 }
 
 export const api = {
+  matchDividendReceipt:(pid,id,payload)=>request(`/api/nh-notices/${encodeURIComponent(pid)}/dividends/${encodeURIComponent(id)}/match`,{method:'POST',body:JSON.stringify(payload)}),
   getRealizedGains:(pid,params={})=>request(`/api/trades/realized?${new URLSearchParams({portfolio_id:pid,...params})}`),
   getInvestmentCapabilities:()=>request('/api/investments/capabilities'),
   getInvestments:pid=>request(`/api/investments/${encodeURIComponent(pid)}`),

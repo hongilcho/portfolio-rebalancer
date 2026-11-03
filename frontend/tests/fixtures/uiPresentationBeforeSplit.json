@@ -14,7 +14,8 @@
     "cma_interest": "2026-10-14: intentional collapsed CMA balance/income panel in tab 5; disabled-by-default status, confirmed interest preview, exact retry receipt, bounded daily checks and opt-in automatic policy. Only two history hashes change; dedicated synthetic CMA UI and accounting tests cover the addition. Period graph unchanged.",
     "realized_gains": "2026-10-17: intentional optional cost disclosure and full-sale quantity action in the common trade form. Only the two history hashes changed; realizedGains tests cover fee certainty and remaining quantities. All unrelated markup retained.",
     "trading_fees": "2026-10-23: account category fee schedules, shared automatic-cost disclosure and collapsed audited cash settlement panel reviewed. Only two account-form and two history hashes changed; financial behavior covered by synthetic and isolated PostgreSQL validation.",
-    "crypto_1600_history": "2026-10-27: adds a shared daily crypto history panel and fixed 16:00 explanations. Only three overview and two crypto presentation hashes change. Existing cards and all unrelated markup are preserved; history behavior and missing-data notices are tested separately."
+    "crypto_1600_history": "2026-10-27: adds a shared daily crypto history panel and fixed 16:00 explanations. Only three overview and two crypto presentation hashes change. Existing cards and all unrelated markup are preserved; history behavior and missing-data notices are tested separately.",
+    "nh_dividend_receipts": "2026-11-03: adds dividend support to NH help text and the cash-history filter label. Only two history snapshots change; dividend parsing, confirmation, actual net and cash-only fallback are independently tested in nhDividends and nhNoticeControls. Other snapshots retain their prior hashes."
   },
   "sha256": {
     "dashboard/KRW": "4526d0aad14d81e84f33b6fde734913d01a88a56a5996984b343ff531ad24065",
@@ -27,8 +28,8 @@
     "settings/edit-account": "50372c541f73d242a5c22f43b8ffc1c631afe22e1d5357a240526fdd183fa911",
     "settings/new-US-asset": "cd33edb1f4eb41667dddb49789064e880643c0d959bfbb5b3f8170ad3a412e84",
     "settings/edit-deposit": "bab4e8d4b9825adffea6eb5b99d9615df29eaa96b26f62603185c66c4b06864d",
-    "history/empty": "272862da9d407694b46f39865d9d2c3effcd36350374f33295d8521df7d357e3",
-    "history/filled-forms": "9ee04ae9a3097b4a28a1ef2bfbf62c754ee2577e30c00d52796496e182cf849b",
+    "history/empty": "7200b210d3e24c3ef7927c829db1be1bc53fcc8aeb27366ae214a6418c8692bf",
+    "history/filled-forms": "65abf555117c2a580b1fcd65eb92425996cc4e0a53b52fb004c61312f40dfc1d",
     "overview/KRW": "36bcf64cd04957710a23fccca7ec023e584a3730aaaa204bda9475b9e14e3927",
     "overview/USD": "78e604f6f6173ad9010f4e12c626f74afed72f219fb1a6bf662417690b807c3a",
     "overview/no-crypto": "ff8e9f2607e37b248495e37b0c56b13fbad01007f883d1e07931d68c983d80d8",

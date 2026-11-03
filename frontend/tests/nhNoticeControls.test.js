@@ -52,6 +52,14 @@ try{
   const Edit=(await server.ssrLoadModule('/src/components/Tab1Dashboard/EditHoldingsModal.jsx')).default;
   const render=(component,props,state)=>{globalThis.__nhStates=state;globalThis.__nhHandlers=[];globalThis.__nhEffects=[];return renderToStaticMarkup(React.createElement(component,props));};
   const state={open:true,rows:[row],contexts:{[day]:context},confirmed:true,loading:false};
+  test('dividend receipt review shows actual net, cash-only fallback and a visible confirmed save',()=>{
+    const dividend={id:'qa-div',kind:'DIVIDEND',accountId:'isa',assetId:'bond',eventDate:day,dividendPaymentDate:day,referenceDate:'2026-10-01',krwAmount:4025,grossAmount:4025,taxAmount:0,external:false,applyCash:true,errors:[],fingerprint:'a'.repeat(64)};
+    const html=render(Import,props,{...state,rows:[dividend],contexts:{[day]:context}});
+    assert.match(html,/실수령 4,025/);assert.match(html,/배당 종목/);assert.match(html,/입금만 기록/);
+    assert.match(html,/외부 투자금으로 기록하지 않습니다/);
+    assert.match(html,/<button type="button" class="btn btn-primary">확인한 알림 1건 장부에 일괄 반영/);
+    assert.doesNotMatch(html,/role="alert"/);
+  });
   test('a missing-account buy cannot save until manual account choice, then final confirmation enables save',()=>{
     const missing=render(Import,props,state);assert.match(missing,/<button[^>]*disabled=""[^>]*>확인한 알림 1건 장부에 일괄 반영/);
     const corrected=render(Import,props,{...state,rows:[{...row,accountId:'isa'}]});

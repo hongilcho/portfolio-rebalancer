@@ -4,8 +4,9 @@ import {api} from '../../utils/api';
 import {formatKRW,formatUSD} from '../../utils/formatters';
 import {kstToday} from '../../utils/depositMaturities';
 import {recentMonths,recordAmount} from '../../utils/activityHistory';
+import DividendReceiptMatch from './DividendReceiptMatch';
 
-const kindNames={PAST_WITHDRAWAL:'과거 출금 누락 정정',CASH:'예수금 정정',HOLDING:'보유 수량·원가 정정',BUY:'매수',SELL:'매도',DEPOSIT:'입금',WITHDRAW:'출금',EXCHANGE_IN:'원화 → 달러',EXCHANGE_OUT:'달러 → 원화',OPENING:'달러 시작 기준',RECONCILE:'달러 원가 조정',KRW_ADJUST:'원화 잔고 조정',INTERNAL_TRANSFER:'원화 내부 이체'};
+const kindNames={DIVIDEND:'배당·분배금',PAST_WITHDRAWAL:'과거 출금 누락 정정',CASH:'예수금 정정',HOLDING:'보유 수량·원가 정정',BUY:'매수',SELL:'매도',DEPOSIT:'입금',WITHDRAW:'출금',EXCHANGE_IN:'원화 → 달러',EXCHANGE_OUT:'달러 → 원화',OPENING:'달러 시작 기준',RECONCILE:'달러 원가 조정',KRW_ADJUST:'원화 잔고 조정',INTERNAL_TRANSFER:'원화 내부 이체'};
 Object.assign(kindNames,{COST_SETTLEMENT:'거래비용 차이 정산',BALANCE_SETTLEMENT:'예수금 차이 정산'});
 export default function ActivityHistory({portfolioId,accounts,assets=[],active,revision=0,onChanged,onBusyChange,onReviewCorrection}){
   const [filters,setFilters]=useState(()=>({start_date:recentMonths(kstToday()),end_date:kstToday(),account_id:'',category:'',asset_id:'',include_cancelled:false}));
@@ -32,9 +33,15 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
     return()=>{cancelled=true;};
   },[portfolioId,active,filters,page,revision,reload]);
   const filter=(key,value)=>{setFilters(old=>({...old,[key]:value,...(key==='category'?{asset_id:''}:{})}));setPage(1);setMessage('');};
+  const matchDividend=async(item,exDate)=>{
+    setSaving(true);setMessage('');try{
+      await api.matchDividendReceipt(portfolioId,item.id.replace(/^NOTICE:/,''),{request_id:crypto.randomUUID(),confirmed:true,ex_date:exDate});
+      setMessage('배당 손익을 실수령액으로 확인했습니다. 예수금은 변경하지 않았습니다.');setReload(n=>n+1);await onChanged?.();
+    }catch(e){setMessage(e.message);}finally{setSaving(false);}
+  };
   const cancel=async item=>{
     const restore=item.cancelled && item.category==='CASH' && item.detail.can_restore;
-    const prompt=item.batch_id?'같은 알림 묶음의 입출금·이체·환전·매수를 함께 취소합니다. 이후 잔고 변경이 있으면 취소가 거절될 수 있습니다.':restore?'이 입출금 성과 기록을 복원할까요? 예수금은 변경하지 않습니다.':item.category==='TRADE'?'매매를 취소하고 예수금·수량·원가를 되돌릴까요?':item.category==='CASH'?(item.detail.usd_event_id?'달러 입출금의 잔고·원가·성과 기록을 함께 취소할까요?':'외부 입출금 성과 기록을 취소할까요? 예수금은 변경하지 않습니다.'):'이 현금·원가 기록을 취소하고 이전 상태로 되돌릴까요?';
+    const prompt=item.batch_id?'같은 알림 묶음의 배당·입출금·이체·환전·매수를 함께 취소합니다. 이후 잔고 변경이 있으면 취소가 거절될 수 있습니다.':restore?'이 입출금 성과 기록을 복원할까요? 예수금은 변경하지 않습니다.':item.category==='TRADE'?'매매를 취소하고 예수금·수량·원가를 되돌릴까요?':item.category==='CASH'?(item.detail.usd_event_id?'달러 입출금의 잔고·원가·성과 기록을 함께 취소할까요?':'외부 입출금 성과 기록을 취소할까요? 예수금은 변경하지 않습니다.'):'이 현금·원가 기록을 취소하고 이전 상태로 되돌릴까요?';
     if(!window.confirm(prompt))return;
     setSaving(true);setError('');setMessage('');let recorded=false;
     try{
@@ -62,7 +69,7 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
       <label>시작일<input className="input-text" aria-label="기록 조회 시작일" type="date" required value={filters.start_date} max={filters.end_date} onChange={e=>filter('start_date',e.target.value)}/></label>
       <label>종료일<input className="input-text" aria-label="기록 조회 종료일" type="date" required value={filters.end_date} min={filters.start_date} onChange={e=>filter('end_date',e.target.value)}/></label>
       <label>계좌<select className="input-select" aria-label="기록 조회 계좌" value={filters.account_id} onChange={e=>filter('account_id',e.target.value)}><option value="">전체 계좌</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.account_alias}</option>)}</select></label>
-      <label>기록 종류<select className="input-select" aria-label="기록 조회 종류" value={filters.category} onChange={e=>filter('category',e.target.value)}><option value="">전체 기록</option><option value="TRADE">매매</option><option value="CASH">외부 입출금·내부 이체</option><option value="USD">달러 원가·환전</option><option value="ADJUST">장부 정정</option></select></label>
+      <label>기록 종류<select className="input-select" aria-label="기록 조회 종류" value={filters.category} onChange={e=>filter('category',e.target.value)}><option value="">전체 기록</option><option value="TRADE">매매</option><option value="CASH">입출금·배당·이체</option><option value="USD">달러 원가·환전</option><option value="ADJUST">장부 정정</option></select></label>
       <label className="history-check"><input type="checkbox" checked={filters.include_cancelled} onChange={e=>filter('include_cancelled',e.target.checked)}/>취소 기록 포함</label>
       <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setReload(n=>n+1)}><RotateCcw size={14}/>다시 조회</button>
     </fieldset>
@@ -85,6 +92,8 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
             {d.reported_available_krw!=null && <p>알림의 출금가능금액 {formatKRW(Number(d.reported_available_krw))} · 참고값</p>}{d.occurred_at && <p>실제 일시 {new Date(d.occurred_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})}</p>}
             {d.balance!=null && <p>처리 후 달러 {formatUSD(Number(d.balance))} · 원화 취득원가 {formatKRW(Number(d.cost_krw))}</p>}
             {d.source_account && <p>출금 계좌: {d.source_account}</p>}{d.destination_account && <p>입금 계좌: {d.destination_account}</p>}{d.peer_account && <p>이체 상대 계좌: {d.peer_account}</p>}{item.category==='CASH' && !d.flow_id && d.cash_applied===false && <p>과거 이력만 저장 · 예수금 변경 없음</p>}{d.broker_order_no && <p>주문번호 {d.broker_order_no}</p>}
+            {item.kind==='DIVIDEND'&&!item.cancelled&&!d.dividend_matched&&<DividendReceiptMatch item={item} portfolioId={portfolioId} disabled={saving} onMatch={matchDividend}/>}
+            {item.kind==='DIVIDEND' && <p>배당 기준일 {d.reference_date} · {d.dividend_matched?'기존 배당을 실수령액으로 확인':'예수금 입금 기록 · 손익은 기존 자동 계산 유지'} · 외부 투자금 아님</p>}
             {d.notes && <p>{d.notes}</p>}{item.category==='CASH' && d.flow_id && <p>{d.cash_linked?(d.usd_event_id?'달러 잔고·원가·성과 함께 반영':d.cash_applied?'성과 기록·예수금 함께 반영':'NH 알림 연결 · 성과 기록만'):'성과 계산용 입출금 기록'} · {formatKRW(Number(d.amount_krw))}</p>}
             {item.batch_id && <p>같은 알림 묶음의 입출금·이체·환전·매수는 함께 취소됩니다. 묶음 ID: {item.batch_id.slice(0,8)}</p>}
             {canCancel && item.category==='TRADE' && !item.batch_id && <label className="history-check"><input type="checkbox" disabled={saving} checked={selectedTrades.includes(d.trade_id)} onChange={e=>setSelectedTrades(old=>e.target.checked?[...old,d.trade_id]:old.filter(id=>id!==d.trade_id))}/>여러 매매를 함께 취소할 목록에 선택</label>}

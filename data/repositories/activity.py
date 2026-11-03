@@ -38,15 +38,17 @@ ACTIVITY = '''WITH activity AS (
  UNION ALL
  SELECT 'NOTICE:'||n.id,CASE WHEN n.kind='KRW_ADJUST' THEN 'ADJUST' ELSE 'CASH' END,
    n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
-   CASE WHEN n.kind='KRW_ADJUST' THEN 'KRW_ADJUST' WHEN n.payload->>'external'='false' AND COALESCE(n.payload->>'transfer','false')='false' THEN 'INTERNAL_TRANSFER' ELSE n.kind END,'KRW',
-   (n.payload->>'krw_amount')::numeric,CASE WHEN n.payload->>'transfer'='true' THEN '포트폴리오 간 이체' ELSE '원화 입출금·잔고' END,n.reversed_at IS NOT NULL,
+   CASE WHEN n.kind='DIVIDEND' THEN 'DIVIDEND' WHEN n.kind='KRW_ADJUST' THEN 'KRW_ADJUST' WHEN n.payload->>'external'='false' AND COALESCE(n.payload->>'transfer','false')='false' THEN 'INTERNAL_TRANSFER' ELSE n.kind END,'KRW',
+   (n.payload->>'krw_amount')::numeric,CASE WHEN n.kind='DIVIDEND' THEN '배당·분배금 입금' WHEN n.payload->>'transfer'='true' THEN '포트폴리오 간 이체' ELSE '원화 입출금·잔고' END,n.reversed_at IS NOT NULL,
    CASE WHEN n.reversed_at IS NULL THEN n.batch_id END,b.created_at,
    jsonb_build_object('source_account',src.account_alias,'destination_account',dest.account_alias,'peer_account',peer.account_alias,'cash_applied',n.payload->>'apply_cash'='true','notes',n.payload->>'notes',
-     'occurred_at',n.payload->>'occurred_at','reported_available_krw',n.payload->>'reported_available_krw','delta_krw',n.result->>'delta_krw','previous_batch_id',n.batch_id)
+     'occurred_at',n.payload->>'occurred_at','reported_available_krw',n.payload->>'reported_available_krw','delta_krw',n.result->>'delta_krw','previous_batch_id',n.batch_id,
+     'asset_id',n.payload->>'asset_id','reference_date',n.payload->>'reference_date','dividend_ex_date',n.payload->>'dividend_ex_date',
+     'gross_amount',n.payload->'gross_amount','tax_amount',n.payload->'tax_amount','dividend_matched',n.result->'dividend_matched')
  FROM nh_notice_items n JOIN nh_notice_batches b ON b.id=n.batch_id
  LEFT JOIN accounts a ON a.id=n.account_id LEFT JOIN accounts src ON src.id=n.payload->>'source_account_id'
  LEFT JOIN accounts dest ON dest.id=n.payload->>'destination_account_id' LEFT JOIN accounts peer ON peer.id=n.payload->>'peer_account_id'
- WHERE n.portfolio_id=%(pid)s AND (n.kind='KRW_ADJUST' OR (n.kind IN ('DEPOSIT','WITHDRAW') AND n.performance_flow_id IS NULL))
+ WHERE n.portfolio_id=%(pid)s AND (n.kind IN ('KRW_ADJUST','DIVIDEND') OR (n.kind IN ('DEPOSIT','WITHDRAW') AND n.performance_flow_id IS NULL))
  UNION ALL
  SELECT 'CORRECTION:'||l.id,'ADJUST',l.event_date::text,l.account_id,a.account_alias,l.kind,
    CASE WHEN l.kind='HOLDING' THEN 'UNIT' ELSE l.request->'proposal'->>'currency' END,

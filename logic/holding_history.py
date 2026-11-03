@@ -68,6 +68,7 @@ def financial(ledger,prices,fx,day,*,reconstructed=False,evidence=None,dividend_
                         if not evidence or not evidence.supports(h,trades or [],records,day):
                             raise ValueError('당시 보유 수량과 매매 이력 대조 필요')
             index=dividend_context.index(trade_source,h['account_id'],h['asset_id']) if dividend_context else None
+            h={**h,'dividend_as_of':str(day)}
             return calculate_holding_dividends(h,a,usd_krw,account_type,trades,records,quantity_index=index)
         result=evaluate_portfolio(accounts,assets,index_valuation_inputs(holdings,trades,price_rows),price_map,fx,calculate_adjustment=adjustment)
         return {**from_kpi(result['kpi']),'source':'RECONSTRUCTED' if reconstructed else 'RECORDED'}

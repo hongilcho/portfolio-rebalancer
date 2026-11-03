@@ -3,6 +3,7 @@ from datetime import datetime
 from psycopg2.extras import RealDictCursor
 from data.repository_context import RepositoryContext
 from data.repositories.forex import enabled
+from data.repositories.dividend_receipts import HOLDING_RECEIPTS_SQL, normalize as normalize_receipts
 
 def get_holdings_by_account(db: RepositoryContext, account_id):
     conn = db.connect()
@@ -11,7 +12,7 @@ def get_holdings_by_account(db: RepositoryContext, account_id):
         cursor.execute('''
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
-                   a.is_dividend_cost_deduct,
+                   a.is_dividend_cost_deduct, __DIVIDEND_RECEIPTS__,
                    acc.account_type, acc.account_alias,
                    (
                        SELECT 
@@ -32,9 +33,9 @@ def get_holdings_by_account(db: RepositoryContext, account_id):
             JOIN assets a ON h.asset_id = a.id
             JOIN accounts acc ON h.account_id = acc.id
             WHERE h.account_id = %s
-        ''', (str(account_id),))
+        '''.replace('__DIVIDEND_RECEIPTS__',HOLDING_RECEIPTS_SQL), (str(account_id),))
         rows = cursor.fetchall()
-        return [dict(r) for r in rows]
+        return [normalize_receipts(r) for r in rows]
     finally:
         conn.close()
 
@@ -46,18 +47,19 @@ def get_all_holdings(db: RepositoryContext, portfolio_id: str = None):
         sql = '''
             SELECT h.*, a.name as asset_name, a.ticker, a.market, a.is_risk_asset,
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
-                   a.is_dividend_cost_deduct,
+                   a.is_dividend_cost_deduct, __DIVIDEND_RECEIPTS__,
                    acc.account_alias, acc.account_type
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
             JOIN accounts acc ON h.account_id = acc.id
         '''
+        sql=sql.replace('__DIVIDEND_RECEIPTS__',HOLDING_RECEIPTS_SQL)
         if portfolio_id:
             cursor.execute(sql + ' WHERE acc.portfolio_id = %s', (portfolio_id,))
         else:
             cursor.execute(sql)
         rows = cursor.fetchall()
-        return [dict(r) for r in rows]
+        return [normalize_receipts(r) for r in rows]
     finally:
         conn.close()
 

@@ -4,6 +4,7 @@ from typing import Dict, Any
 from data.normalization import sanitize_account_names, _normalize_asset
 from data.repository_context import RepositoryContext
 from logic.crypto_numbers import precise_holding
+from data.repositories.dividend_receipts import HOLDING_RECEIPTS_SQL, normalize as normalize_receipts
 
 
 def _detect_cma_support(cursor):
@@ -117,7 +118,7 @@ def get_overview_batch_data(db: RepositoryContext, portfolio_id: str = None, *, 
                    a.is_deposit, a.deposit_principal, a.interest_rate, a.start_date, a.maturity_date, a.tax_rate, a.lock_rebalance_sell,
                    a.is_dividend_cost_deduct,
                    acc.account_alias, acc.account_type,
-                   starts.min_trade_date
+                   starts.min_trade_date, __DIVIDEND_RECEIPTS__
             FROM holdings h
             JOIN assets a ON h.asset_id = a.id
             JOIN scoped_accounts acc ON h.account_id = acc.id
@@ -149,7 +150,7 @@ def get_overview_batch_data(db: RepositoryContext, portfolio_id: str = None, *, 
     conn = db.connect()
     cursor = conn.cursor()
     try:
-        sql = sql.replace('__ACCOUNT_SOURCE__', _overview_account_source(cursor, cma_support))
+        sql = sql.replace('__ACCOUNT_SOURCE__', _overview_account_source(cursor, cma_support)).replace('__DIVIDEND_RECEIPTS__', HOLDING_RECEIPTS_SQL)
         cursor.execute(sql, {"portfolio_id": None if portfolio_id is None else str(portfolio_id)})
         row = cursor.fetchone()
         raw = row[0] if row else {}
@@ -178,6 +179,7 @@ def get_overview_batch_data(db: RepositoryContext, portfolio_id: str = None, *, 
         r['include_in_rebalance'] = bool(r.get('include_in_rebalance', True) if r.get('include_in_rebalance') is not None else True)
         r['is_dividend_cost_deduct'] = bool(r.get('is_dividend_cost_deduct', False))
         processed_assets.append(r)
+    raw['holdings'] = [normalize_receipts(h) for h in raw.get('holdings',[])]
     raw['assets'] = processed_assets
     raw['crypto_holdings'] = [precise_holding(h) for h in raw.get('crypto_holdings',[])]
     return raw

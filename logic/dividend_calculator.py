@@ -4,6 +4,7 @@ All quotes, FX and dividend records are supplied by the caller. No DB/provider I
 """
 from typing import List, Dict, Any, Optional
 from logic.dividend_quantity import DividendQuantityIndex
+from logic.dividend_receipts import apply_receipts
 
 
 def dividend_lookup_key(asset):
@@ -175,7 +176,7 @@ def calculate_holding_dividends(
     final_avg_krw = orig_krw if orig_krw > 0 else curr_krw
     final_avg_usd = orig_usd if orig_usd > 0 else curr_usd
 
-    return {
+    return apply_receipts({
         "avg_price": final_avg_krw,
         "avg_price_usd": round(final_avg_usd, 2),
         "original_avg_price": final_avg_krw,
@@ -193,4 +194,4 @@ def calculate_holding_dividends(
         "is_dividend_cost_deduct": False,  # 구 배당차감 비활성화 -> Total Return 일원화
         "buy_fx_rate": buy_fx_rate,
         "account_type": effective_acc_type
-    }
+    }, holding)

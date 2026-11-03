@@ -17,7 +17,7 @@ class Cash(BaseModel):
 
 class Row(BaseModel):
     execution: ExecutionLink | None = None
-    kind: Literal['BUY','DEPOSIT','WITHDRAW','EXCHANGE_IN','KRW_ADJUST']
+    kind: Literal['BUY','DEPOSIT','WITHDRAW','EXCHANGE_IN','KRW_ADJUST','DIVIDEND']
     account_id: str = Field(min_length=1,max_length=100)
     event_date: date
     occurred_at: datetime | None = None
@@ -30,6 +30,10 @@ class Row(BaseModel):
     existing_flow_id: str | None = None
     duplicate_confirmed: bool = False
     fingerprint: str = Field(default='',pattern=r'^(?:[0-9a-f]{64})?$')
+    reference_date: date | None = None
+    dividend_ex_date: date | None = None
+    gross_amount: float | None = Field(default=None,ge=0,le=1e15,allow_inf_nan=False)
+    tax_amount: float | None = Field(default=None,ge=0,le=1e15,allow_inf_nan=False)
     asset_id: str = ''
     quantity: float = Field(default=0,ge=0,le=1e12,allow_inf_nan=False)
     price: float = Field(default=0,ge=0,le=1e12,allow_inf_nan=False)
@@ -61,3 +65,15 @@ def commit(pid:str,req:Batch):
 @router.delete('/{pid}/batch/{batch_id}')
 def undo(pid:str,batch_id:str):
     return perform(nh_notices.undo,pid,batch_id)
+
+
+class DividendMatch(BaseModel):
+    request_id: str = Field(min_length=8,max_length=100)
+    confirmed: Literal[True]
+    ex_date: date
+
+
+@router.post('/{pid}/dividends/{notice_id}/match')
+def match_dividend(pid:str,notice_id:str,req:DividendMatch):
+    from data.repositories.dividend_receipts import match
+    return perform(match,pid,notice_id,req.model_dump(mode='json'))

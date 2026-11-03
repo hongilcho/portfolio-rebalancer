@@ -39,7 +39,8 @@ def test_unfiltered_holdings_remain_backward_compatible(database):
     cursor.fetchall.return_value = []
     assert dm.get_all_holdings() == []
     assert len(cursor.execute.call_args.args) == 1
-    assert "WHERE" not in cursor.execute.call_args.args[0]
+    # Receipt subqueries are scoped; the outer holdings query remains unfiltered.
+    assert "WHERE" not in cursor.execute.call_args.args[0].split("JOIN accounts acc ON h.account_id = acc.id")[-1]
     conn.close.assert_called_once_with()
 
 

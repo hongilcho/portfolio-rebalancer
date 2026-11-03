@@ -43,6 +43,7 @@ class NoticeDatabase(DatabaseAdapter):
 def db():
     database=NoticeDatabase()
     database.raw.executescript('''
+      CREATE TABLE market_cache(key TEXT PRIMARY KEY,data TEXT);
       ALTER TABLE accounts ADD COLUMN account_alias TEXT DEFAULT 'Test';
       ALTER TABLE assets ADD COLUMN ticker TEXT DEFAULT '0085P0';
       ALTER TABLE trade_history ADD COLUMN import_source TEXT;
