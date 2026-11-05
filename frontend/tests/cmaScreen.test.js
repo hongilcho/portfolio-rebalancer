@@ -23,7 +23,7 @@ const server=await createServer({root:fileURLToPath(new URL('../',import.meta.ur
   }}]});
 try{
   const Panel=(await server.ssrLoadModule('/src/components/Tab4History/CmaIncomePanel.jsx')).default;
-  const render=states=>{globalThis.__cmaState=states;return renderToStaticMarkup(React.createElement(Panel,{portfolioId:'p'}));};
+  const render=(states,props={})=>{globalThis.__cmaState=states;return renderToStaticMarkup(React.createElement(Panel,{portfolioId:'p',...props}));};
   test('disabled feature exposes no query or write button',()=>{
     const html=render({data:{enabled:false}});
     assert.match(html,/운영 검증과 승인 후/);assert.doesNotMatch(html,/NH CMA 잔고 확인|CMA 이자로 반영/);
@@ -84,5 +84,14 @@ try{
         cash_krw:'0',sweep_krw:'1043',total_krw:'1043',withdrawable_krw:'1040',posted_krw:'1020',unposted_valuation_krw:'23'}});
     assert.match(html,/지급 완료 기준 장부 반영 잔액 1,020 원/);
     assert.match(html,/지급 확인 전 평가 차이 23 원/);assert.match(html,/이자로 반영하지 않습니다/);
+  });
+  test('unknown cash gap offers a correction handoff without an interest posting button',()=>{
+    const html=render({aid:'cma',data:{enabled:true,writes_enabled:true,accounts:[{id:'cma',account_alias:'CMA',deposit_krw:3000086}],income:[],checks:[]},observation:{state:'CASH_RETURNED',total_krw:'3002498',observed_at:'2026-11-05T12:00:00+09:00'},preview:{book_krw:'3000086',broker_krw:'3002498',interest_krw:'2412',can_apply:false,status:'STATEMENT_REQUIRED'}},{onReviewBalance:()=>{}});
+    assert.match(html,/잔고 차이 정정하기/);assert.match(html,/3,002,498 원/);assert.match(html,/이자로 단정하지 않고/);assert.doesNotMatch(html,/>CMA 이자로 반영</);
+    assert.match(html,/<details class="cma-review-details"><summary>상세 조회값·이자 확인 근거/);
+  });
+  test('zero after withdrawal prioritizes missing transfer rather than replacing the ledger with zero',()=>{
+    const html=render({aid:'cma',data:{enabled:true,accounts:[{id:'cma',account_alias:'CMA',deposit_krw:3000086}],income:[],checks:[]},observation:{state:'ZERO_UNVERIFIED',total_krw:'0',observed_at:'2026-11-05T12:00:00+09:00'}},{onReviewBalance:()=>{},onReturnToInput:()=>{}});
+    assert.match(html,/누락된 이체부터 입력하기/);assert.match(html,/이체를 모두 기록했는데 잔고가 다른가요/);assert.doesNotMatch(html,/>잔고 차이 정정하기</);
   });
 }finally{await server.close();globalThis.fetch=originalFetch;delete globalThis.__cmaState;}

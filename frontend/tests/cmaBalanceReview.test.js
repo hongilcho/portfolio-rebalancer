@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {cmaBalanceReview,cmaMoney} from '../src/utils/cmaBalanceReview.js';
+const a={deposit_krw:3000086};
+test('missing money stays unknown, explicit zero is preserved',()=>{for(const v of [undefined,null,'',' ',NaN,Infinity])assert.equal(cmaMoney(v),null);assert.equal(cmaMoney('0'),0);});
+test('statement-unverified cash difference is not described as interest',()=>{const r=cmaBalanceReview(a,{state:'CASH_RETURNED',total_krw:'3002498'},{book_krw:'3000086',broker_krw:'3002498',interest_krw:'2412',can_apply:false});assert.equal(r.delta,2412);assert.equal(r.target,3002498);assert.equal(r.interestReady,false);assert.match(r.description,/이자로 단정하지 않고/);});
+test('withdrawal availability and unverified zero cannot prefill a correction',()=>{for(const o of [{state:'ZERO_UNVERIFIED',total_krw:'0',withdrawable_krw:'0'},{state:'UNVERIFIED',withdrawable_krw:'3002498'},{state:'AWAITING_CASH_RETURN',total_krw:'3002498'}]){const r=cmaBalanceReview(a,o);assert.equal(r.target,null);assert.equal(r.delta,null);assert.equal(r.interestReady,false);}});
+test('posted principal excludes unpaid valuation',()=>{const r=cmaBalanceReview({deposit_krw:1000},{state:'CMA_PRINCIPAL_VERIFIED',posted_krw:'1020',total_krw:'1043',withdrawable_krw:'1040'});assert.equal(r.target,1020);assert.equal(r.delta,20);assert.equal(r.interestReady,false);});
+test('confirmed positive interest keeps the existing posting gate',()=>{const r=cmaBalanceReview(a,{state:'CASH_RETURNED',total_krw:'3000274'},{can_apply:true,interest_krw:'188'});assert.equal(r.interestReady,true);assert.equal(r.tone,'ready');});
+test('matched balances need no correction and a negative delta stays negative',()=>{assert.equal(cmaBalanceReview(a,{state:'CASH_RETURNED',total_krw:'3000086'}).tone,'matched');const r=cmaBalanceReview(a,{state:'CASH_RETURNED',total_krw:'3000000'});assert.equal(r.delta,-86);assert.equal(r.tone,'review');});

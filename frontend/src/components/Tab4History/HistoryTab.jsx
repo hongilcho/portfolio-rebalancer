@@ -99,6 +99,8 @@ export default function HistoryTab({
   const [noticeCorrection,setNoticeCorrection]=useState(null);
   const [correctionResult,setCorrectionResult]=useState(null);
   const [correctionReset,setCorrectionReset]=useState(null);
+  const [cashReview,setCashReview]=useState(null);
+  const returnToCashInput=()=>{setView('input');setMethod('nh');requestAnimationFrame(()=>document.getElementById('history-input-panel')?.scrollIntoView?.({behavior:'smooth',block:'start'}));};
   const correctionCompleted=useCallback(result=>{setCorrectionResult(result);setNoticeCorrection(null);},[]);
   const [method,setMethod]=useState(()=>{
     if(embedded && pendingSubmission)return 'manual';
@@ -327,9 +329,9 @@ export default function HistoryTab({
         {!embedded && <LedgerCorrectionPanel hidden={embedded} key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
           resetRequest={correctionReset} noticeRequest={noticeCorrection?.source?.portfolioId===currentPortfolioId?noticeCorrection:null} onNoticeSettled={correctionCompleted}
           reviewRequest={reviewCorrection?.portfolioId===currentPortfolioId?reviewCorrection:null} active={active && !embedded && effectiveView==='input'} disabled={busy && !childBusy.correction} onBusyChange={correctionBusy} onChanged={changed}/>}
-        {!embedded && <CashSettlementPanel key={`settlement/${currentPortfolioId}`} portfolioId={currentPortfolioId} accounts={accounts} disabled={busy && !childBusy.settlement} onBusyChange={settlementBusy} onChanged={changed}/>}
+        {!embedded && <CashSettlementPanel key={`settlement/${currentPortfolioId}`} portfolioId={currentPortfolioId} accounts={accounts} disabled={busy && !childBusy.settlement} onBusyChange={settlementBusy} onChanged={changed} reviewRequest={cashReview?.portfolioId===currentPortfolioId?cashReview:null} onReturnToInput={returnToCashInput}/>}
         {!embedded && <CmaIncomePanel key={`cma/${currentPortfolioId}`} portfolioId={currentPortfolioId}
-          active={active && effectiveView==='input'} disabled={busy && !childBusy.cma} onBusyChange={cmaBusy} onChanged={changed}/>}
+          active={active && effectiveView==='input'} disabled={busy && !childBusy.cma} onBusyChange={cmaBusy} onChanged={changed} revision={recordRevision} onReviewBalance={request=>setCashReview({...request,portfolioId:currentPortfolioId,key:crypto.randomUUID()})} onReturnToInput={returnToCashInput}/>}
       </div>
       {!embedded && <div id="history-record-panel" role="tabpanel" aria-labelledby="history-record-tab" hidden={effectiveView!=='records'}>
         <ActivityHistory key={currentPortfolioId} portfolioId={currentPortfolioId} accounts={accounts} assets={assets}
