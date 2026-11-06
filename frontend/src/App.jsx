@@ -69,6 +69,8 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState('tab1');
+  const [analysisFocus,setAnalysisFocus]=useState(null);
+  const openRealizedReport=()=>{setAnalysisFocus({section:'realized',key:crypto.randomUUID()});setActiveTab('tab6');};
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -333,6 +335,7 @@ export default function App() {
                     assets={assets}
                     accounts={accounts}
                     currencyMode={currencyMode}
+                    onOpenRealized={openRealizedReport}
                     onRefresh={() => loadAllData(true, currentPortfolioId)}
                   />
                 )}
@@ -395,6 +398,7 @@ export default function App() {
                     assets={assets}
                     dashboardData={dashboardData}
                     performance={performance}
+                    focusRequest={analysisFocus}
                     onOpenHistory={() => setActiveTab('tab4')}
                   />
                 )}

@@ -5,7 +5,7 @@ import {profitColor,splitProfitSegment,zeroReference} from '../../utils/profitCh
 import {ProfitStatus,ZeroLine,ZeroOutside,SignedSelection} from '../common/ProfitChartSignals';
 import './HoldingsPerformance.css';
 
-export default function HoldingsPerformance({scope,current,components=[],includeCrypto=false,initialData}){
+export default function HoldingsPerformance({scope,current,components=[],includeCrypto=false,initialData,onOpenPeriod}){
   const {data,loading,error}=useHoldingHistory(scope,includeCrypto,initialData);
   const [metric,setMetric]=useState('profit_krw'),[range,setRange]=useState('90'),[period,setPeriod]=useState('day');
   const [selected,setSelected]=useState(null),[breakdown,setBreakdown]=useState(false);
@@ -41,6 +41,7 @@ export default function HoldingsPerformance({scope,current,components=[],include
   const missingNames=coverage?.missing_components?.map(c=>c.id==='crypto'?'가상자산':components.find(p=>p.id===c.id)?.name||data?.portfolios?.find(p=>p.id===c.id)?.name||'일부 포트폴리오');
   return <section className="section-card holdings-trend" aria-labelledby={heading}>
     <div className="holdings-trend-title"><h3 id={heading}>{scope==='all'?'전체 자산 손익 추이':cryptoOnly?'가상자산 손익 추이':'보유자산 손익 추이'}</h3><span className="badge" role={loading&&data?'status':undefined}>{loading&&data?'기록 갱신 중…':cryptoOnly?'매일 오후 4시 기준':'현황과 같은 기준'}</span></div>
+    {onOpenPeriod && <div className="profit-scope-note"><p>현재 보유분의 평가손익·배당 추이입니다. 매도하면 해당 수량의 손익은 실현손익으로 구분됩니다.</p><button type="button" className="btn btn-secondary btn-sm" onClick={onOpenPeriod}>매도분 포함 기간 성과 보기</button></div>}
     <div className="holdings-trend-options" role="group" aria-label="손익 추이 항목">
       {[['profit_krw','손익'],['return_pct','수익률'],['value_krw','평가액']].map(([key,label])=><button type="button" className={`btn btn-sm ${metric===key?'btn-primary':'btn-secondary'}`} aria-pressed={metric===key} key={key} onClick={()=>setMetric(key)}>{label}</button>)}
       <label>범위 <select value={range} onChange={e=>setRange(e.target.value)}><option value="30">최근 30일</option><option value="90">최근 90일</option><option value="all">전체</option></select></label>

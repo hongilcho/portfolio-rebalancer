@@ -118,7 +118,9 @@ def test_full_responses_match_pre_refactor(variant):
     for endpoint, output in snapshot_outputs(variant).items():
         # The additive realized summary has dedicated accounting tests. Every
         # pre-existing valuation field still matches its unchanged baseline.
-        if endpoint=='bundle':output['dashboard'].pop('realized_summary',None)
+        if endpoint=='bundle':
+            output['dashboard'].pop('realized_summary',None)
+            output['dashboard'].pop('realized_recent_sales',None)
         encoded = json.dumps(output, sort_keys=True, ensure_ascii=False).encode()
         assert hashlib.sha256(encoded).hexdigest() == expected['sha256'][f'{variant}/{endpoint}'], \
             f'{variant}/{endpoint} response changed'

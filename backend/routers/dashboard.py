@@ -144,7 +144,10 @@ def build_dashboard_summary(accounts, assets, inputs, price_map, usd_krw):
              if aid in aids and sid in sids for t in rows]
     holdings=[h for aid,rows in inputs.holdings_by_account.items() if aid in aids for h in rows if str(h['asset_id']) in sids]
     baselines=[p for p in inputs.realized_openings if p['account_id'] in aids and p['asset_id'] in sids]
-    result['realized_summary']=calculate(history,holdings,baselines=baselines)['summary']
+    report=calculate(history,holdings,baselines=baselines)
+    result['realized_summary']=report['summary']
+    from logic.realized_presentation import recent_sales
+    result['realized_recent_sales']=recent_sales(report,accounts,assets)
     result['market_status'] = {
         'prices': market_service.request_status(), 'dividends': get_dividend_status(),
     }
