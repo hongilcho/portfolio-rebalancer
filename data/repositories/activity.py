@@ -33,18 +33,18 @@ ACTIVITY = '''WITH activity AS (
      'balance',e.after_state->>'usd_balance','cost_krw',e.after_state->>'cost_krw','notes',e.notes)
  FROM usd_cash_events e JOIN accounts a ON a.id=e.account_id
  LEFT JOIN nh_notice_items n ON n.linked_usd_event_id=e.id AND n.reversed_at IS NULL
- WHERE a.portfolio_id=%(pid)s AND e.kind NOT IN ('BUY','SELL') AND NOT EXISTS(SELECT 1 FROM ledger_adjustments l WHERE l.usd_event_id=e.id)
+ WHERE a.portfolio_id=%(pid)s AND e.kind NOT IN ('BUY','SELL','DIVIDEND') AND NOT EXISTS(SELECT 1 FROM ledger_adjustments l WHERE l.usd_event_id=e.id)
    AND NOT EXISTS(SELECT 1 FROM bookkeeping_requests br WHERE br.result->>'event_id'=e.id AND br.result->>'flow_id' IS NOT NULL AND (br.result->>'created_flow'='true' OR COALESCE(br.result->>'reversed','false')='false'))
  UNION ALL
  SELECT 'NOTICE:'||n.id,CASE WHEN n.kind='KRW_ADJUST' THEN 'ADJUST' ELSE 'CASH' END,
    n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
-   CASE WHEN n.kind='DIVIDEND' THEN 'DIVIDEND' WHEN n.kind='KRW_ADJUST' THEN 'KRW_ADJUST' WHEN n.payload->>'external'='false' AND COALESCE(n.payload->>'transfer','false')='false' THEN 'INTERNAL_TRANSFER' ELSE n.kind END,'KRW',
-   (n.payload->>'krw_amount')::numeric,CASE WHEN n.kind='DIVIDEND' THEN '배당·분배금 입금' WHEN n.payload->>'transfer'='true' THEN '포트폴리오 간 이체' ELSE '원화 입출금·잔고' END,n.reversed_at IS NOT NULL,
+   CASE WHEN n.kind='DIVIDEND' THEN 'DIVIDEND' WHEN n.kind='KRW_ADJUST' THEN 'KRW_ADJUST' WHEN n.payload->>'external'='false' AND COALESCE(n.payload->>'transfer','false')='false' THEN 'INTERNAL_TRANSFER' ELSE n.kind END,CASE WHEN n.payload->>'dividend_currency'='USD' AND n.payload->>'tax_receipt_id' IS NULL THEN 'USD' ELSE 'KRW' END,
+   CASE WHEN n.payload->>'tax_receipt_id' IS NOT NULL THEN (n.result->>'delta_krw')::numeric WHEN n.payload->>'dividend_currency'='USD' THEN (n.payload->>'usd_amount')::numeric ELSE (n.payload->>'krw_amount')::numeric END,CASE WHEN n.payload->>'tax_receipt_id' IS NOT NULL THEN '해외 배당 원화 세금 출금' WHEN n.kind='DIVIDEND' THEN '배당·분배금 입금' WHEN n.payload->>'transfer'='true' THEN '포트폴리오 간 이체' ELSE '원화 입출금·잔고' END,n.reversed_at IS NOT NULL,
    CASE WHEN n.reversed_at IS NULL THEN n.batch_id END,b.created_at,
    jsonb_build_object('source_account',src.account_alias,'destination_account',dest.account_alias,'peer_account',peer.account_alias,'cash_applied',n.payload->>'apply_cash'='true','notes',n.payload->>'notes',
      'occurred_at',n.payload->>'occurred_at','reported_available_krw',n.payload->>'reported_available_krw','delta_krw',n.result->>'delta_krw','previous_batch_id',n.batch_id,
      'asset_id',n.payload->>'asset_id','reference_date',n.payload->>'reference_date','dividend_ex_date',n.payload->>'dividend_ex_date',
-     'gross_amount',n.payload->'gross_amount','tax_amount',n.payload->'tax_amount','dividend_matched',n.result->'dividend_matched')
+     'gross_amount',n.payload->'gross_amount','tax_amount',n.payload->'tax_amount','dividend_matched',n.result->'dividend_matched') || CASE WHEN n.payload->>'dividend_currency'='USD' THEN jsonb_build_object('dividend_currency','USD','usd_amount',n.payload->'usd_amount','krw_tax',n.payload->'krw_tax','receipt_rate',n.payload->'receipt_rate','fee_amount',n.payload->'fee_amount','tax_receipt_id',n.payload->'tax_receipt_id','tax_paid',COALESCE((n.payload->>'tax_cash_applied')::boolean,FALSE) OR COALESCE((n.payload->>'tax_already_reflected')::boolean,FALSE) OR EXISTS(SELECT 1 FROM nh_notice_items paid WHERE paid.payload->>'tax_receipt_id'=n.id AND paid.reversed_at IS NULL)) ELSE '{}'::jsonb END
  FROM nh_notice_items n JOIN nh_notice_batches b ON b.id=n.batch_id
  LEFT JOIN accounts a ON a.id=n.account_id LEFT JOIN accounts src ON src.id=n.payload->>'source_account_id'
  LEFT JOIN accounts dest ON dest.id=n.payload->>'destination_account_id' LEFT JOIN accounts peer ON peer.id=n.payload->>'peer_account_id'

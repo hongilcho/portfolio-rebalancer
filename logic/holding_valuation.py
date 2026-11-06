@@ -8,7 +8,9 @@ def dividend_profits(adjustment, quantity, is_us, usd_krw):
     else:
         amount = quantity * float(adjustment.get('cumulative_dividend', 0.0))
     if is_us:
-        return amount * usd_krw, amount
+        if not adjustment.get('dividend_tax_krw'):return amount * usd_krw, amount
+        net_krw=amount * usd_krw-float(adjustment.get('dividend_tax_krw') or 0)
+        return net_krw, net_krw/usd_krw if usd_krw>0 else amount
     return amount, amount / usd_krw if usd_krw > 0 else 0.0
 
 

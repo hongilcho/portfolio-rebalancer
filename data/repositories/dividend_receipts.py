@@ -6,7 +6,7 @@ from logic.usd_cost import number,positive
 HOLDING_RECEIPTS_SQL = """(SELECT json_agg(n.payload || jsonb_build_object('receipt_id',n.id) ORDER BY n.sequence)
     FROM nh_notice_items n WHERE n.account_id=h.account_id AND n.portfolio_id=acc.portfolio_id
       AND n.kind='DIVIDEND' AND n.reversed_at IS NULL
-      AND n.payload->>'asset_id'=h.asset_id) AS dividend_receipts"""
+      AND n.payload->>'asset_id'=h.asset_id AND n.payload->>'tax_receipt_id' IS NULL) AS dividend_receipts"""
 
 
 def normalize(holding):
@@ -15,7 +15,12 @@ def normalize(holding):
     return row
 
 
-def record(c,pid,row):
+def record(db,c,pid,row):
+    if row.get('dividend_currency')=='USD':
+        from data.repositories.foreign_dividends import record as foreign
+        return foreign(db,c,pid,row)
+    if row.get('tax_receipt_id') or row.get('krw_tax') or row.get('fee_amount') or row.get('tax_cash_applied') or row.get('tax_already_reflected') or row.get('receipt_rate'):
+        raise ValueError('원화 배당에는 해외 배당 처리 항목을 지정할 수 없습니다.')
     aid,asset_id=row['account_id'],row['asset_id']
     if (row.get('external') or row.get('execution') or row.get('source_account_id')
         or row.get('destination_account_id') or row.get('existing_flow_id')

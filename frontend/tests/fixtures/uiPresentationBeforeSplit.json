@@ -16,7 +16,8 @@
     "trading_fees": "2026-10-23: account category fee schedules, shared automatic-cost disclosure and collapsed audited cash settlement panel reviewed. Only two account-form and two history hashes changed; financial behavior covered by synthetic and isolated PostgreSQL validation.",
     "crypto_1600_history": "2026-10-27: adds a shared daily crypto history panel and fixed 16:00 explanations. Only three overview and two crypto presentation hashes change. Existing cards and all unrelated markup are preserved; history behavior and missing-data notices are tested separately.",
     "nh_dividend_receipts": "2026-11-03: adds dividend support to NH help text and the cash-history filter label. Only two history snapshots change; dividend parsing, confirmation, actual net and cash-only fallback are independently tested in nhDividends and nhNoticeControls. Other snapshots retain their prior hashes.",
-    "cma_balance_review": "2026-11-05: intentional CMA balance comparison and correction handoff. Only the two history loading-shell hashes change; all other presentation snapshots retained. Dedicated CMA state, posting gates and synthetic browser flows verified separately; user review confirmed 2026-11-05."
+    "cma_balance_review": "2026-11-05: intentional CMA balance comparison and correction handoff. Only the two history loading-shell hashes change; all other presentation snapshots retained. Dedicated CMA state, posting gates and synthetic browser flows verified separately; user review confirmed 2026-11-05.",
+    "foreign_dividends": "2026-11-06: intentional support-help sentence includes USD cash dividends. Only two history markup hashes change; currency controls, moving-average preview and actual/tax/duplicate behavior have dedicated tests. User review pending; other screen hashes retained."
   },
   "sha256": {
     "dashboard/KRW": "4526d0aad14d81e84f33b6fde734913d01a88a56a5996984b343ff531ad24065",
@@ -29,8 +30,8 @@
     "settings/edit-account": "50372c541f73d242a5c22f43b8ffc1c631afe22e1d5357a240526fdd183fa911",
     "settings/new-US-asset": "cd33edb1f4eb41667dddb49789064e880643c0d959bfbb5b3f8170ad3a412e84",
     "settings/edit-deposit": "bab4e8d4b9825adffea6eb5b99d9615df29eaa96b26f62603185c66c4b06864d",
-    "history/empty": "3dc3c83365a4ac1ca48320f4ce5961ef749578f6242d20f66c38eaa4e3c85399",
-    "history/filled-forms": "02683be71debe05e9a2f9b7e84b8897c4a9007eccccdcd2af25ef239a5d5ec66",
+    "history/empty": "0b0aec6af09fd7480fb10dfc3f5e3ee8bc1fb74adb77deeb95d68093c61ecd64",
+    "history/filled-forms": "0a22b20a3413816b1388ed851547b32b9f06c25d55a89ae67571e085cd68321a",
     "overview/KRW": "36bcf64cd04957710a23fccca7ec023e584a3730aaaa204bda9475b9e14e3927",
     "overview/USD": "78e604f6f6173ad9010f4e12c626f74afed72f219fb1a6bf662417690b807c3a",
     "overview/no-crypto": "ff8e9f2607e37b248495e37b0c56b13fbad01007f883d1e07931d68c983d80d8",

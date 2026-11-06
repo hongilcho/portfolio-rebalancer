@@ -151,7 +151,7 @@ def commit(db,pid,payload):
         if existing:
             prior=plain(existing['payload'])
             for old_row in prior['rows']:
-                for key,value in dict(destination_account_id=None,cross_portfolio=False,counterparty_flow_id=None,reported_available_krw=None,reference_date=None,dividend_ex_date=None,gross_amount=None,tax_amount=None).items():
+                for key,value in dict(destination_account_id=None,cross_portfolio=False,counterparty_flow_id=None,reported_available_krw=None,reference_date=None,dividend_ex_date=None,gross_amount=None,tax_amount=None,dividend_currency='KRW',fee_amount=None,krw_tax=0,tax_cash_applied=False,tax_already_reflected=False,receipt_rate=0,tax_receipt_id=None).items():
                     old_row.setdefault(key,value)
             if prior != payload: raise ValueError('같은 저장 요청의 내용이 바뀌었습니다. 기존 저장 결과를 먼저 확인해주세요.')
             if existing['reversed_at']: raise ValueError('취소된 요청입니다. 새 알림 목록으로 다시 확인해주세요.')
@@ -184,7 +184,7 @@ def commit(db,pid,payload):
                 cash_entries=cash_notice(db,c,pid,row,tracks,owners)
                 result=cash_entries[0]['result']
             elif row['kind']=='DIVIDEND':
-                result=dividend_receipts.record(c,pid,row)
+                result=dividend_receipts.record(db,c,pid,row)
             elif row['kind']=='EXCHANGE_IN':
                 c.execute("SELECT id FROM usd_cash_events WHERE account_id=%s AND event_date=%s AND kind='EXCHANGE_IN' AND usd_amount=%s AND krw_amount=%s AND reversed_at IS NULL",
                           (row['account_id'],day,row['usd_amount'],row['krw_amount']))
@@ -256,7 +256,7 @@ def undo(db,pid,batch_id):
             if item['kind']=='BUY':
                 ok,msg=trades.delete_trades(db,[result['trade_id']],transaction=conn)
                 if not ok: raise ValueError(msg)
-            elif item['kind']=='EXCHANGE_IN':
+            elif item['kind']=='EXCHANGE_IN' or (item['kind']=='DIVIDEND' and result.get('usd_event_id')):
                 forex.reverse_latest(c,item['account_id'],result['usd_event_id'])
             if result.get('created_flow'):
                 c.execute('UPDATE performance_flows SET voided=TRUE WHERE id=%s', (result['flow_id'],))
@@ -309,14 +309,16 @@ def read_context(db,pid,day):
             SELECT 1 FROM nh_notice_items n WHERE n.batch_id=b.id AND n.portfolio_id=%s) ORDER BY created_at DESC LIMIT 10''', (pid,pid))
         batches=c.fetchall()
         c.execute("""SELECT a.id AS asset_id,m.data FROM assets a JOIN market_cache m
-            ON m.key='div_KR_' || UPPER(TRIM(a.ticker)) WHERE a.portfolio_id=%s
-            AND a.market='KR' AND NOT COALESCE(a.is_deposit,FALSE)""",(pid,))
+            ON m.key='div_' || a.market || '_' || UPPER(TRIM(a.ticker)) WHERE a.portfolio_id=%s
+            AND NOT COALESCE(a.is_deposit,FALSE)""",(pid,))
         dividend_events=[]
         for cached in c.fetchall():
             records=cached['data'] or []
             if isinstance(records,str):records=json.loads(records)
             if isinstance(records,list):
                 dividend_events.extend(dict(asset_id=cached['asset_id'],ex_date=d['date'],amount_per_share=d['amount']) for d in records if d.get('date') and d['date']<=str(day))
-        return dict(accounts=accounts,transfer_accounts=transfer_accounts,trackings=trackings,transfer_flows=all_flows,flows=flows,notices=notices,trades=saved_trades,exchanges=exchanges,batches=batches,dividend_events=dividend_events)
+        c.execute("SELECT account_id,payload FROM nh_notice_items WHERE portfolio_id=%s AND kind='DIVIDEND' AND reversed_at IS NULL",(pid,))
+        dividend_receipts=c.fetchall()
+        return dict(dividend_receipts=dividend_receipts,dividend_rate=db.exchange_rate(),accounts=accounts,transfer_accounts=transfer_accounts,trackings=trackings,transfer_flows=all_flows,flows=flows,notices=notices,trades=saved_trades,exchanges=exchanges,batches=batches,dividend_events=dividend_events)
     finally:
         conn.close()

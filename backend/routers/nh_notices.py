@@ -34,6 +34,13 @@ class Row(BaseModel):
     dividend_ex_date: date | None = None
     gross_amount: float | None = Field(default=None,ge=0,le=1e15,allow_inf_nan=False)
     tax_amount: float | None = Field(default=None,ge=0,le=1e15,allow_inf_nan=False)
+    dividend_currency: Literal['KRW','USD'] = 'KRW'
+    fee_amount: float | None = Field(default=None,ge=0,le=1e12,allow_inf_nan=False)
+    krw_tax: float = Field(default=0,ge=0,le=1e12,allow_inf_nan=False)
+    tax_cash_applied: bool = False
+    tax_already_reflected: bool = False
+    receipt_rate: float = Field(default=0,ge=0,le=1e6,allow_inf_nan=False)
+    tax_receipt_id: str | None = None
     asset_id: str = ''
     quantity: float = Field(default=0,ge=0,le=1e12,allow_inf_nan=False)
     price: float = Field(default=0,ge=0,le=1e12,allow_inf_nan=False)

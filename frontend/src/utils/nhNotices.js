@@ -12,7 +12,7 @@ const dayOf = (year,month,day) => `${year}-${String(month).padStart(2,'0')}-${St
 export function parseNhNotifications(text,anchor) {
   return normalized(text).split(/(?=\[NH투자증권\])/).map(s=>s.replace(/^\s*[-─]{3,}\s*$/gm,'').trim()).filter(Boolean).map(raw=>{
     const common={raw,eventDate:anchor,occurredAt:null,external:true,applyCash:true,duplicateConfirmed:false,accountId:'',assetId:'',accountMask:'',errors:[]};
-    const dividend=parseNhDividend(raw);
+    const dividend=parseNhDividend(raw,anchor);
     if(dividend)return {...common,...dividend};
     if (/^\[NH투자증권\]\s*(입금|출금)안내/.test(raw)) {
       const kind=/^\[NH투자증권\]\s*출금안내/.test(raw)?'WITHDRAW':'DEPOSIT';
@@ -91,9 +91,14 @@ export function validateNhNotice(row,context,accounts,assets,pid,pending,earlier
     if (earlier.some(r=>r.kind==='BUY' && r.accountId===row.accountId && r.eventDate===row.eventDate && r.brokerOrderNo===row.brokerOrderNo)) errors.push('목록에 같은 주문번호가 있습니다.');
   } else if(row.kind==='DIVIDEND') {
     const asset=assets.find(a=>String(a.id)===row.assetId&&(!a.portfolio_id||String(a.portfolio_id)===String(pid)));
-    if(!asset||asset.market!=='KR'||asset.is_deposit||asset.ticker==='M04020000')errors.push('배당을 지급한 국내 상장 종목을 선택해주세요.');
-    if(!validNoticeDate(row.referenceDate)||row.referenceDate>row.eventDate||row.dividendPaymentDate!==row.eventDate)errors.push('알림의 기준일·입금일을 확인해주세요.');
-    if(!Number.isSafeInteger(row.krwAmount)||row.krwAmount<=0)errors.push('실수령 배당금을 확인해주세요.');
+    if(!asset||asset.market!==(row.dividendCurrency==='USD'?'US':'KR')||asset.is_deposit||asset.ticker==='M04020000')errors.push('배당을 지급한 종목과 상장 시장을 확인해주세요.');
+    if(row.dividendCurrency!=='USD' && (!validNoticeDate(row.referenceDate)||row.referenceDate>row.eventDate||row.dividendPaymentDate!==row.eventDate))errors.push('알림의 기준일·입금일을 확인해주세요.');
+    if(row.dividendCurrency==='USD'){
+      if(!validNoticeDate(chosenDividendDate(row,context))||chosenDividendDate(row,context)>row.eventDate)errors.push('확인한 배당락일을 입력해주세요.');
+      if(!(Number(row.receiptRate??context?.dividend_rate)>0))errors.push('입금일 평가환율을 확인해주세요.');
+      if(!(row.usdAmount>0))errors.push('실수령 달러를 확인해주세요.');
+    } else if(!Number.isSafeInteger(row.krwAmount)||row.krwAmount<=0)errors.push('실수령 배당금을 확인해주세요.');
+    if(row.dividendCurrency==='USD' && (earlier.some(r=>r.kind==='DIVIDEND'&&r.accountId===row.accountId&&r.assetId===row.assetId&&chosenDividendDate(r,context)===chosenDividendDate(row,context)) || (context?.dividend_receipts||[]).some(n=>String(n.account_id)===row.accountId&&n.payload.asset_id===row.assetId&&n.payload.dividend_ex_date===chosenDividendDate(row,context)&&!n.payload.tax_receipt_id)))errors.push('이 배당락일의 배당을 이미 반영했습니다.');
     if(earlier.some(r=>sameDividend(r,row))||(context?.notices||[]).some(n=>n.payload?.kind==='DIVIDEND'&&String(n.account_id)===row.accountId&&n.payload.asset_id===row.assetId&&n.payload.reference_date===row.referenceDate))errors.push('이 종목·기준일의 배당이 이미 목록이나 장부에 있습니다.');
   } else if (isCashNotice(row)) {
     const all=context?.transfer_accounts || accounts;
@@ -123,7 +128,8 @@ export function validateNhNotice(row,context,accounts,assets,pid,pending,earlier
 
 export function noticeApiRow(row,context) {
   const occurrence=row.occurredAt ? row.eventDate+row.occurredAt.slice(10):null;
-  return {...(row.kind==='DIVIDEND'?{reference_date:row.referenceDate,dividend_ex_date:chosenDividendDate(row,context),gross_amount:row.grossAmount??null,tax_amount:row.taxAmount??null}:{}),kind:row.kind,account_id:row.accountId,event_date:row.eventDate,occurred_at:occurrence,
+  const foreign=row.kind==='DIVIDEND'&&row.dividendCurrency==='USD';
+  return {...(foreign?{dividend_currency:'USD',fee_amount:row.feeAmount,krw_tax:row.krwTax,tax_cash_applied:Boolean(row.taxCashApplied),tax_already_reflected:Boolean(row.taxAlreadyReflected),receipt_rate:Number(row.receiptRate??context?.dividend_rate)}:{}),...(row.kind==='DIVIDEND'?{reference_date:foreign?chosenDividendDate(row,context):row.referenceDate,dividend_ex_date:chosenDividendDate(row,context),gross_amount:row.grossAmount??null,tax_amount:row.taxAmount??null}:{}),kind:row.kind,account_id:row.accountId,event_date:row.eventDate,occurred_at:occurrence,
     source_account_id:row.sourceAccountId || null,destination_account_id:row.destinationAccountId || null,cross_portfolio:Boolean(row.crossPortfolio),counterparty_flow_id:row.crossPortfolio?chosenFlow(row,context,true):null,external:row.external,apply_cash:row.applyCash,
     existing_flow_id:isCashNotice(row)?chosenFlow(row,context):null,duplicate_confirmed:Boolean(row.duplicateConfirmed),
     fingerprint:row.fingerprint,asset_id:row.assetId || '',quantity:row.quantity || 0,price:row.price || 0,
@@ -153,7 +159,18 @@ export function previewNhNotices(rows,contexts,ledgers=[],assets=[]) {
       const fee=estimateFee(account,asset,row.eventDate,row.quantity,row.price);
       if(fee){const deferred=cash.deposit_krw<fee.amount;if(!deferred)cash.deposit_krw-=fee.amount;fees.push({id:row.id,...fee,deferred});}
     }
-    if(row.kind==='DIVIDEND'&&row.applyCash)cash.deposit_krw+=row.krwAmount;
+    if(row.kind==='DIVIDEND'&&row.dividendCurrency==='USD'){
+      if(row.applyCash){
+        if(!costs[row.accountId] && cash.deposit_usd===0)costs[row.accountId]={balance:0,cost:0,lastDate:row.eventDate};
+        const state=costs[row.accountId];
+        if(!state)errors.push('기존 달러의 시작 기준환율을 먼저 등록해주세요.');
+        else if(state.needsReconciliation)errors.push('달러 잔고·원가 차이를 먼저 확인해주세요.');
+        else if(row.eventDate<state.lastDate)errors.push('기존 달러 기록 이후 날짜로 입력해주세요. 과거 누락은 장부 정정으로 확인해주세요.');
+        else{state.balance+=row.usdAmount;state.cost+=row.usdAmount*Number(row.receiptRate??contexts[row.eventDate]?.dividend_rate);state.lastDate=row.eventDate;}
+        cash.deposit_usd+=row.usdAmount;
+      }
+      if(row.taxCashApplied)cash.deposit_krw-=row.krwTax;
+    } else if(row.kind==='DIVIDEND'&&row.applyCash)cash.deposit_krw+=row.krwAmount;
     if (isCashNotice(row) && row.applyCash) {
       cash.deposit_krw+=cashSign(row)*row.krwAmount;
       if (!row.external && balances[peerAccount(row)]) balances[peerAccount(row)].deposit_krw-=cashSign(row)*row.krwAmount;

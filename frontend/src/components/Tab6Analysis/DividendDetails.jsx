@@ -19,10 +19,11 @@ export default function DividendDetails({ accounts }) {
       return <div className="trade-row-card" key={g.key}>
         <b>{g.name} · {g.account} · {g.currency}</b>
         <p>계산 내역 합계 {money(g.calculated)} · 손익 반영액 {money(g.reflected)}</p>
+        {g.krwTax>0&&<p>실제 수령 달러 합계 {money(g.calculated)} · 별도 원화 세금 {formatKRW(g.krwTax)}. 손익 반영액에는 이 세금을 현재 환율로 환산해 한 번만 제외했습니다.</p>}
         {g.adjusted && <p>내역 합계와 반영액이 다릅니다. 수동 배당 보정값 및 과거 거래 기준을 확인해주세요.</p>}
         {!g.details.length ? <p>표시할 배당락일별 계산 내역이 없습니다.</p> : <div className="table-container"><table className="custom-table">
-          <thead><tr><th>배당락일</th><th>당시 수량</th><th>주당 배당</th><th>세전 계산액</th><th>계산 세금</th><th>세후 반영액</th><th>확인 근거</th></tr></thead>
-          <tbody>{g.details.map((d,i) => <tr key={`${d.ex_date}/${i}`}><td>{d.ex_date}</td><td>{d.holding_quantity==null?'—':formatQuantity(d.holding_quantity,'주')}</td><td>{d.amount_per_share==null?'—':`${Number(d.amount_per_share).toLocaleString('ko-KR',{maximumFractionDigits:6})} ${g.currency === 'USD' ? '달러' : '원'}`}</td><td>{d.gross_amount==null?'미제공':money(d.gross_amount)}</td><td>{d.tax_amount==null?'미제공':money(d.tax_amount)}</td><td>{money(d.net_amount)}</td><td>{d.source==='NH_RECEIPT'?`NH 입금 확인 · ${d.payment_date}`:'공시 기반 계산'}</td></tr>)}</tbody>
+          <thead><tr><th>배당락일</th><th>당시 수량</th><th>주당 배당</th><th>세전 계산액</th><th>계산 세금</th><th>{g.krwTax>0?'달러 실수령액':'세후 반영액'}</th><th>확인 근거</th></tr></thead>
+          <tbody>{g.details.map((d,i) => <tr key={`${d.ex_date}/${i}`}><td>{d.ex_date}</td><td>{d.holding_quantity==null?'—':formatQuantity(d.holding_quantity,'주')}</td><td>{d.amount_per_share==null?'—':`${Number(d.amount_per_share).toLocaleString('ko-KR',{maximumFractionDigits:6})} ${g.currency === 'USD' ? '달러' : '원'}`}</td><td>{d.gross_amount==null?'미제공':money(d.gross_amount)}</td><td>{d.tax_amount==null?'미제공':money(d.tax_amount)}{Number(d.krw_tax)>0&&<div>원화 {formatKRW(d.krw_tax)}</div>}</td><td>{money(d.net_amount)}</td><td>{d.source==='NH_RECEIPT'?`NH 입금 확인 · ${d.payment_date}`:'공시 기반 계산'}</td></tr>)}</tbody>
         </table></div>}
       </div>;
     })}

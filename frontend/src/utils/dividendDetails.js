@@ -7,7 +7,7 @@ export function dividendGroups(accounts) {
       const calculated = details.reduce((sum,d) => sum + Number(d.net_amount || 0), 0);
       const reflected = Number(currency === 'USD' ? h.dividend_profit_usd : h.dividend_profit_krw) || 0;
       return { key:`${a.id}/${h.asset_id}`, accountId:String(a.id), assetId:String(h.asset_id), account:a.account_alias,
-        name:h.asset_name, currency, details, calculated, reflected,
-        adjusted: Math.abs(calculated - reflected) > (currency === 'USD' ? 0.02 : 1) };
+        name:h.asset_name, currency, details, calculated, reflected,krwTax:details.reduce((sum,d)=>sum+Number(d.krw_tax||0),0),
+        adjusted: !details.some(d=>Number(d.krw_tax)>0) && Math.abs(calculated - reflected) > (currency === 'USD' ? 0.02 : 1) };
     }));
 }

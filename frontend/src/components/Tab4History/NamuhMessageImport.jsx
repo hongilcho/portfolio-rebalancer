@@ -104,6 +104,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
     try{
       await requireFeeProtocol(api,accounts);
       if(payload.rows.some(r=>r.kind==='DIVIDEND') && (await api.getBookkeepingCapabilities()).nh_dividend_protocol!==1)throw new Error('백엔드 배당 입금 기능을 먼저 배포한 뒤 다시 저장해주세요.');
+      if(payload.rows.some(r=>r.dividend_currency==='USD') && (await api.getBookkeepingCapabilities()).foreign_dividend_protocol!==1)throw new Error('해외 배당 백엔드를 먼저 배포해주세요.');
       const result=await api.commitNhNotices(portfolioId,payload);
       recorded=true;setRows([]);setPendingPayload(null);setConfirmed(false);setRequestId(crypto.randomUUID());
       persist({rows:[]});setReload(n=>n+1);
@@ -147,7 +148,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
           return <div className={focused?"history-notice-row":"trade-row-card"} key={row.id} style={{marginTop:12}}>
             <b>{i+1}. {names[row.kind]}{row.assetName?` · ${row.assetName}`:''}</b>
             <p>{row.kind==='BUY'?`${row.quantity}주 × ${formatKRW(row.price)} · 주문 ${row.brokerOrderNo || '확인 불가'}`:
-              row.kind==='DIVIDEND'?`실수령 ${formatKRW(row.krwAmount)} · 기준일 ${row.referenceDate}`:isCashNotice(row)?formatKRW(row.krwAmount):`${formatKRW(row.krwAmount)} → ${formatUSD(row.usdAmount)} · 고시환율 ${row.quotedRate}`}</p>
+              row.kind==='DIVIDEND'?(row.dividendCurrency==='USD'?`달러 입금 ${formatUSD(row.usdAmount)} · 원화 세금 ${formatKRW(row.krwTax)} (${row.taxAlreadyReflected?'이미 반영됨':row.taxCashApplied?'지금 차감':'출금 대기'})`:`실수령 ${formatKRW(row.krwAmount)} · 기준일 ${row.referenceDate}`):isCashNotice(row)?formatKRW(row.krwAmount):`${formatKRW(row.krwAmount)} → ${formatUSD(row.usdAmount)} · 고시환율 ${row.quotedRate}`}</p>
             {preview.fees.filter(f=>f.id===row.id).map(f=><p key={f.id} className="fee-trade-summary">예상 수수료 {formatKRW(f.amount)}{f.deferred?' · 잔고 부족으로 비용은 정산 대기':' · 예수금에서 함께 차감'}</p>)}
             {row.kind==='WITHDRAW' && Number.isFinite(row.reportedAvailableKrw) && <small>알림의 출금가능금액 {formatKRW(row.reportedAvailableKrw)} · 참고값이며 잔고를 덮어쓰지 않습니다.</small>}
             {focused && <div className="history-row-context">{accounts.find(a=>String(a.id)===row.accountId)?.account_alias || '계좌 선택 필요'} · {row.eventDate} · 미반영</div>}
@@ -157,17 +158,25 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
               <button type="button" className="btn btn-secondary btn-sm" disabled={!correctionDraft || !onCorrectionRequest} onClick={()=>startCorrection(row,i)}>{row.historicalCashChoice==='CORRECTION'?'누락 보정 입력 계속하기':`누락된 ${formatKRW(row.krwAmount)} 출금 보정`}</button>
               {!correctionDraft && <small>정정할 계좌와 문자의 날짜·금액을 먼저 확인해주세요.</small>}
             </div>}
-            <details className={focused?'history-notice-details':''} open={!focused || checks[i].errors.length>0 || undefined}>
+            <details className={focused?'history-notice-details':''} open={!focused || row.dividendCurrency==='USD' || checks[i].errors.length>0 || undefined}>
             <summary>계좌·날짜·반영 방식 확인 / 수정</summary>
             <fieldset className="history-notice-fields" disabled={row.historicalCashChoice==='CORRECTION'} style={{border:0,padding:0}}>
             <label>계좌 <select aria-label={`알림 ${i+1} 계좌`} className="input-select" value={row.accountId} onChange={e=>edit(i,'accountId',e.target.value)}><option value="">계좌 선택</option>{scopedAccounts.map(a=><option key={a.id} value={a.id}>{a.account_alias} ({a.account_no})</option>)}</select></label>
             {row.accountWarning && <p>{row.accountWarning}</p>}
             {row.kind==='DIVIDEND' && <>
-              <label>배당 종목<select aria-label={`알림 ${i+1} 배당 종목`} className="input-select" value={row.assetId} onChange={e=>edit(i,'assetId',e.target.value)}><option value="">배당 종목 선택</option>{assets.filter(a=>a.market==='KR'&&!a.is_deposit&&a.ticker!=='M04020000'&&(!a.portfolio_id||String(a.portfolio_id)===String(portfolioId))).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+              <label>배당 종목<select aria-label={`알림 ${i+1} 배당 종목`} className="input-select" value={row.assetId} onChange={e=>edit(i,'assetId',e.target.value)}><option value="">배당 종목 선택</option>{assets.filter(a=>a.market===(row.dividendCurrency==='USD'?'US':'KR')&&!a.is_deposit&&a.ticker!=='M04020000'&&(!a.portfolio_id||String(a.portfolio_id)===String(portfolioId))).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
               <label>예수금 반영<select aria-label={`알림 ${i+1} 배당 예수금 반영`} className="input-select" value={row.applyCash?'APPLY':'REFLECTED'} onChange={e=>edit(i,'applyCash',e.target.value==='APPLY')}><option value="APPLY">실수령액을 예수금에 입금</option><option value="REFLECTED">이미 잔고에 반영됨 · 기록만 저장</option></select></label>
+              {row.dividendCurrency==='USD'?<>
+                <label>확인한 배당락일<input aria-label={`알림 ${i+1} 해외 배당락일`} className="input-text" type="date" max={row.eventDate} value={chosenDividendDate(row,context)||''} onChange={e=>edit(i,'dividendExDate',e.target.value)}/></label>
+                <label>입금일 평가환율 · 원/달러<input aria-label={`알림 ${i+1} 배당 평가환율`} className="input-number" type="number" min="0.01" step="any" value={row.receiptRate??context?.dividend_rate??''} onChange={e=>edit(i,'receiptRate',e.target.value)}/></label>
+                <small>조회 기준환율을 제안합니다. 입금일 기준인지 확인해주세요. 실제 환전은 아니며 달러 평균 취득환율 계산에 사용합니다.</small>
+                <label>원화 세금<select aria-label={`알림 ${i+1} 원화 세금 반영`} className="input-select" value={row.taxAlreadyReflected?'REFLECTED':row.taxCashApplied?'PAID':'PENDING'} onChange={e=>{edit(i,'taxCashApplied',e.target.value==='PAID');edit(i,'taxAlreadyReflected',e.target.value==='REFLECTED');}}><option value="PENDING">아직 출금되지 않음 · 출금 확인 대기</option><option value="PAID">실제 출금 확인 · 원화 예수금에서 차감</option><option value="REFLECTED">이미 장부 잔고에 반영됨 · 중복 차감 안 함</option></select></label>
+                <p>달러 {formatUSD(row.usdAmount)}의 입금과 원가를 함께 기록합니다. 알려진 원화 세금 {formatKRW(row.krwTax)}은 배당 손익에서 한 번만 제외하고, 예수금 차감은 실제 출금을 확인했을 때 처리합니다. 나중에 공시가 갱신되어도 배당을 중복 가산하지 않습니다.</p>
+              </>:<>
               <label>배당 손익 확인<select aria-label={`알림 ${i+1} 배당 손익 연결`} className="input-select" value={chosenDividendDate(row,context)||''} onChange={e=>edit(i,'dividendExDate',e.target.value)}><option value="">입금만 기록 · 손익은 기존 자동 계산 유지</option>{dividendCandidates(row,context).map(d=><option value={d.ex_date} key={d.ex_date}>{d.ex_date} 공시 배당을 실수령액으로 확인</option>)}</select></label>
               <p>{chosenDividendDate(row,context)?'기존 배당 계산액을 실수령액으로 교체합니다. 손익에 중복 가산하지 않습니다.':'연결할 배당 내역이 없거나 선택하지 않았습니다. 예수금만 반영하고 배당 손익은 기존 자동 계산을 유지합니다.'} 외부 투자금으로 기록하지 않습니다.</p>
               <small>{row.grossAmount==null?'세전금액 미제공':`세전 ${formatKRW(row.grossAmount)}`} · {row.taxAmount==null?'세금 미제공':`세금 ${formatKRW(row.taxAmount)}`}</small>
+              </>}
             </>}
             <label>적용 날짜 <input aria-label={`알림 ${i+1} 날짜`} type="date" className="input-text" value={row.eventDate} onChange={e=>edit(i,'eventDate',e.target.value)} /></label>
             <small>{row.occurredAt?`알림 시각 ${row.occurredAt.slice(11,16)}`:'알림에 시각 없음 · 같은 날짜는 목록 순서대로 반영합니다.'}</small>
@@ -206,7 +215,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
       {storageError && <p role="alert">임시 저장을 사용할 수 없습니다. 저장 결과 확인 전에는 이 화면을 닫지 마세요.</p>}
       {message && <p role="status">{message}</p>}
       {!focused && <details><summary>알림 반영 이력·묶음 취소</summary>{batches.map(batch=><p key={batch.id}>{new Date(batch.created_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})} · {batch.result.items?.length || 0}건 {batch.reversed_at?'(취소됨)':<button type="button" className="btn btn-secondary btn-sm" disabled={saving} onClick={()=>undo(batch.id)}>이 묶음 취소</button>}</p>)}</details>}
-      <details><summary>지원 범위·기록 안내</summary><p>국내 매수 전량 체결, 원화 배당·분배금 입금, 원화 입출금·계좌 이체, USD 외화매수 알림을 지원합니다. 부분 체결·달러 매도 환전은 직접 입력해주세요. 과거 입출금은 기본으로 기록만 저장하므로 예수금이 중복 반영되지 않는지 확인하세요. 연도가 없는 알림은 화면의 체결 날짜 연도로 해석하므로 과거 알림은 적용 날짜를 확인하세요. 등록 전 목록은 이 기기에 30일간 임시 저장됩니다. 환전 원가는 실제 원화 지출액으로 계산하고 고시환율도 보존합니다. 한 묶음에서 오류가 나면 전부 반영하지 않습니다.</p></details>
+      <details><summary>지원 범위·기록 안내</summary><p>국내 매수 전량 체결, 원화 배당·분배금과 USD 현금 배당 입금, 원화 입출금·계좌 이체, USD 외화매수 알림을 지원합니다. 부분 체결·달러 매도 환전은 직접 입력해주세요. 과거 입출금은 기본으로 기록만 저장하므로 예수금이 중복 반영되지 않는지 확인하세요. 연도가 없는 알림은 화면의 체결 날짜 연도로 해석하므로 과거 알림은 적용 날짜를 확인하세요. 등록 전 목록은 이 기기에 30일간 임시 저장됩니다. 환전 원가는 실제 원화 지출액으로 계산하고 고시환율도 보존합니다. 한 묶음에서 오류가 나면 전부 반영하지 않습니다.</p></details>
     </div>}
   </section>;
 }

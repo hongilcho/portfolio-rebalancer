@@ -18,6 +18,7 @@ from logic.dividend_calculator import (
 )
 
 from logic.refreshing_cache import RefreshingCache
+from logic.market_providers.ishares import fetch_sgov,reconcile_sgov,incomplete
 import threading
 
 _dividend_memory_cache = {}  # one cache per market/ticker, including empty lists
@@ -34,7 +35,8 @@ def begin_dividend_request(force=False):
 def get_dividend_status():
     statuses = list(getattr(_dividend_request, "statuses", {}).values())
     times = [s["updated_at"] for s in statuses if s["updated_at"]]
-    return {"updated_at": min(times) if times else None,
+    missing=[s["symbol"] for s in statuses if s.get("incomplete")]
+    return {**({"incomplete_symbols":missing} if missing else {}),"updated_at": min(times) if times else None,
             "stale": any(s["stale"] for s in statuses),
             "refreshing": any(s["refreshing"] for s in statuses),
             "refresh_failed": any(s["refresh_failed"] for s in statuses)}
@@ -49,7 +51,13 @@ def _get_dividend_cache(clean_ticker, market):
         return (value, age) if isinstance(value, list) else (None, 0)
 
     def fetch():
-        records = YahooQuotes(yf.Ticker).dividends(clean_ticker, market)
+        if clean_ticker=='SGOV' and market=='US':
+            try:records=YahooQuotes(yf.Ticker).dividends(clean_ticker,market)
+            except Exception:records=[]
+            try:records=reconcile_sgov(records,fetch_sgov())
+            except Exception:
+                if incomplete(clean_ticker,market,records):raise RuntimeError('Recent SGOV dividend unavailable') from None
+        else:records = YahooQuotes(yf.Ticker).dividends(clean_ticker, market)
         if not records and cache.value:
             # yfinance can return an empty series after an upstream failure.
             # Previously recorded dividends must not silently disappear.
@@ -107,6 +115,12 @@ def fetch_dividend_history(ticker: str, market: str) -> List[Dict[str, Any]]:
             raise
         # No history available: label unavailable, do not persist a guessed zero.
         records, status = [], cache.status()
+    if incomplete(clean_ticker,market,records):
+        status={**status,"incomplete":True,"symbol":clean_ticker}
+        if not status["stale"] and not status["refreshing"] and not status["refresh_failed"]:
+            cache.invalidate()  # One background refresh, never label a partial history as complete.
+            records,status_now=cache.get()
+            status={**status_now,"incomplete":True,"symbol":clean_ticker}
     _dividend_request.statuses = getattr(_dividend_request, "statuses", {})
     _dividend_request.statuses[key] = status
     return records

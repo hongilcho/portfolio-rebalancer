@@ -5,6 +5,7 @@ import {formatKRW,formatUSD} from '../../utils/formatters';
 import {kstToday} from '../../utils/depositMaturities';
 import {recentMonths,recordAmount} from '../../utils/activityHistory';
 import DividendReceiptMatch from './DividendReceiptMatch';
+import ForeignDividendTax from './ForeignDividendTax';
 
 const kindNames={DIVIDEND:'배당·분배금',PAST_WITHDRAWAL:'과거 출금 누락 정정',CASH:'예수금 정정',HOLDING:'보유 수량·원가 정정',BUY:'매수',SELL:'매도',DEPOSIT:'입금',WITHDRAW:'출금',EXCHANGE_IN:'원화 → 달러',EXCHANGE_OUT:'달러 → 원화',OPENING:'달러 시작 기준',RECONCILE:'달러 원가 조정',KRW_ADJUST:'원화 잔고 조정',INTERNAL_TRANSFER:'원화 내부 이체'};
 Object.assign(kindNames,{COST_SETTLEMENT:'거래비용 차이 정산',BALANCE_SETTLEMENT:'예수금 차이 정산'});
@@ -90,10 +91,11 @@ export default function ActivityHistory({portfolioId,accounts,assets=[],active,r
             {d.trade_costs && <p>{d.trade_costs.status==='ESTIMATED'?'자동 계산한 예상 비용':d.trade_costs.status==='DEFERRED'?'미차감 · 비용 정산 대기':'기록 비용'} · 원화 {d.trade_costs.krw==null?'미확인':formatKRW(d.trade_costs.krw)}{item.currency==='USD'?` · 달러 ${d.trade_costs.usd==null?'미확인':formatUSD(d.trade_costs.usd)}`:''}{d.trade_costs.status==='DEFERRED'&&` · 미반영 예상 비용 ${formatKRW(d.trade_costs.estimated_krw||0)} / ${formatUSD(d.trade_costs.estimated_usd||0)}`}</p>}
             {(d.fx_rate || d.exchange_rate) && <p>적용환율 {Number(d.fx_rate || d.exchange_rate).toLocaleString('ko-KR',{maximumFractionDigits:8})}원</p>}
             {d.reported_available_krw!=null && <p>알림의 출금가능금액 {formatKRW(Number(d.reported_available_krw))} · 참고값</p>}{d.occurred_at && <p>실제 일시 {new Date(d.occurred_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})}</p>}
+            {item.kind==='DIVIDEND'&&d.dividend_currency==='USD'&&!d.tax_receipt_id&&!item.cancelled&&<><p>실수령 {formatUSD(Number(d.usd_amount||0))} · 입금일 평가환율 {Number(d.receipt_rate||0).toLocaleString('ko-KR')}원/달러</p><ForeignDividendTax item={item} portfolioId={portfolioId} disabled={saving} onBusyChange={onBusyChange} onChanged={async()=>{setReload(n=>n+1);await onChanged?.();}}/></>}
             {d.balance!=null && <p>처리 후 달러 {formatUSD(Number(d.balance))} · 원화 취득원가 {formatKRW(Number(d.cost_krw))}</p>}
             {d.source_account && <p>출금 계좌: {d.source_account}</p>}{d.destination_account && <p>입금 계좌: {d.destination_account}</p>}{d.peer_account && <p>이체 상대 계좌: {d.peer_account}</p>}{item.category==='CASH' && !d.flow_id && d.cash_applied===false && <p>과거 이력만 저장 · 예수금 변경 없음</p>}{d.broker_order_no && <p>주문번호 {d.broker_order_no}</p>}
-            {item.kind==='DIVIDEND'&&!item.cancelled&&!d.dividend_matched&&<DividendReceiptMatch item={item} portfolioId={portfolioId} disabled={saving} onMatch={matchDividend}/>}
-            {item.kind==='DIVIDEND' && <p>배당 기준일 {d.reference_date} · {d.dividend_matched?'기존 배당을 실수령액으로 확인':'예수금 입금 기록 · 손익은 기존 자동 계산 유지'} · 외부 투자금 아님</p>}
+            {item.kind==='DIVIDEND'&&!item.cancelled&&!d.dividend_matched&&!d.tax_receipt_id&&<DividendReceiptMatch item={item} portfolioId={portfolioId} disabled={saving} onMatch={matchDividend}/>}
+            {item.kind==='DIVIDEND' && !d.tax_receipt_id && <p>배당 기준일 {d.reference_date} · {d.dividend_matched?'기존 배당을 실수령액으로 확인':'예수금 입금 기록 · 손익은 기존 자동 계산 유지'} · 외부 투자금 아님</p>}
             {d.notes && <p>{d.notes}</p>}{item.category==='CASH' && d.flow_id && <p>{d.cash_linked?(d.usd_event_id?'달러 잔고·원가·성과 함께 반영':d.cash_applied?'성과 기록·예수금 함께 반영':'NH 알림 연결 · 성과 기록만'):'성과 계산용 입출금 기록'} · {formatKRW(Number(d.amount_krw))}</p>}
             {item.batch_id && <p>같은 알림 묶음의 입출금·이체·환전·매수는 함께 취소됩니다. 묶음 ID: {item.batch_id.slice(0,8)}</p>}
             {canCancel && item.category==='TRADE' && !item.batch_id && <label className="history-check"><input type="checkbox" disabled={saving} checked={selectedTrades.includes(d.trade_id)} onChange={e=>setSelectedTrades(old=>e.target.checked?[...old,d.trade_id]:old.filter(id=>id!==d.trade_id))}/>여러 매매를 함께 취소할 목록에 선택</label>}
