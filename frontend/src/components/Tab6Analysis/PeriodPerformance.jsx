@@ -3,10 +3,12 @@ import { api } from '../../utils/api';
 import { formatKRW } from '../../utils/formatters';
 import {useCompactLayout} from '../../utils/useCompactLayout';
 import PerformanceChart from './PerformanceChart';
+import { performanceValue } from '../../utils/performanceChart';
 
 export default function PeriodPerformance({ portfolioId, performance, onOpenHistory, sales, salesError }) {
   const { data, busy, error, notice, run, capture, setNotice } = performance;
   const compact=useCompactLayout();
+  const timeWeighted = data?.twr_method === 'closing';
   const [startChecked, setStartChecked] = useState(false);
   return <section className="section-card workflow-panel" aria-label="매도분 포함 기간 운용성과">
       <h3>기간 운용성과</h3>
@@ -18,9 +20,11 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
         <button className="btn btn-primary" disabled={busy || !startChecked} onClick={()=>run(async()=>{await api.startPerformance(portfolioId);setNotice('현재 평가액을 시작 기준으로 등록했습니다.');})}>기간 성과 시작 기준 등록</button>
       </div> : <div>
         <PerformanceChart reports={data.reports} dailyReports={data.daily_reports || []} baselineDate={data.tracking.baseline_date}
-          sales={sales} salesError={salesError} />
-        <details className="period-table-details" open={!compact}><summary>기간 성과 표 보기</summary><div className="table-container"><table className="custom-table" aria-label="기간 성과 표"><thead><tr><th>구분</th><th>기간</th><th>평가 시작/종료</th><th>순입금</th><th>기간 손익</th><th>금액가중 기간 수익률</th></tr></thead><tbody>
-          {data.reports.map(r=><tr key={`${r.kind}/${r.label}`}><td>{r.kind}</td><td>{r.label}{r.partial && ' (기준 등록 이후)'}<br />{r.start} ~ {r.end}</td><td>{r.start_value==null ? '미기록' : formatKRW(r.start_value)} / {r.end_value==null ? '미기록' : formatKRW(r.end_value)}</td><td>{r.net_flow==null ? '—' : formatKRW(r.net_flow)}</td><td>{r.profit==null ? '—' : formatKRW(r.profit)}{r.warning && <p>{r.warning}</p>}</td><td>{r.return_pct==null ? '계산 대기' : `${(Math.abs(r.return_pct)<0.005 ? 0 : r.return_pct).toFixed(2)}%`}</td></tr>)}
+          sales={sales} salesError={salesError} timeWeighted={timeWeighted} />
+        <details className="period-table-details" open={!compact}><summary>기간 성과 표 보기</summary><div className="table-container"><table className="custom-table" aria-label="기간 성과 표"><thead><tr><th>구분</th><th>기간</th><th>평가 시작/종료</th><th>순입금</th><th>기간 손익</th><th>{timeWeighted ? '종가 기준 시간가중 수익률' : '금액가중 기간 수익률'}</th></tr></thead><tbody>
+          {data.reports.map(r=><tr key={`${r.kind}/${r.label}`}><td>{r.kind}</td><td>{r.label}{r.partial && ' (기준 등록 이후)'}<br />{r.start} ~ {r.end}</td><td>{r.start_value==null ? '미기록' : formatKRW(r.start_value)} / {r.end_value==null ? '미기록' : formatKRW(r.end_value)}</td><td>{r.net_flow==null ? '—' : formatKRW(r.net_flow)}</td><td>{r.profit==null ? '—' : formatKRW(r.profit)}{(!timeWeighted || r.ledger_unconfirmed) && r.warning && <p>{r.warning}</p>}</td><td>
+            {performanceValue((timeWeighted ? r.twr_pct : r.return_pct) ?? null, 'return_pct')}
+            {timeWeighted && r.twr_warning && <p>{r.twr_warning}</p>}</td></tr>)}
         </tbody></table></div></details>
         <details><summary>기록 관리·수집 상태</summary>
           <p>시작 기준 {data.tracking.baseline_date} · {formatKRW(data.tracking.baseline_value)} · 평가 기록 {data.snapshots.length}일</p>
@@ -40,7 +44,12 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
         <p>선택한 포트폴리오의 보유자산·예금·원화/달러 예수금 전체를 원화로 평가합니다. 가상자산과 다른 포트폴리오는 제외합니다.</p>
         <p>국내 자산은 해당 거래일 KRX 정규장 종가, 미국 자산은 한국 평가 시점까지 마감한 최근 미국 정규장 종가를 적용합니다. 환율은 별도 고시 환율과 수집 시각을 함께 저장합니다. 예금은 평가일의 세후 원리금으로 계산합니다. 마감이 늦춰진 거래일에는 마감 30분 후 기록합니다.</p>
         <p>보유 수량·예수금은 수집 당시 앱 장부 기준입니다. 실제 매매·잔고를 종가 기록 전에 반영해주세요. 배당은 실제 잔고에 반영된 금액으로만 포함하며 계산된 배당 손익을 다시 더하지 않습니다. 기존 조회 기록과 시작 기준은 종가 기록과 구분해 보존합니다.</p>
-        <p>기간 손익 = 종료 평가액 − 시작 평가액 − 순입금. 수익률은 날짜별 입출금을 반영한 금액가중 방식(XIRR의 기간 환산)이며 연환산 수익률·시간가중 수익률이 아닙니다. 같은 날의 입출금은 날짜 단위로 계산합니다. 단순 월 수익률 합산으로 연 수익률을 만들지 않습니다.</p>
+        <p>기간 손익 = 종료 평가액 − 시작 평가액 − 순입금.</p>
+        {timeWeighted ? <>
+          <p>종가 기준 시간가중 수익률은 입금을 평가 구간의 시작에, 출금을 종료에 반영한 뒤 구간 수익률을 복리로 연결합니다. 첫 구간은 등록된 시작 평가액을 사용합니다.</p>
+          <p>누락된 종가 사이에 입출금이 없으면 두 평가일로 구간 수익률을 계산합니다. 입출금이 있으면 해당 구간과 그 구간을 포함하는 누적·기간 수익률은 계산을 보류합니다.</p>
+          <p>기존 금액가중 수익률(XIRR의 기간 환산)은 그래프에서 일자나 기간을 선택한 뒤 기록 상세에서 볼 수 있습니다.</p>
+        </> : <p>수익률은 날짜별 입출금을 반영한 금액가중 방식(XIRR의 기간 환산)입니다. 같은 날의 입출금은 날짜 단위로 계산합니다.</p>}
         <p>종가 기록의 월말·연말 경계는 마지막 KRX 거래일입니다. 해당 거래일 기록이 없으면 기간 수익률을 계산하지 않습니다. 휴장일은 기록하지 않으며 누락된 거래일은 그래프의 선을 끊습니다. 현재 월·연은 최근 기록일까지의 성과이고, 입출금은 표시된 실제 평가 시작/종료 날짜 사이를 반영합니다.</p>
       </details>
   </section>;

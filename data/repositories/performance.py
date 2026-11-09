@@ -2,7 +2,7 @@ import json
 """Performance bookkeeping only; external-flow records never adjust actual cash."""
 from datetime import datetime, timezone, timedelta
 from psycopg2.extras import RealDictCursor, Json
-from logic.period_performance import report_periods, report_daily
+from logic.period_performance import add_closing_time_weighted_returns, report_periods, report_daily
 
 
 def today():
@@ -75,7 +75,7 @@ def read(ctx, pid):
     result['reports']=report_periods(tracking,result['snapshots'],result['flows'])
     result['daily_reports']=report_daily(tracking,result['snapshots'],result['flows'])
     from logic.ledger_reconciliation import mask_uncertain
-    return mask_uncertain(result,corrections)
+    return add_closing_time_weighted_returns(mask_uncertain(result,corrections))
 
 
 def add_flow(ctx,pid,data):

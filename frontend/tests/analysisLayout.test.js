@@ -72,6 +72,26 @@ try {
     assert.match(html, /<details><summary>그래프 보는 법<\/summary>/);
     assert.doesNotMatch(html, /NaN|Infinity/);
   });
+  await test('closing time-weighted return is graphed while XIRR remains in record details', () => {
+    const dailyReports = [
+      {kind:'일',label:'2026-11-02',start:'2026-10-29',end:'2026-11-02',
+        record_kind:'close',return_pct:3.72,twr_pct:2.12,profit:123194,warning:''},
+      {kind:'일',label:'2026-11-03',start:'2026-10-29',end:'2026-11-03',
+        record_kind:'close',previous_close_date:'2026-11-02',return_pct:null,twr_pct:0.75,twr_warning:'',
+        profit:100000,warning:'입출금 부호가 여러 번 바뀌었습니다.'},
+    ];
+    const html = renderToStaticMarkup(React.createElement(Chart, {dailyReports,timeWeighted:true,baselineDate:'2026-10-29'}));
+    assert.match(html,/2026-11-03 종가 기준 누적 시간가중 수익률 \+0.75%/);
+    assert.match(html,/<details><summary>선택한 기록 상세<\/summary>.*기존 금액가중 수익률 \(XIRR\) 계산 대기/);
+    assert.doesNotMatch(html,/<title>[^<]*입출금 부호|role="status">입출금 부호/);
+    assert.match(html,/−23,194원/);
+    const analysis = renderToStaticMarkup(React.createElement(Analysis, { portfolioId:'default', assets:[], dashboardData:{},
+      performance:{...performance,data:{...data,twr_method:'closing',daily_reports:dailyReports,
+        reports:[{kind:'월',label:'2026-11',start:'2026-10-30',end:'2026-11-03',
+          profit:100000,return_pct:null,twr_pct:1.32,warning:'XIRR 확인 필요'}]}},onOpenHistory:noop }));
+    assert.match(analysis,/<th>종가 기준 시간가중 수익률<\/th>/);
+    assert.match(analysis,/<td>\+1.32%<\/td>/);
+  });
   await test('daily sales show a separate dated marker and amount, including sales before a closing record arrives', () => {
     const dailyReports = [
       {kind:'일',label:'2026-11-06',start:'2026-11-05',end:'2026-11-06',

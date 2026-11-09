@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 import calendar
 import math
-from logic.close_calendar import last_session
+from logic.close_calendar import last_session, previous_session
 
 
 def money_weighted_return(start, end, start_value, end_value, flows):
@@ -150,4 +150,104 @@ def report_daily(tracking, snapshots, flows):
                        'valuation_at': snapshot.get('valuation_at'),
                        'ledger_at': snapshot.get('ledger_at'), 'fx':snapshot.get('fx'),
                        'closes':snapshot.get('closes')})
+    return result
+
+
+
+def add_closing_time_weighted_returns(result):
+    """Enrich the read report using closing snapshots and dated external flows.
+
+    Only recorded closes are linked after the registered start value. A gap
+    without cash movement can be measured from its endpoints; a gap with a
+    flow needs valuations that we do not have.
+    """
+    tracking = result['tracking']
+    if not tracking:
+        return result
+    result['twr_method'] = 'closing'
+    baseline = tracking['baseline_date']
+    start_value = float(tracking['baseline_value'])
+    daily = result['daily_reports']
+    base = next((row for row in daily if row['end'] == baseline), {})
+    base_is_close = base.get('value_krw') == start_value and (
+        base.get('baseline_kind') == 'closing_baseline' or base.get('record_kind') == 'close'
+    )
+    flows = sorted(
+        (f for f in result['flows'] if not f['voided'] and f['event_date'] >= baseline and f['amount_krw'] != 0),
+        key=lambda f: f['event_date'],
+    )
+    flow_index = 0
+    while flow_index < len(flows) and flows[flow_index]['event_date'] == baseline:
+        flow_index += 1
+    pending = ''
+    if base.get('ledger_unconfirmed'):
+        pending = base['warning']
+    elif flow_index and not base_is_close:
+        pending = '시작일 입출금이 시작 평가액에 포함됐는지 확인할 수 없습니다.'
+    cumulative_warning = pending
+    growth = 1.0
+    previous_date, previous_value = baseline, start_value
+    checkpoints = {baseline: 0}
+    factors = []
+
+    for row in daily:
+        day, end_value = row['end'], row['value_krw']
+        row.update(twr_pct=None, twr_warning='')
+        if day == baseline:
+            if not pending and end_value == start_value and start_value > 0:
+                row['twr_pct'] = 0.0
+            else:
+                row['twr_warning'] = pending or '시작 평가액과 같은 날짜의 평가 기록이 일치해야 합니다.'
+            continue
+        if row.get('record_kind') != 'close':
+            row['twr_warning'] = row['warning'] if row.get('ledger_unconfirmed') else '이 날짜의 정규장 종가 평가 기록이 없습니다.'
+            if row.get('ledger_unconfirmed'):
+                pending = row['warning']
+            continue
+
+        inflows = outflows = 0.0
+        while flow_index < len(flows) and flows[flow_index]['event_date'] <= day:
+            amount = float(flows[flow_index]['amount_krw'])
+            inflows += max(amount, 0)
+            outflows += max(-amount, 0)
+            flow_index += 1
+        begin, end = previous_value + inflows, end_value + outflows
+        reason = row['warning'] if row.get('ledger_unconfirmed') else pending
+        if not reason and (inflows or outflows) and previous_date < (row.get('previous_close_date') or previous_session(day)):
+            reason = '종가 기록이 빠진 구간에 외부 입출금이 있어 수익률을 확정할 수 없습니다.'
+        if not reason and (begin <= 0 or end < 0 or not math.isfinite(begin) or not math.isfinite(end)):
+            reason = '입출금 조정 후의 평가액으로 수익률을 계산할 수 없습니다.'
+        factor = None if reason else end / begin
+        factors.append(factor)
+        checkpoints[day] = len(factors)
+        pending = row['warning'] if row.get('ledger_unconfirmed') else ''
+        previous_date, previous_value = day, end_value
+        if not cumulative_warning and reason:
+            cumulative_warning = f'{day.isoformat()}까지의 구간 · {reason}'
+        if not cumulative_warning:
+            growth *= factor
+            rate = (growth - 1) * 100
+            if math.isfinite(rate):
+                row['twr_pct'] = rate
+            else:
+                cumulative_warning = '안정적으로 계산할 수 있는 수익률 범위를 벗어났습니다.'
+        row['twr_warning'] = cumulative_warning
+
+    for row in result['reports']:
+        row.update(twr_pct=None, twr_warning='')
+        start, end = row['start'], row['end']
+        if row.get('ledger_unconfirmed'):
+            row['twr_warning'] = row['warning']
+        elif start not in checkpoints or end not in checkpoints or start == end:
+            row['twr_warning'] = '기간의 시작과 종료에 평가 기록이 필요합니다.'
+        else:
+            interval = factors[checkpoints[start]:checkpoints[end]]
+            if None in interval:
+                row['twr_warning'] = '기간에 수익률을 확정할 수 없는 평가 구간이 있습니다.'
+            else:
+                rate = (math.prod(interval) - 1) * 100
+                if math.isfinite(rate):
+                    row['twr_pct'] = rate
+                else:
+                    row['twr_warning'] = '안정적으로 계산할 수 있는 수익률 범위를 벗어났습니다.'
     return result

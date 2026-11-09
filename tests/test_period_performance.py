@@ -1,6 +1,6 @@
 from datetime import date
 import pytest
-from logic.period_performance import money_weighted_return, report_periods, report_daily
+from logic.period_performance import add_closing_time_weighted_returns, money_weighted_return, report_periods, report_daily
 from backend.performance_valuation import current_nav
 
 START=date(2026,1,1)
@@ -184,3 +184,92 @@ def test_daily_ambiguous_return_is_not_fabricated_but_profit_is_available():
                         [flow(date(2026, 3, 1), -300), flow(date(2026, 6, 1), 300)])
     assert rows[0]['return_pct'] is None and rows[0]['profit'] == 0
     assert '부호' in rows[0]['warning']
+
+
+
+def close(day, value, previous):
+    return dict(snapshot_date=day, value_krw=value, previous_close_date=previous, record_kind='close')
+
+
+def closing_returns(t, snapshots, flows, adjustments=()):
+    from logic.ledger_reconciliation import mask_uncertain
+    report = dict(tracking=t, daily_reports=report_daily(t, snapshots, flows),
+                  reports=report_periods(t, snapshots, flows), flows=flows)
+    return add_closing_time_weighted_returns(mask_uncertain(report, adjustments))
+
+
+def test_closing_twr_survives_the_november_3_xirr_sign_change():
+    oct29, oct30, nov2, nov3 = (date(2026, month, day) for month, day in [(10,29),(10,30),(11,2),(11,3)])
+    t = {**tracking(oct29), 'baseline_value':10000000, 'close_started_on':oct30}
+    snapshots = [
+        close(oct29, 10000000, date(2026,10,28)),
+        close(oct30, 7100000, oct29),
+        close(nov2, 15250000, oct30),
+        close(nov3, 15100000, nov2),
+    ]
+    flows = [flow(oct30, -3000000), flow(nov2, 3000000), flow(nov2, 5000000), flow(nov3, -2000000, True)]
+    existing = report_daily(t, snapshots, flows)
+    result = closing_returns(t, snapshots, flows)
+    daily = result['daily_reports']
+    assert result['twr_method'] == 'closing'
+    assert [r['return_pct'] for r in daily] == [r['return_pct'] for r in existing]
+    assert [r['profit'] for r in daily] == [r['profit'] for r in existing]
+    assert daily[-2]['return_pct'] is not None and daily[-1]['return_pct'] is None
+    assert '부호' in daily[-1]['warning'] and not daily[-1]['twr_warning']
+    expected = 1.01 * (15250000/15100000) * (15100000/15250000)
+    assert daily[-1]['twr_pct'] == pytest.approx((expected-1)*100)
+    november = next(r for r in result['reports'] if r['label']=='2026-11')
+    assert november['twr_pct'] == pytest.approx(0)
+    assert result['reports'][-1]['twr_pct'] == pytest.approx(daily[-1]['twr_pct'])
+
+
+def test_closing_twr_uses_gross_same_day_flows_and_retains_true_zero():
+    first, second, third = (date(2026,11,d) for d in (2,3,4))
+    t = {**tracking(first), 'close_started_on':first}
+    snaps = [close(first,100,date(2026,10,30)), close(second,110,first), close(third,110,second)]
+    flows = [flow(second,50), flow(second,-50), flow(third,20), flow(third,-20)]
+    result = closing_returns(t,snaps,flows)
+    assert [r['twr_pct'] for r in result['daily_reports']] == pytest.approx([0,100*10/150,100*10/150])
+    zero_result = closing_returns(t,[snaps[0],close(second,100,first)],flows)
+    assert zero_result['daily_reports'][-1]['twr_pct'] == 0
+
+
+def test_closing_twr_bridges_no_flow_gap_but_flags_gap_with_flows():
+    first, gap_day, next_close, next_month = (date(2026,m,d) for m,d in ((11,26),(11,27),(11,30),(12,1)))
+    t = {**tracking(first), 'close_started_on':first}
+    snaps = [close(first,100,date(2026,11,25)),
+             {'snapshot_date':gap_day,'value_krw':103,'record_kind':'legacy_view'},
+             close(next_close,110,gap_day),close(next_month,121,next_close)]
+    no_flow = closing_returns(t,snaps,[])['daily_reports']
+    assert [r['twr_pct'] for r in (no_flow[0],no_flow[2],no_flow[3])] == pytest.approx([0,10,21])
+    assert no_flow[1]['twr_pct'] is None
+    with_flow = closing_returns(t,snaps,[flow(gap_day,5)])
+    assert '종가 기록이 빠진 구간' in with_flow['daily_reports'][2]['twr_warning']
+    assert all(r['twr_pct'] is None for r in with_flow['daily_reports'][1:])
+    december = next(r for r in with_flow['reports'] if r['label']=='2026-12')
+    assert december['twr_pct'] == pytest.approx(10)
+    assert with_flow['reports'][-1]['twr_pct'] is None
+
+
+def test_closing_twr_does_not_double_count_a_flow_in_the_closing_baseline():
+    start, end = (date(2026,11,d) for d in (2,3))
+    t = {**tracking(start), 'close_started_on':start}
+    snaps = [dict(snapshot_date=start,value_krw=100,record_kind='baseline',baseline_kind='closing_baseline'),
+             close(end,110,start)]
+    flows = [flow(start,20)]
+    assert closing_returns(t,snaps,flows)['daily_reports'][-1]['twr_pct'] == pytest.approx(10)
+    snaps[0].pop('baseline_kind')
+    ambiguous = closing_returns(t,snaps,flows)
+    assert ambiguous['daily_reports'][-1]['twr_pct'] is None
+    assert '시작일 입출금' in ambiguous['daily_reports'][-1]['twr_warning']
+
+
+def test_closing_twr_respects_unconfirmed_valuations_inside_the_chain():
+    a,b,c = (date(2026,11,d) for d in (2,3,4))
+    t = {**tracking(a), 'close_started_on':a}
+    snaps = [close(a,100,date(2026,10,30)), close(b,110,a), close(c,120,b)]
+    report = closing_returns(t,snaps,[],[{'history':[{'key':b.isoformat(),'decision':'UNKNOWN'}]}])
+    assert report['daily_reports'][1]['ledger_unconfirmed']
+    assert report['daily_reports'][2]['profit']==20
+    assert all(r['twr_pct'] is None for r in report['daily_reports'][1:])
+    assert all(r['twr_pct'] is None for r in report['reports'])

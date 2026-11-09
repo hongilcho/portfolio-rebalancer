@@ -5,7 +5,7 @@ export function performanceSeries(reports, kind, metric, year) {
     .sort((a, b) => a.label.localeCompare(b.label)).map(row => {
       const raw = row[metric];
       const value = typeof raw === 'number' && Number.isFinite(raw)
-        ? metric === 'return_pct' ? (Math.abs(raw) < 0.005 ? 0 : raw) : Math.round(raw)
+        ? ['return_pct', 'twr_pct'].includes(metric) ? (Math.abs(raw) < 0.005 ? 0 : raw) : Math.round(raw)
         : null;
       const periodEnd = kind === '연' ? `${row.label}-12-31`
         : new Date(Date.UTC(Number(row.label.slice(0, 4)), Number(row.label.slice(5, 7)), 0)).toISOString().slice(0, 10);
@@ -42,7 +42,7 @@ export function dailyPerformanceSeries(reports, metric, range = '90') {
       const previous = ordered[index - 1];
       const raw = row[metric];
       const value = typeof raw === 'number' && Number.isFinite(raw)
-        ? metric === 'return_pct' ? (Math.abs(raw) < 0.005 ? 0 : raw) : Math.round(raw) : null;
+        ? ['return_pct', 'twr_pct'].includes(metric) ? (Math.abs(raw) < 0.005 ? 0 : raw) : Math.round(raw) : null;
       // The server's cumulative profit already excludes external cash flows.
       const comparison = previous ? {
         date: previous.label,

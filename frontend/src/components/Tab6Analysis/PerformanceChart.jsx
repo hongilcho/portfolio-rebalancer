@@ -45,7 +45,7 @@ function SaleDay({day, rows, missingEvaluation = false}) {
   </div>;
 }
 
-export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate, sales, salesError }) {
+export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate, sales, salesError, timeWeighted = false }) {
   const [kind, setKind] = useState(dailyReports.length ? '일' : '월');
   const [metric, setMetric] = useState('return_pct');
   const [year, setYear] = useState('latest');
@@ -58,7 +58,10 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
   const years = [...new Set(reports.filter(row => row.kind === '월').map(row => row.label.slice(0, 4)))].sort();
   const selectedYear = years.includes(year) ? year : years.at(-1);
   const daily = kind === '일';
-  const series = daily ? dailyPerformanceSeries(dailyReports, metric, effectiveRange) : performanceSeries(reports, kind, metric, selectedYear);
+  const metricField = timeWeighted && metric === 'return_pct' ? 'twr_pct' : metric;
+  const series = daily ? dailyPerformanceSeries(dailyReports, metricField, effectiveRange) : performanceSeries(reports, kind, metricField, selectedYear);
+  const warningFor = row => metricField === 'twr_pct' ? row.twr_warning :
+    !timeWeighted || row.ledger_unconfirmed ? row.warning : '';
   const selected = series.find(row => row.key === selectedKey) || series.at(-1);
   const salesByDay = useMemo(() => {
     const grouped = new Map();
@@ -104,7 +107,10 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
   const chooseKind = value => { setKind(value); setSelectedKey(null); if (value !== '일' && metric === 'value_krw') setMetric('return_pct'); };
   const chooseMetric = value => setMetric(value);
   const metricLabel = metric === 'value_krw' ? '평가액' : metric === 'return_pct'
-    ? daily ? '기준일부터 누적 금액가중 수익률' : '금액가중 기간 수익률' : daily ? '기준일부터 누적 손익' : '기간 손익';
+    ? timeWeighted
+      ? daily ? '종가 기준 누적 시간가중 수익률' : '종가 기준 기간 시간가중 수익률'
+      : daily ? '기준일부터 누적 금액가중 수익률' : '금액가중 기간 수익률'
+    : daily ? '기준일부터 누적 손익' : '기간 손익';
   const tooltipWidth=Math.min(210,right-left);
   const tooltipX=Math.max(left,Math.min(right-tooltipWidth,selectedX-tooltipWidth/2));
   const segments = daily ? dailyPerformanceSegments(series) : [];
@@ -141,13 +147,13 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         <option value="365">최근 기록일 기준 1년</option><option value="all">전체 기록</option>
       </select></label>}
     </div>
-    <p className="performance-chart-caption">{compact?(metric==='value_krw'?'평가액':daily?metric==='return_pct'?'기준일부터 누적 수익률':'기준일부터 누적 손익':metricLabel):metricLabel}
+    <p className="performance-chart-caption">{compact && !timeWeighted && daily && metric==='return_pct'?'기준일부터 누적 수익률':metricLabel}
       {daily && baselineDate && <small className="performance-chart-baseline">기준일 <time dateTime={baselineDate}>{baselineDate}</time></small>}
     </p>
     {hasSaleMarks && <p className="performance-sale-legend"><span aria-hidden="true">◆</span> 매도일 · 날짜를 선택하면 실현손익을 볼 수 있습니다.</p>}
     {(daily || !dailyReports.length) && salesError && <p className="performance-chart-note" role="status">매도 기록을 갱신하지 못했습니다.{sales && ' 이전 조회 결과를 표시합니다.'}</p>}
     {!series.length ? <p>표시할 기간 성과 기록이 없습니다. 시작 기준 등록 이후의 평가 기록을 확인해주세요.</p> : <>
-      {!daily&&signed&&latest&&<ProfitStatus profit={latest.profit} rate={latest.return_pct} caption={`최근 기간 · ${latest.label}`}/>}
+      {!daily&&signed&&latest&&<ProfitStatus profit={latest.profit} rate={timeWeighted?latest.twr_pct:latest.return_pct} caption={`최근 기간 · ${latest.label}`}/>}
       {selected && <p className="performance-chart-value" aria-live="polite" aria-atomic="true">
         <span>{selected.label} · </span><SignedSelection value={selected.value} metric={metric}>{performanceValue(selected.value, metric)}</SignedSelection>
       </p>}
@@ -182,7 +188,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
                     siblings[series.indexOf(target)]?.focus();
                   }
                 }}>
-                <title>{`${label}${row.warning ? ` · ${row.warning}` : ''}`}</title>
+                <title>{`${label}${warningFor(row) ? ` · ${warningFor(row)}` : ''}`}</title>
                 {!compact && <circle cx={x} cy={pointY} r="22" fill="transparent" pointerEvents="all" />}
                 {row.value === null ? <text x={x} y={pointY + 4} textAnchor="middle" fill="var(--text-secondary)" fontSize="12">×</text>
                   : (!compact || series.length<=12 || selected?.key===row.key || index===0 || index===series.length-1) && <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill={signed?profitColor(row.value):'var(--accent-primary)'} stroke={signed?profitColor(row.value):'var(--accent-primary)'} strokeWidth="2" />}
@@ -204,7 +210,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
           </> : series.map((row, index) => {
             const x = left + slot * (index + 0.5);
             const color = row.value > 0 ? 'var(--color-profit)' : row.value < 0 ? 'var(--color-loss)' : 'var(--text-secondary)';
-            const label = `${row.label} ${performanceValue(row.value, metric)}${row.warning ? ` · ${row.warning}` : ''}`;
+            const label = `${row.label} ${performanceValue(row.value, metric)}${warningFor(row) ? ` · ${warningFor(row)}` : ''}`;
             return <g key={row.key} role="button" tabIndex={0} aria-label={label} aria-pressed={selected?.key === row.key}
               className="performance-chart-period" onClick={() => setSelectedKey(row.key)} onFocus={() => setSelectedKey(row.key)}
               onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedKey(row.key); } }}>
@@ -235,6 +241,8 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         <details><summary>선택한 기록 상세</summary>
         <p>{selected.start} ~ {selected.end}{selected.partial && ' · 시작 기준 등록 이후'}{selected.ongoing && ' · 최근 평가일까지'}</p>
         {daily && <p>평가액 {performanceValue(selected.value_krw, 'value_krw')} · 누적 순입금 {performanceValue(selected.net_flow, 'profit')} · 누적 손익 {performanceValue(selected.profit, 'profit')}</p>}
+        {timeWeighted && <p>기존 금액가중 수익률 (XIRR) {performanceValue(selected.return_pct ?? null, 'return_pct')}
+          {selected.warning && <> · {selected.warning}</>}</p>}
         {daily && selected.recorded_at && <p>마지막 기록 시각 {new Date(selected.recorded_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간)</p>}
         {daily && <p>평가 기준 {selected.record_kind === 'close' ? '정규장 종가' : selected.record_kind === 'baseline' ? selected.baseline_kind === 'closing_baseline' ? '종가 기준 시작 평가액' : '시작 기준 등록 시점' : '이전 조회 시점 기록'}</p>}
         {daily && selected.fx && <p>적용 환율 {Number(selected.fx.rate).toLocaleString('ko-KR')} 원/USD{selected.fx.published_at
@@ -243,14 +251,14 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         {daily && selected.ledger_at && <p>장부 수집 시각 {new Date(selected.ledger_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국 시간)</p>}
         {daily && selected.closes?.length>0 && <details><summary>종가 날짜·출처 확인</summary>{selected.closes.map(c=><p key={c.id}>{c.ticker || '예금'} · {c.price_date} · {c.source}</p>)}</details>}
         </details>
-        {selected.warning && <p role="status">{selected.warning}</p>}
+        {warningFor(selected) && <p role="status">{warningFor(selected)}</p>}
         {selected.ongoing && <p className="history-muted">진행 중인 기간 · 최근 평가일까지의 성과입니다.</p>}
       </div>}
       <details><summary>그래프 보는 법</summary>
       <p>{daily ? '점을 선택하면 해당 날짜의 값을 확인할 수 있습니다. 수익률·손익은 시작 기준일부터의 누적 성과입니다. 표시 범위를 바꿔도 계산 기준일은 바뀌지 않습니다.' : '양수는 위쪽, 음수는 아래쪽으로 표시합니다. 막대를 선택하면 해당 기간의 상세 값을 확인할 수 있습니다.'}</p>
       {daily && <p>하루 운용손익은 직전 평가일부터의 평가액 변화에서 그 사이 외부 순입금을 뺀 값입니다. 매도 실현손익은 별도 표시합니다.</p>}
       <p className="performance-chart-note">{daily ? '종가 기록은 연속된 거래일 사이에 선을 연결합니다. 주말·휴장일은 건너뛰고, 누락된 거래일과 계산 대기 구간은 연결하지 않습니다. 하루만 기록되면 점 하나가 표시됩니다. 평가액은 입출금으로도 변하므로 수익률과 다릅니다. 기존 조회 기록은 날짜별 상세의 평가 기준으로 구분합니다.' : '계산 대기는 0%·0원으로 표시하지 않습니다. 진행 중인 기간은 최근 평가일까지 표시하며, 정확한 금액과 계산 상태는 아래 표에서 확인할 수 있습니다.'}</p>
-      {daily && !series.some(row => row.value !== null) && <p>계산 대기 사유는 기록 상세에서 확인할 수 있습니다. 시작일 평가액이 변경된 경우 다음 날짜의 기록부터 수익률을 계산할 수 있습니다.</p>}
+      {daily && !series.some(row => row.value !== null) && <p>계산 대기 사유는 선택한 기록에서 확인할 수 있습니다.</p>}
       <p>외부 입출금 기록이 없으면 입출금 없음으로 계산합니다. 실제 입출금이 있을 때만 5번 탭에 기록하면 날짜·금액이 자동 반영됩니다.</p>
       </details>
     </>}
