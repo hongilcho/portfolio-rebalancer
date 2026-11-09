@@ -4,21 +4,21 @@ import { formatKRW } from '../../utils/formatters';
 import {useCompactLayout} from '../../utils/useCompactLayout';
 import PerformanceChart from './PerformanceChart';
 
-export default function PeriodPerformance({ portfolioId, performance, onOpenHistory }) {
+export default function PeriodPerformance({ portfolioId, performance, onOpenHistory, sales, salesError }) {
   const { data, busy, error, notice, run, capture, setNotice } = performance;
   const compact=useCompactLayout();
   const [startChecked, setStartChecked] = useState(false);
-  const [open, setOpen] = useState(true);
-  return <section className="section-card workflow-panel">
-    <details open={open} onToggle={e => setOpen(e.currentTarget.open)}>
-      <summary style={{ cursor: 'pointer', fontWeight: 700 }}>📈 기간 성과</summary>
+  return <section className="section-card workflow-panel" aria-label="매도분 포함 기간 운용성과">
+      <h3>기간 운용성과</h3>
+      <p className="history-muted">보유자산과 예수금을 함께 평가하고 외부 입출금을 제외한 성과입니다.</p>
       {error && <p role="alert">기간 성과: {error}</p>}{notice && <p>{notice}</p>}
       {!data ? <p>기간 성과 정보를 조회 중입니다.</p> : !data.tracking ? <div>
         <p>시작 기준을 등록하면 종가 기준 기간 성과를 자동 기록합니다.</p>
         <label style={{display:'block',margin:'16px 0 8px'}}><input type="checkbox" checked={startChecked} disabled={busy} onChange={e=>setStartChecked(e.target.checked)} />현재 장부의 잔고·예수금·시세를 확인했습니다.</label>
         <button className="btn btn-primary" disabled={busy || !startChecked} onClick={()=>run(async()=>{await api.startPerformance(portfolioId);setNotice('현재 평가액을 시작 기준으로 등록했습니다.');})}>기간 성과 시작 기준 등록</button>
       </div> : <div>
-        <PerformanceChart reports={data.reports} dailyReports={data.daily_reports || []} baselineDate={data.tracking.baseline_date} />
+        <PerformanceChart reports={data.reports} dailyReports={data.daily_reports || []} baselineDate={data.tracking.baseline_date}
+          sales={sales} salesError={salesError} />
         <details className="period-table-details" open={!compact}><summary>기간 성과 표 보기</summary><div className="table-container"><table className="custom-table" aria-label="기간 성과 표"><thead><tr><th>구분</th><th>기간</th><th>평가 시작/종료</th><th>순입금</th><th>기간 손익</th><th>금액가중 기간 수익률</th></tr></thead><tbody>
           {data.reports.map(r=><tr key={`${r.kind}/${r.label}`}><td>{r.kind}</td><td>{r.label}{r.partial && ' (기준 등록 이후)'}<br />{r.start} ~ {r.end}</td><td>{r.start_value==null ? '미기록' : formatKRW(r.start_value)} / {r.end_value==null ? '미기록' : formatKRW(r.end_value)}</td><td>{r.net_flow==null ? '—' : formatKRW(r.net_flow)}</td><td>{r.profit==null ? '—' : formatKRW(r.profit)}{r.warning && <p>{r.warning}</p>}</td><td>{r.return_pct==null ? '계산 대기' : `${(Math.abs(r.return_pct)<0.005 ? 0 : r.return_pct).toFixed(2)}%`}</td></tr>)}
         </tbody></table></div></details>
@@ -43,6 +43,5 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
         <p>기간 손익 = 종료 평가액 − 시작 평가액 − 순입금. 수익률은 날짜별 입출금을 반영한 금액가중 방식(XIRR의 기간 환산)이며 연환산 수익률·시간가중 수익률이 아닙니다. 같은 날의 입출금은 날짜 단위로 계산합니다. 단순 월 수익률 합산으로 연 수익률을 만들지 않습니다.</p>
         <p>종가 기록의 월말·연말 경계는 마지막 KRX 거래일입니다. 해당 거래일 기록이 없으면 기간 수익률을 계산하지 않습니다. 휴장일은 기록하지 않으며 누락된 거래일은 그래프의 선을 끊습니다. 현재 월·연은 최근 기록일까지의 성과이고, 입출금은 표시된 실제 평가 시작/종료 날짜 사이를 반영합니다.</p>
       </details>
-    </details>
   </section>;
 }

@@ -14,6 +14,14 @@ export function summarizeSales(rows) {
     estimated:netRows.length===rows.length&&rows.length?netRows.reduce((a,b)=>a+b,0):null,
     pending:rows.filter(r=>r.status!=='CONFIRMED').length,basisMissing:rows.filter(r=>!number(r.gross_profit_krw)).length};
 }
+export function realizedDayProfit(rows) {
+  const {count, confirmed, pending, estimated, gross, basisMissing} = summarizeSales(rows);
+  if (!count || basisMissing) return {amount:null, label:'원가 확인 필요'};
+  if (!pending && confirmed != null) return {amount:confirmed, label:'확인된 순손익'};
+  if (estimated != null) return {amount:estimated, label:'예상 순손익'};
+  return {amount:gross, label:'비용 전 손익'};
+}
+
 export function groupSales(rows,group='month') {
   const map=new Map();for(const row of rows){
     const key=['month','year'].includes(group)?row.trade_date.slice(0,group==='year'?4:7):String(group==='account'?row.account_id:row.asset_id);

@@ -1,10 +1,34 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { performanceSeries, performanceValue, performanceAxisValue, performanceDomain, performanceDay,
   dailyPerformanceSeries, dailyPerformanceSegments,performanceChartLayout,nearestPerformanceRecord } from '../../utils/performanceChart';
 import {profitColor,splitProfitSegment,zeroReference} from '../../utils/profitChartSignals';
 import {ProfitStatus,ZeroLine,SignedSelection} from '../common/ProfitChartSignals';
+import {realizedDayProfit,saleProfit} from '../../utils/realizedReport';
+import './PerformanceSales.css';
 
-export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate }) {
+function SaleDay({day, rows, missingEvaluation = false}) {
+  const {amount, label} = realizedDayProfit(rows);
+  const sameAsset = rows.every(row => row.asset_id === rows[0].asset_id);
+  const name = sameAsset
+    ? rows[0].asset_name + ' ' + rows.reduce((total,row) => total+row.quantity,0).toLocaleString('ko-KR') + '주 매도'
+    : rows.length + '건 매도';
+  const describe = value => value == null ? '원가 확인 필요' : performanceValue(value, 'profit');
+  return <div className="performance-sale-day">
+    <div className="performance-sale-summary">
+      <div><span className="performance-sale-eyebrow"><time>{day}</time> · 실현 매도손익</span><strong>{name}</strong></div>
+      <div><strong style={{color:profitColor(amount)}}>{describe(amount)}</strong>{amount != null && <small>{label}</small>}</div>
+    </div>
+    {missingEvaluation && <small>이 날짜의 평가 기록이 없습니다.</small>}
+    {rows.length > 1 && <details><summary>매도 내역 {rows.length}건</summary>
+      <ul>{rows.map(row => {
+        const profit = saleProfit(row);
+        return <li key={row.trade_id}>{row.asset_name} {row.quantity}주 · {describe(profit.amount)}{profit.amount != null && ' · '+profit.label}</li>;
+      })}</ul>
+    </details>}
+  </div>;
+}
+
+export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate, sales, salesError }) {
   const [kind, setKind] = useState(dailyReports.length ? '일' : '월');
   const [metric, setMetric] = useState('return_pct');
   const [year, setYear] = useState('latest');
@@ -19,6 +43,24 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
   const daily = kind === '일';
   const series = daily ? dailyPerformanceSeries(dailyReports, metric, effectiveRange) : performanceSeries(reports, kind, metric, selectedYear);
   const selected = series.find(row => row.key === selectedKey) || series.at(-1);
+  const salesByDay = useMemo(() => {
+    const grouped = new Map();
+    for (const sale of sales || []) {
+      if (!grouped.has(sale.trade_date)) grouped.set(sale.trade_date, []);
+      grouped.get(sale.trade_date).push(sale);
+    }
+    return grouped;
+  }, [sales]);
+  const shownDays = new Set(daily ? series.map(row => row.label) : []);
+  const selectedSales = daily ? salesByDay.get(selected?.label) : null;
+  const hasSaleMarks = daily && series.some(row => salesByDay.has(row.label));
+  const lastReportDay = performanceDay(series.at(-1)?.label);
+  const minSaleDay = daily && Number.isFinite(lastReportDay) && effectiveRange !== 'all'
+    ? lastReportDay - Number(effectiveRange) + 1 : -Infinity;
+  const salesWithoutEvaluation = daily || !dailyReports.length
+    ? [...salesByDay.keys()].filter(day => (!baselineDate || day >= baselineDate) &&
+      performanceDay(day) >= minSaleDay && !shownDays.has(day)).sort().reverse()
+    : [];
   const [minimum, maximum] = performanceDomain(series, metric);
   const hasSeries = series.length > 0;
   useEffect(() => {
@@ -85,6 +127,8 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
     <p className="performance-chart-caption">{compact?(metric==='value_krw'?'평가액':daily?metric==='return_pct'?'기준일부터 누적 수익률':'기준일부터 누적 손익':metricLabel):metricLabel}
       {daily && baselineDate && <small className="performance-chart-baseline">기준일 <time dateTime={baselineDate}>{baselineDate}</time></small>}
     </p>
+    {hasSaleMarks && <p className="performance-sale-legend"><span aria-hidden="true">◆</span> 매도일 · 날짜를 선택하면 실현손익을 볼 수 있습니다.</p>}
+    {(daily || !dailyReports.length) && salesError && <p className="performance-chart-note" role="status">매도 기록을 갱신하지 못했습니다.{sales && ' 이전 조회 결과를 표시합니다.'}</p>}
     {!series.length ? <p>표시할 기간 성과 기록이 없습니다. 시작 기준 등록 이후의 평가 기록을 확인해주세요.</p> : <>
       {signed&&latest&&<ProfitStatus profit={latest.profit} rate={latest.return_pct} caption={`최근 ${daily?'기록':'기간'} · ${latest.label}`}/>}
       {selected && <p className="performance-chart-value" aria-live="polite" aria-atomic="true">
@@ -107,9 +151,10 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
             })}
             {series.map((row, index) => {
               const x = dailyX(row), pointY = row.value === null ? top : y(row.value);
-              const label = `${row.label} ${metricLabel} ${performanceValue(row.value, metric)}`;
+              const saleCount = salesByDay.get(row.label)?.length || 0;
+              const label = `${row.label} ${metricLabel} ${performanceValue(row.value, metric)}${saleCount ? ' · 매도 '+saleCount+'건' : ''}`;
               return <g key={row.key} role="button" tabIndex={0} aria-label={label} aria-pressed={selected?.key === row.key}
-                className="performance-chart-point" onClick={() => setSelectedKey(row.key)} onFocus={() => setSelectedKey(row.key)}
+                className="performance-chart-point" onClick={event => {event.stopPropagation();setSelectedKey(row.key);}} onFocus={() => setSelectedKey(row.key)}
                 onKeyDown={event => {
                   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedKey(row.key); }
                   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
@@ -124,6 +169,10 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
                 {!compact && <circle cx={x} cy={pointY} r="22" fill="transparent" pointerEvents="all" />}
                 {row.value === null ? <text x={x} y={pointY + 4} textAnchor="middle" fill="var(--text-secondary)" fontSize="12">×</text>
                   : (!compact || series.length<=12 || selected?.key===row.key || index===0 || index===series.length-1) && <circle cx={x} cy={pointY} r={selected?.key === row.key ? 6 : 4} fill={signed?profitColor(row.value):'var(--accent-primary)'} stroke={signed?profitColor(row.value):'var(--accent-primary)'} strokeWidth="2" />}
+                {saleCount > 0 && <g aria-hidden="true" transform={`translate(${x},${bottom+13})`}>
+                  <rect x="-12" y="-11" width="24" height="22" fill="transparent" pointerEvents="all"/>
+                  <path className="performance-sale-marker" d="M 0 -5 L 5 0 L 0 5 L -5 0 Z"/>
+                </g>}
               </g>;
             })}
             {ticks.map(row => <text key={row.key} x={dailyX(row)} y={bottom + 35}
@@ -156,6 +205,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
           })}
         </svg>
       </div>
+      {selectedSales && <SaleDay day={selected.label} rows={selectedSales}/>}
       {selected && <div className="performance-chart-detail">
         {daily && <div className="performance-chart-controls" role="group" aria-label="일별 기록 선택">
           <button type="button" className="btn btn-secondary btn-sm" disabled={selectedIndex <= 0}
@@ -185,5 +235,11 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
       <p>외부 입출금 기록이 없으면 입출금 없음으로 계산합니다. 실제 입출금이 있을 때만 5번 탭에 기록하면 날짜·금액이 자동 반영됩니다.</p>
       </details>
     </>}
+    {salesWithoutEvaluation.length > 0 && <div aria-label="평가 기록 없는 매도일">
+      <SaleDay day={salesWithoutEvaluation[0]} rows={salesByDay.get(salesWithoutEvaluation[0])} missingEvaluation/>
+      {salesWithoutEvaluation.length > 1 && <details><summary>평가 기록 없는 다른 매도일 {salesWithoutEvaluation.length - 1}일</summary>
+        {salesWithoutEvaluation.slice(1).map(day => <SaleDay key={day} day={day} rows={salesByDay.get(day)} missingEvaluation/>)}
+      </details>}
+    </div>}
   </section>;
 }

@@ -38,7 +38,9 @@ try {
   await test('analysis shows chart and table first, management collapsed, without daily confirmation', () => {
     const html = renderToStaticMarkup(React.createElement(Analysis, { portfolioId: 'default', assets: fixture.bundle.assets,
       dashboardData: fixture.bundle.dashboard, performance, onOpenHistory: noop }));
-    assert.match(html, /📈 기간 성과/);
+    assert.match(html, /<h3>기간 운용성과<\/h3>/);
+    assert.ok(html.indexOf('aria-label="기간 성과 그래프"') < html.indexOf('보유자산 손익 추이'));
+    assert.doesNotMatch(html, /<summary>[^<]*기간 성과<\/summary>/);
     assert.match(html, /예금 만기 안내/);
     assert.match(html, /배당 계산 상세 보기/);
     assert.doesNotMatch(html, /기간 입출금 기록 확인 완료|시작 기준부터 최근 평가일까지/);
@@ -68,6 +70,25 @@ try {
     assert.match(html, /<details><summary>선택한 기록 상세<\/summary>/);
     assert.match(html, /<details><summary>그래프 보는 법<\/summary>/);
     assert.doesNotMatch(html, /NaN|Infinity/);
+  });
+  await test('daily sales show a separate dated marker and amount, including sales before a closing record arrives', () => {
+    const dailyReports = [{kind:'일',label:'2026-11-09',start:'2026-11-06',end:'2026-11-09',
+      return_pct:-0.1,profit:-70000,value_krw:99930000,record_kind:'close'}];
+    const sale = {asset_id:'samsung',asset_name:'삼성전자',trade_date:'2026-11-09',quantity:50,
+      gross_profit_krw:-1050000,status:'COSTS_PENDING'};
+    const sales = [{...sale,trade_id:'one'},{...sale,trade_id:'two'},
+      {...sale,trade_id:'next',trade_date:'2026-11-10',asset_id:'vt',asset_name:'VT',quantity:1,gross_profit_krw:null,status:'BASIS_PENDING'}];
+    const html = renderToStaticMarkup(React.createElement(Chart, {dailyReports, sales, baselineDate:'2026-11-06'}));
+    assert.equal((html.match(/class="performance-sale-marker"/g) || []).length, 1);
+    assert.match(html,/2026-11-09 기준일부터 누적 금액가중 수익률 -0.10% · 매도 2건/);
+    assert.match(html,/삼성전자 100주 매도/);
+    assert.match(html,/-2,100,000 원/);
+    assert.match(html,/비용 전 손익/);
+    assert.match(html,/−70,000원/);
+    assert.match(html,/2026-11-10<\/time> · 실현 매도손익/);
+    assert.match(html,/원가 확인 필요/);
+    assert.match(html,/이 날짜의 평가 기록이 없습니다/);
+    assert.doesNotMatch(html,/class="performance-chart-point"[^>]*2026-11-10/);
   });
   await test('recorded flows are identified without pending confirmation markers', () => {
     const dailyReports=[{kind:'일',label:'2026-10-06',start:'2026-10-05',end:'2026-10-06',
