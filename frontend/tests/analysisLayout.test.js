@@ -66,14 +66,19 @@ try {
     assert.match(html, /class="performance-chart-point"/);
     assert.match(html, /2026-10-05 기준일부터 누적 금액가중 수익률 0.00%/);
     assert.match(html, /점 하나가 표시/);
+    assert.match(html, /직전 평가 기록 없음/);
     assert.match(html, /마지막 기록 시각/);
     assert.match(html, /<details><summary>선택한 기록 상세<\/summary>/);
     assert.match(html, /<details><summary>그래프 보는 법<\/summary>/);
     assert.doesNotMatch(html, /NaN|Infinity/);
   });
   await test('daily sales show a separate dated marker and amount, including sales before a closing record arrives', () => {
-    const dailyReports = [{kind:'일',label:'2026-11-09',start:'2026-11-06',end:'2026-11-09',
-      return_pct:-0.1,profit:-70000,value_krw:99930000,record_kind:'close'}];
+    const dailyReports = [
+      {kind:'일',label:'2026-11-06',start:'2026-11-05',end:'2026-11-06',
+        return_pct:-0.2,profit:-193194,value_krw:99806806,net_flow:0,record_kind:'close'},
+      {kind:'일',label:'2026-11-09',start:'2026-11-05',end:'2026-11-09',
+        return_pct:-0.1,profit:-70000,value_krw:100930000,net_flow:1000000,record_kind:'close',previous_close_date:'2026-11-06'},
+    ];
     const sale = {asset_id:'samsung',asset_name:'삼성전자',trade_date:'2026-11-09',quantity:50,
       gross_profit_krw:-1050000,status:'COSTS_PENDING'};
     const sales = [{...sale,trade_id:'one'},{...sale,trade_id:'two'},
@@ -84,6 +89,10 @@ try {
     assert.match(html,/삼성전자 100주 매도/);
     assert.match(html,/-2,100,000 원/);
     assert.match(html,/비용 전 손익/);
+    assert.match(html,/하루 운용손익/);
+    assert.match(html,/\+123,194원/);
+    assert.match(html,/직전 평가일 <time>2026-11-06<\/time>/);
+    assert.match(html,/기준일부터 누적손익/);
     assert.match(html,/−70,000원/);
     assert.match(html,/2026-11-10<\/time> · 실현 매도손익/);
     assert.match(html,/원가 확인 필요/);

@@ -43,3 +43,31 @@
   margin-top: 8px;
   font-size: .85rem;
 }
+
+.performance-day-profits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.performance-day-profits > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.performance-day-profits span,
+.performance-day-profits small {
+  font-size: .85rem;
+  color: var(--text-secondary);
+}
+
+.performance-day-profits strong {
+  font-size: 1.1rem;
+}

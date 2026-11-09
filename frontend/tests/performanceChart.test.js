@@ -75,6 +75,41 @@ test('daily range crosses years and is anchored on last recorded date, preservin
   assert.deepEqual(reports, original);
 });
 
+test('daily comparison removes external flows through cumulative profit and crosses a weekend', () => {
+  const reports = [
+    dailyRow('2026-11-06', { value_krw: 10000000, net_flow: 0, profit: -1500000, record_kind: 'close' }),
+    dailyRow('2026-11-09', { value_krw: 11123194, net_flow: 1000000, profit: -1376806,
+      return_pct: null, record_kind: 'close', previous_close_date: '2026-11-06' }),
+    dailyRow('2026-11-10', { value_krw: 10623194, net_flow: 500000, profit: -1376806,
+      record_kind: 'close', previous_close_date: '2026-11-09' }),
+  ];
+  const [first, monday, tuesday] = dailyPerformanceSeries(reports, 'return_pct', 'all');
+  assert.equal(first.comparison, null);
+  assert.equal(monday.value, null);
+  assert.deepEqual(monday.comparison, {date:'2026-11-06', consecutive:true, profit:123194});
+  assert.equal(monday.profit, -1376806);
+  assert.equal(tuesday.comparison.profit, 0);
+});
+
+test('daily comparison uses records outside the plot range and respects missing or masked amounts', () => {
+  const reports = [
+    dailyRow('2026-10-09', { profit: 900, record_kind: 'close' }),
+    dailyRow('2026-10-13', { profit: 1000, record_kind: 'close', previous_close_date: '2026-10-12' }),
+    dailyRow('2026-11-11', { profit: null }),
+    dailyRow('2026-11-12', { profit: 2000 }),
+    dailyRow('2026-11-13', { start:'2026-11-12', profit:2100 }),
+  ];
+  const [first, gap, masked, afterMask, otherBaseline] = dailyPerformanceSeries(reports, 'profit', 'all');
+  assert.equal(first.comparison, null);
+  assert.deepEqual(gap.comparison, {date:'2026-10-09', consecutive:false, profit:100});
+  assert.equal(masked.comparison.profit, null);
+  assert.equal(afterMask.comparison.profit, null);
+  assert.equal(otherBaseline.comparison.profit, null);
+  const visible = dailyPerformanceSeries(reports.slice(0, -1), 'profit', '31');
+  assert.equal(visible[0].label, '2026-10-13');
+  assert.equal(visible[0].comparison.date, '2026-10-09');
+});
+
 test('daily lines break at missing dates and null results, connect genuine zero and cross leap day', () => {
   const series = dailyPerformanceSeries([dailyRow('2024-02-28', { return_pct: 0 }), dailyRow('2024-02-29'),
     dailyRow('2024-03-01'), dailyRow('2024-03-03'), dailyRow('2024-03-04', { return_pct: null }),

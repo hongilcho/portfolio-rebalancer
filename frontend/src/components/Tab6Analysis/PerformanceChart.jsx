@@ -1,10 +1,27 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { performanceSeries, performanceValue, performanceAxisValue, performanceDomain, performanceDay,
   dailyPerformanceSeries, dailyPerformanceSegments,performanceChartLayout,nearestPerformanceRecord } from '../../utils/performanceChart';
-import {profitColor,splitProfitSegment,zeroReference} from '../../utils/profitChartSignals';
+import {profitColor,signedProfit,splitProfitSegment,zeroReference} from '../../utils/profitChartSignals';
 import {ProfitStatus,ZeroLine,SignedSelection} from '../common/ProfitChartSignals';
 import {realizedDayProfit,saleProfit} from '../../utils/realizedReport';
 import './PerformanceSales.css';
+
+function SelectedDayProfit({row}) {
+  const comparison = row.comparison;
+  const interval = comparison && !comparison.consecutive;
+  return <div className="performance-day-profits" role="group" aria-label="선택일 운용손익" aria-live="polite" aria-atomic="true">
+    <div>
+      <span>{interval ? '평가일 간 운용손익' : '하루 운용손익'}</span>
+      <strong style={{color:profitColor(comparison?.profit)}}>{signedProfit(comparison?.profit, 'profit')}</strong>
+      <small>{comparison ? <>직전 평가일 <time>{comparison.date}</time>{interval && ' · 평가 기록 사이'}</> : '직전 평가 기록 없음'}</small>
+    </div>
+    <div>
+      <span>기준일부터 누적손익</span>
+      <strong style={{color:profitColor(row.profit)}}>{signedProfit(row.profit, 'profit')}</strong>
+      <small>선택일 <time>{row.label}</time></small>
+    </div>
+  </div>;
+}
 
 function SaleDay({day, rows, missingEvaluation = false}) {
   const {amount, label} = realizedDayProfit(rows);
@@ -130,7 +147,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
     {hasSaleMarks && <p className="performance-sale-legend"><span aria-hidden="true">◆</span> 매도일 · 날짜를 선택하면 실현손익을 볼 수 있습니다.</p>}
     {(daily || !dailyReports.length) && salesError && <p className="performance-chart-note" role="status">매도 기록을 갱신하지 못했습니다.{sales && ' 이전 조회 결과를 표시합니다.'}</p>}
     {!series.length ? <p>표시할 기간 성과 기록이 없습니다. 시작 기준 등록 이후의 평가 기록을 확인해주세요.</p> : <>
-      {signed&&latest&&<ProfitStatus profit={latest.profit} rate={latest.return_pct} caption={`최근 ${daily?'기록':'기간'} · ${latest.label}`}/>}
+      {!daily&&signed&&latest&&<ProfitStatus profit={latest.profit} rate={latest.return_pct} caption={`최근 기간 · ${latest.label}`}/>}
       {selected && <p className="performance-chart-value" aria-live="polite" aria-atomic="true">
         <span>{selected.label} · </span><SignedSelection value={selected.value} metric={metric}>{performanceValue(selected.value, metric)}</SignedSelection>
       </p>}
@@ -205,6 +222,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
           })}
         </svg>
       </div>
+      {daily && selected && <SelectedDayProfit row={selected}/>}
       {selectedSales && <SaleDay day={selected.label} rows={selectedSales}/>}
       {selected && <div className="performance-chart-detail">
         {daily && <div className="performance-chart-controls" role="group" aria-label="일별 기록 선택">
@@ -230,6 +248,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
       </div>}
       <details><summary>그래프 보는 법</summary>
       <p>{daily ? '점을 선택하면 해당 날짜의 값을 확인할 수 있습니다. 수익률·손익은 시작 기준일부터의 누적 성과입니다. 표시 범위를 바꿔도 계산 기준일은 바뀌지 않습니다.' : '양수는 위쪽, 음수는 아래쪽으로 표시합니다. 막대를 선택하면 해당 기간의 상세 값을 확인할 수 있습니다.'}</p>
+      {daily && <p>하루 운용손익은 직전 평가일부터의 평가액 변화에서 그 사이 외부 순입금을 뺀 값입니다. 매도 실현손익은 별도 표시합니다.</p>}
       <p className="performance-chart-note">{daily ? '종가 기록은 연속된 거래일 사이에 선을 연결합니다. 주말·휴장일은 건너뛰고, 누락된 거래일과 계산 대기 구간은 연결하지 않습니다. 하루만 기록되면 점 하나가 표시됩니다. 평가액은 입출금으로도 변하므로 수익률과 다릅니다. 기존 조회 기록은 날짜별 상세의 평가 기준으로 구분합니다.' : '계산 대기는 0%·0원으로 표시하지 않습니다. 진행 중인 기간은 최근 평가일까지 표시하며, 정확한 금액과 계산 상태는 아래 표에서 확인할 수 있습니다.'}</p>
       {daily && !series.some(row => row.value !== null) && <p>계산 대기 사유는 기록 상세에서 확인할 수 있습니다. 시작일 평가액이 변경된 경우 다음 날짜의 기록부터 수익률을 계산할 수 있습니다.</p>}
       <p>외부 입출금 기록이 없으면 입출금 없음으로 계산합니다. 실제 입출금이 있을 때만 5번 탭에 기록하면 날짜·금액이 자동 반영됩니다.</p>

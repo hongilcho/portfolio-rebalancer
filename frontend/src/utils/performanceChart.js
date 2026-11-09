@@ -37,24 +37,36 @@ export const performanceDay = label => Date.parse(`${label}T00:00:00Z`) / 864000
 export function dailyPerformanceSeries(reports, metric, range = '90') {
   const ordered = [...reports].sort((a, b) => a.label.localeCompare(b.label));
   const lastDay = ordered.length ? performanceDay(ordered.at(-1).label) : 0;
-  return ordered.filter(row => range === 'all' || performanceDay(row.label) >= lastDay - Number(range) + 1)
-    .map(row => {
+  return ordered.flatMap((row, index) => {
+      if (range !== 'all' && performanceDay(row.label) < lastDay - Number(range) + 1) return [];
+      const previous = ordered[index - 1];
       const raw = row[metric];
       const value = typeof raw === 'number' && Number.isFinite(raw)
         ? metric === 'return_pct' ? (Math.abs(raw) < 0.005 ? 0 : raw) : Math.round(raw) : null;
-      return { ...row, value, key: `일/${row.label}` };
-    });
+      // The server's cumulative profit already excludes external cash flows.
+      const comparison = previous ? {
+        date: previous.label,
+        consecutive: consecutiveEvaluations(previous, row),
+        profit: previous.start === row.start && Number.isFinite(previous.profit) && Number.isFinite(row.profit)
+          ? row.profit - previous.profit : null,
+      } : null;
+      return [{ ...row, value, comparison, key: `일/${row.label}` }];
+  });
+}
+
+function consecutiveEvaluations(previous, row) {
+  if (row.record_kind === 'close' && ['close','baseline'].includes(previous.record_kind)) {
+    return row.previous_close_date === previous.label || (previous.record_kind === 'baseline' &&
+      previous.label > row.previous_close_date && previous.label < row.label);
+  }
+  return performanceDay(row.label) - performanceDay(previous.label) === 1;
 }
 
 // Never connect across an unrecorded day or a pending calculation.
 export function dailyPerformanceSegments(series) {
   return series.slice(1).flatMap((row, index) => {
     const previous = series[index];
-    const consecutive = row.record_kind === 'close' && ['close','baseline'].includes(previous.record_kind)
-      ? row.previous_close_date === previous.label || (previous.record_kind === 'baseline' &&
-        previous.label > row.previous_close_date && previous.label < row.label)
-      : performanceDay(row.label) - performanceDay(previous.label) === 1;
-    return previous.value !== null && row.value !== null && consecutive
+    return previous.value !== null && row.value !== null && consecutiveEvaluations(previous, row)
       ? [{ from: previous, to: row }] : [];
   });
 }

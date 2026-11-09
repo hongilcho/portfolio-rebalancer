@@ -48,7 +48,7 @@ try{
  });
  test('period graph uses the same signed cues without replacing its performance definition',()=>{
   const html=renderToStaticMarkup(React.createElement(Period,{baselineDate:'2026-10-05',dailyReports:[{kind:'일',label:'2026-10-29',profit:-100,return_pct:-1,record_kind:'close',previous_close_date:'2026-10-28'},{kind:'일',label:'2026-10-30',profit:100,return_pct:1,record_kind:'close',previous_close_date:'2026-10-29'}]}));
-  assert.doesNotMatch(html,/>손익분기점 0%<\/text>/);assert.match(html,/stroke-dasharray="5 4"/);assert.match(html,/최근 기록 · 2026-10-30/);assert.match(html,/기준일부터 누적/);assert.match(html,/stroke="var\(--color-loss\)"/);assert.match(html,/stroke="var\(--color-profit\)"/);
+  assert.doesNotMatch(html,/>손익분기점 0%<\/text>/);assert.match(html,/stroke-dasharray="5 4"/);assert.match(html,/선택일 <time>2026-10-30<\/time>/);assert.match(html,/기준일부터 누적/);assert.match(html,/stroke="var\(--color-loss\)"/);assert.match(html,/stroke="var\(--color-profit\)"/);
  });
  test('small nonzero values and missing rates are not presented as exact breakeven',()=>{
   assert.equal(signedProfit(-.001,'return_pct'),'−0.01% 미만');assert.equal(signedProfit(.1,'profit'),'+1원 미만');assert.equal(signedProfit(null,'profit'),'기록 부족');
