@@ -17,7 +17,7 @@ class Cash(BaseModel):
 
 class Row(BaseModel):
     execution: ExecutionLink | None = None
-    kind: Literal['BUY','DEPOSIT','WITHDRAW','EXCHANGE_IN','KRW_ADJUST','DIVIDEND']
+    kind: Literal['BUY','SELL','DEPOSIT','WITHDRAW','EXCHANGE_IN','KRW_ADJUST','DIVIDEND']
     account_id: str = Field(min_length=1,max_length=100)
     event_date: date
     occurred_at: datetime | None = None
@@ -44,6 +44,7 @@ class Row(BaseModel):
     asset_id: str = ''
     quantity: float = Field(default=0,ge=0,le=1e12,allow_inf_nan=False)
     price: float = Field(default=0,ge=0,le=1e12,allow_inf_nan=False)
+    trade_currency: Literal['KRW','USD'] = 'KRW'
     broker_order_no: str = ''
     notes: str = Field(default='',max_length=2000)
     krw_amount: float = Field(default=0,ge=0,le=1e15,allow_inf_nan=False)

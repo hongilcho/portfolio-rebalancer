@@ -32,8 +32,8 @@ def selected_asset_currency(asset, account_id, currency):
 def validate_notice_fields(import_source, broker_order_no, trade_type, currency, quantity, trade_date):
     if import_source != 'NAMUH_KAKAO' or not re.fullmatch(r'[0-9]{1,10}', broker_order_no or ''):
         raise ValueError('가져오기 출처 또는 주문번호를 확인해주세요.')
-    if trade_type != 'BUY' or currency != 'KRW' or quantity != int(quantity):
-        raise ValueError('체결 메시지 가져오기는 국내 원화 매수만 지원합니다.')
+    if trade_type not in ('BUY', 'SELL') or currency != 'KRW' or quantity != int(quantity):
+        raise ValueError('체결 메시지 가져오기는 국내 원화 매수·매도만 지원합니다.')
     if date.fromisoformat(trade_date).isoformat() != trade_date:
         raise ValueError('체결일을 확인해주세요.')
 

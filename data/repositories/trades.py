@@ -36,6 +36,8 @@ def execute_trade(
     transaction=None,
     fees_krw=None,
     fees_usd=None,
+    *,
+    trade_id=None,
 ):
     if not all(math.isfinite(v) and v > 0 for v in (quantity, price)):
         return False, "수량과 단가는 0보다 커야 합니다."
@@ -44,7 +46,7 @@ def execute_trade(
         return False, "거래 유형 또는 통화를 확인해주세요."
     conn = transaction if transaction is not None else db.connect()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    new_trade_id = db.new_id()
+    new_trade_id = trade_id or db.new_id()
     try:
         validate_trade_day(trade_date, datetime.now(forex.KST).date())
         cursor.execute("""SELECT a.*,
@@ -233,12 +235,15 @@ def get_trade_history(db: RepositoryContext, portfolio_id: str = None):
         conn.close()
 
 
-def delete_trades(db: RepositoryContext, trade_ids, transaction=None):
+def delete_trades(db: RepositoryContext, trade_ids, transaction=None, *, restore_from_checkpoint=False):
     """Reverse recorded cash movements and replay holdings in one transaction.
 
     Legacy BUY/SELL rows without cash deltas require reconciliation first.
     Account locks are taken in stable order before locking transaction rows.
+    A caller that verified an audited checkpoint may restore cash and holdings itself.
     """
+    if restore_from_checkpoint and transaction is None:
+        raise ValueError("장부 복원은 같은 저장 작업 안에서만 가능합니다.")
     ids = [str(tid) for tid in trade_ids]
     if not ids:
         return False, "삭제할 거래를 선택해주세요."
@@ -271,7 +276,7 @@ def delete_trades(db: RepositoryContext, trade_ids, transaction=None):
         if transaction is None:
             cursor.execute(f'SELECT id FROM nh_notice_items WHERE linked_trade_id IN ({placeholders}) AND reversed_at IS NULL', tuple(ids))
             if cursor.fetchone():
-                raise ValueError('NH 알림으로 반영한 매수는 알림 가져오기의 반영 이력에서 묶음 취소해주세요.')
+                raise ValueError('NH 알림으로 반영한 매매는 알림 가져오기의 반영 이력에서 묶음 취소해주세요.')
         cursor.execute(f'SELECT * FROM usd_cash_events WHERE trade_id IN ({placeholders}) AND reversed_at IS NULL ORDER BY sequence DESC', tuple(ids))
         managed = cursor.fetchall()
         managed_ids = {event['trade_id'] for event in managed}
@@ -313,6 +318,8 @@ def delete_trades(db: RepositoryContext, trade_ids, transaction=None):
                     SET deposit_krw = deposit_krw - %s, deposit_usd = deposit_usd - %s
                     WHERE id = %s
                 """, (trade['cash_delta_krw'], trade['cash_delta_usd'], trade['account_id']))
+        if restore_from_checkpoint:
+            return True, "매매 기록을 취소했습니다."
         cursor.execute(f"SELECT deposit_krw, deposit_usd FROM accounts WHERE id IN ({acc_placeholders})", tuple(account_ids))
         if any(float(a.get('deposit_krw') or 0) < -1e-9 or float(a.get('deposit_usd') or 0) < -1e-9
                for a in cursor.fetchall()):

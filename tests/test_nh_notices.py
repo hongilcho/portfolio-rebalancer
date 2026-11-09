@@ -301,7 +301,7 @@ def test_retry_of_a_pre_upgrade_pending_request_remains_idempotent(db):
     data=scenario(db);result=nh_notices.commit(db.ctx,'p',data)
     old=deepcopy(data)
     for r in old['rows']:
-        for key in ('cross_portfolio','destination_account_id','counterparty_flow_id','reported_available_krw'):r.pop(key,None)
+        for key in ('cross_portfolio','destination_account_id','counterparty_flow_id','reported_available_krw','trade_currency'):r.pop(key,None)
     db.raw.execute('UPDATE nh_notice_batches SET payload=?',(json.dumps(old),));db.commit()
     assert nh_notices.commit(db.ctx,'p',data)==result
     assert len(db.rows('nh_notice_batches'))==1
@@ -312,3 +312,72 @@ def test_unrelated_portfolio_cannot_undo_a_transfer(db):
     db.raw.execute("INSERT INTO portfolios(id) VALUES('unrelated')");db.commit()
     with pytest.raises(ValueError,match='이력'):nh_notices.undo(db.ctx,'unrelated',result['batch_id'])
     assert {r['id']:r['deposit_krw'] for r in db.rows('accounts')}=={'acc':4,'peer':1000100}
+
+
+def test_two_sell_notices_close_position_and_undo_exactly(db):
+    db.raw.execute("INSERT INTO holdings (id,account_id,asset_id,quantity,avg_price,original_avg_price) VALUES ('seed','acc','ast',100,213000,213000)")
+    db.commit()
+    before=db.state()
+    flows=db.rows('performance_flows')
+    first=row('SELL',asset_id='ast',quantity=50,price=192000,broker_order_no='0000445807')
+    second=first.model_copy(update=dict(broker_order_no='0000445808',fingerprint='c'*64))
+    request=payload(db,[first,second])
+    result=nh_notices.commit(db.ctx,'p',request)
+    assert nh_notices.commit(db.ctx,'p',request)==result
+    assert db.holding()[0]==0 and db.balances()==(19200004,10)
+    saved=db.rows('trade_history')
+    assert [t['broker_order_no'] for t in saved]==['0000445807','0000445808']
+    assert all(t['trade_type']=='SELL' and float(json.loads(t['accounting_basis'])['avg_krw'])==213000 for t in saved)
+    assert db.rows('performance_flows')==flows
+    nh_notices.undo(db.ctx,'p',result['batch_id'])
+    assert db.state()==before
+    assert all(n['reversed_at'] for n in db.rows('nh_notice_items'))
+
+
+def test_oversell_rolls_back_a_mixed_notice_batch(db):
+    db.raw.execute("INSERT INTO holdings (id,account_id,asset_id,quantity,avg_price,original_avg_price) VALUES ('seed','acc','ast',70,213000,213000)")
+    db.commit()
+    before=db.state()
+    first=row('SELL',asset_id='ast',quantity=50,price=192000,broker_order_no='0000445807')
+    second=first.model_copy(update=dict(broker_order_no='0000445808',fingerprint='c'*64))
+    with pytest.raises(ValueError,match='수량'):
+        nh_notices.commit(db.ctx,'p',payload(db,[first,second]))
+    assert db.state()==before and not db.rows('nh_notice_items') and not db.rows('nh_notice_batches')
+
+
+def test_us_buy_uses_cash_cost_and_fee_then_batch_undo_restores_both(db):
+    db.raw.execute("UPDATE assets SET market='US', ticker='VT'")
+    db.raw.execute('UPDATE accounts SET deposit_usd=200,fee_schedule=?',
+        (json.dumps({'US':[{'from':'2026-01-01','rate_pct':'0.07'}]}),))
+    db.raw.execute("UPDATE usd_cash_state SET usd_balance=200,cost_krw=260000")
+    db.commit()
+    before=db.state()
+    original_fx=db.rows('usd_cash_state')
+    trade=row('BUY',trade_currency='USD',asset_id='ast',quantity=1,price=155.250)
+    request=payload(db,[trade])
+    result=nh_notices.commit(db.ctx,'p',request)
+    assert nh_notices.commit(db.ctx,'p',request)==result
+    assert db.balances()==pytest.approx((4,44.65))
+    assert db.holding()==pytest.approx((1,201825,155.25,1300))
+    assert db.rows('usd_cash_state')[0]['cost_krw']==pytest.approx(58045)
+    saved=db.rows('trade_history')[0]
+    assert saved['broker_order_no'] is None and saved['import_source']=='NAMUH_KAKAO_US'
+    for fingerprint in (trade.fingerprint,'c'*64):
+        duplicate=trade.model_copy(update=dict(fingerprint=fingerprint,duplicate_confirmed=True))
+        with pytest.raises(ValueError,match='이미'):
+            nh_notices.commit(db.ctx,'p',payload(db,[duplicate],'duplicate-request'))
+    assert len(db.rows('trade_history'))==1
+    nh_notices.undo(db.ctx,'p',result['batch_id'])
+    assert db.state()==before and db.rows('usd_cash_state')==original_fx
+
+
+def test_us_notice_does_not_guess_acquisition_fx(db):
+    db.raw.execute("UPDATE assets SET market='US', ticker='VT'")
+    db.raw.execute("DELETE FROM usd_cash_state")
+    db.raw.execute("UPDATE accounts SET deposit_usd=200")
+    db.commit()
+    before=db.state()
+    trade=row('BUY',trade_currency='USD',asset_id='ast',quantity=1,price=155.25)
+    with pytest.raises(ValueError,match='달러 원가 추적'):
+        nh_notices.commit(db.ctx,'p',payload(db,[trade]))
+    assert db.state()==before and not db.rows('nh_notice_batches')

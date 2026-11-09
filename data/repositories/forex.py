@@ -287,12 +287,13 @@ def reverse_latest(cursor, account_id, event_id):
         restore = (before or {}).get('holding') or dict.fromkeys(HOLDING_FIELDS, 0)
         cursor.execute('UPDATE holdings SET ' + ', '.join(key + ' = %s' for key in HOLDING_FIELDS) + ' WHERE account_id = %s AND asset_id = %s',
                        (*[restore[key] for key in HOLDING_FIELDS], str(account_id), after['asset_id']))
-    if number(account['deposit_krw'] or 0) - number(event['cash_delta_krw']) < 0:
+    krw_delta = number(event['cash_delta_krw'])
+    restored_krw = number(account['deposit_krw'] or 0) - krw_delta
+    if krw_delta > 0 and restored_krw < 0:
         raise ValueError('취소에 필요한 원화 예수금이 부족합니다.')
     # Restore through Decimal, not binary SQL subtraction (111.84-100.46+100.46).
     # Exact checkpoints must remain undoable after a later purchase is cancelled.
     restored_usd = number(before['usd_balance']) if before and number(event['cash_delta_usd']) else number(account['deposit_usd'] or 0)-number(event['cash_delta_usd'])
-    restored_krw = number(account['deposit_krw'] or 0)-number(event['cash_delta_krw'])
     cursor.execute('UPDATE accounts SET deposit_krw = %s, deposit_usd = %s WHERE id = %s',
                    (float(restored_krw), float(restored_usd), str(account_id)))
     if before is None:

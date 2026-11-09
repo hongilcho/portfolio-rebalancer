@@ -1,4 +1,4 @@
-// Parse only the observed NH full-buy format. No network or clipboard access.
+// Parse NH domestic full-order notifications.
 const normalize = text => String(text || '').normalize('NFKC').replace(/\r\n?/g, '\n').replace(/[\u200b-\u200d\ufeff]/g, '').trim();
 const fields = ['계좌번호', '종목명', '종목코드', '체결종류', '체결수량', '체결단가', '주문번호', '체결일자'];
 function field(text, label) {
@@ -17,8 +17,11 @@ export function parseNamuhMessages(raw) {
   return blocks.map(block => {
     const errors = [];
     const kind = field(block, '체결종류').replace(/\s/g, '');
-    if (!block.startsWith('[NH투자증권]') || !/매수주문체결알림/.test(block.replace(/\s/g, '')) || kind !== '매수전량체결')
-      errors.push('현재는 NH투자증권 국내 매수 전량 체결 알림만 지원합니다. 부분 체결·매도 알림은 직접 입력해주세요.');
+    const tradeType = kind === '매도전량체결' ? 'SELL' : 'BUY';
+    const direction = tradeType === 'SELL' ? '매도' : '매수';
+    const header = block.split('\n', 1)[0].replace(/\s/g, '');
+    if (!header.startsWith('[NH투자증권]') || !header.endsWith(direction + '주문체결알림') || kind !== direction + '전량체결')
+      errors.push('NH투자증권 국내 매수·매도 전량 체결 알림인지 확인해주세요. 부분 체결은 직접 입력해주세요.');
     const accountMask = field(block, '계좌번호').split(/\s/)[0].replace(/[^0-9*]/g, '');
     // Missing account information is corrected by an explicit account selection.
     const ticker = field(block, '종목코드').replace(/\s/g, '').toUpperCase();
@@ -40,9 +43,14 @@ export function parseNamuhMessages(raw) {
       const timestamp = Date.parse(`${messageDate}T00:00:00Z`);
       if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0,10) !== messageDate) errors.push('체결일자 형식을 확인해주세요.');
     }
-    return { ticker, assetName: field(block, '종목명').replace(/\s+/g, ' '), accountMask,
+    return { tradeType, ticker, assetName: field(block, '종목명').replace(/\s+/g, ' '), accountMask,
       brokerOrderNo, quantity, price, messageDate, errors };
   });
+}
+
+export function matchesNamuhAsset(asset, draft) {
+  return asset.market === (draft.tradeCurrency === 'USD' ? 'US' : 'KR') &&
+    !asset.is_deposit && String(asset.ticker).trim().toUpperCase() === draft.ticker;
 }
 
 export function resolveNamuhDraft(parsed, accounts, assets, portfolioId) {
@@ -51,7 +59,7 @@ export function resolveNamuhDraft(parsed, accounts, assets, portfolioId) {
     return /^[0-9*]{11}$/.test(parsed.accountMask) && /[0-9]/.test(parsed.accountMask) && number.length === parsed.accountMask.length && [...parsed.accountMask].every((c, i) => c === '*' || c === number[i]);
   });
   const accountId = matches.length === 1 ? String(matches[0].id) : '';
-  const candidates = scope(assets, portfolioId).filter(a => a.market === 'KR' && !a.is_deposit && String(a.ticker).toUpperCase() === parsed.ticker);
+  const candidates = scope(assets, portfolioId).filter(a => matchesNamuhAsset(a, parsed));
   return { ...parsed, accountId, assetId: candidates.length === 1 ? String(candidates[0].id) : '',
     accountWarning: matches.length !== 1 ? '계좌를 하나로 확인할 수 없습니다. 직접 선택해주세요.' : '' };
 }
@@ -61,15 +69,22 @@ export function validateNamuhDraft(draft, date, accounts, assets, portfolioId, p
   const account = scope(accounts, portfolioId).find(a => String(a.id) === draft.accountId);
   const asset = scope(assets, portfolioId).find(a => String(a.id) === draft.assetId);
   if (!account) errors.push('계좌를 선택해주세요.');
-  if (!asset || asset.market !== 'KR' || asset.is_deposit || String(asset.ticker).toUpperCase() !== draft.ticker)
-    errors.push('해당 종목코드의 등록된 국내 종목을 선택해주세요. 종목 등록이 필요하면 자산 관리에서 먼저 등록하세요.');
+  if (!asset || !matchesNamuhAsset(asset, draft))
+    errors.push('해당 종목코드의 등록된 종목을 선택해주세요. 종목 등록이 필요하면 자산 관리에서 먼저 등록하세요.');
   if (asset && !(asset.allowed_accounts || []).map(String).includes(draft.accountId)) errors.push('이 계좌에 허용된 종목이 아닙니다.');
   if (draft.messageDate && draft.messageDate !== date) errors.push('메시지의 체결일자가 선택한 체결일과 다릅니다. 다른 날짜의 거래는 따로 가져오세요.');
   const key = orderKey({ ...draft, importSource: 'NAMUH_KAKAO' }, date);
   if (key && pending.some(row => orderKey(row, date) === key)) errors.push('이미 입력 대기 중인 주문입니다.');
-  if (saved.some(t => t.import_source === 'NAMUH_KAKAO' && String(t.account_id) === draft.accountId && t.trade_date === date && t.broker_order_no === draft.brokerOrderNo)) errors.push('이미 장부에 저장된 주문입니다.');
-  const manualDuplicate = saved.some(t => String(t.account_id) === draft.accountId && String(t.asset_id) === draft.assetId && t.trade_date === date && t.trade_type === 'BUY' && Number(t.quantity) === draft.quantity && Number(t.price) === draft.price)
-    || pending.some(r => r.accountId === draft.accountId && r.assetId === draft.assetId && r.quantity === draft.quantity && r.price === draft.price);
+  if (key && saved.some(t => t.import_source === 'NAMUH_KAKAO' && String(t.account_id) === draft.accountId && t.trade_date === date && t.broker_order_no === draft.brokerOrderNo)) errors.push('이미 장부에 저장된 주문입니다.');
+  const side = draft.kind || draft.tradeType || 'BUY';
+  const currency = draft.tradeCurrency || 'KRW';
+  const matching = saved.filter(t => String(t.account_id) === draft.accountId && String(t.asset_id) === draft.assetId &&
+    t.trade_date === date && t.trade_type === side && (t.currency || 'KRW') === currency &&
+    Number(t.quantity) === draft.quantity && Number(t.price) === draft.price);
+  if (currency === 'USD' && matching.some(t => t.import_source === 'NAMUH_KAKAO_US'))
+    errors.push('같은 미국 주식 체결을 이미 저장했습니다. 별도 주문이면 거래내역을 확인한 뒤 직접 입력해주세요.');
+  const manualDuplicate = matching.some(t => !t.import_source) ||
+    (side === 'BUY' && pending.some(r => r.accountId === draft.accountId && r.assetId === draft.assetId && r.quantity === draft.quantity && r.price === draft.price));
   return { errors, manualDuplicate };
 }
 
@@ -77,6 +92,7 @@ export function appendNamuhRows(existing, drafts, date, idFactory = () => crypto
   const rows = existing.filter(r => r.assetId || r.quantity || r.price || r.importSource);
   const keys = new Set(rows.map(r => orderKey(r, date)).filter(Boolean));
   for (const draft of drafts) {
+    if (draft.tradeType === 'SELL' || draft.tradeCurrency === 'USD') throw new Error('NH 알림 가져오기에서 확인해주세요.');
     const key = orderKey({ ...draft, importSource: 'NAMUH_KAKAO' }, date);
     if (keys.has(key)) throw new Error('같은 주문이 중복 선택되었습니다.');
     keys.add(key);

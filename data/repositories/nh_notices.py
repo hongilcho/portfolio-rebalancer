@@ -133,6 +133,34 @@ def exchange(db,c,row):
     return dict(usd_event_id=event_id,delta_krw=str(-krw),delta_usd=str(usd))
 
 
+def record_trade(db, conn, c, row):
+    aid, asset_id, day = row['account_id'], row['asset_id'], row['event_date']
+    kind, quantity, price = row['kind'], row['quantity'], row['price']
+    currency = row.get('trade_currency', 'KRW')
+    order = row['broker_order_no']
+    foreign = currency == 'USD'
+    if foreign and (kind != 'BUY' or order or not row['fingerprint'] or quantity != int(quantity)):
+        raise ValueError('미국 USD 전량 매수 알림의 수량과 거래 정보를 확인해주세요.')
+    if foreign or kind == 'SELL':
+        c.execute('''SELECT import_source FROM trade_history WHERE account_id=%s AND asset_id=%s
+            AND trade_date=%s AND trade_type=%s AND currency=%s AND quantity=%s AND price=%s''',
+            (aid,asset_id,day,kind,currency,quantity,price))
+        matches = c.fetchall()
+        if foreign and any(t['import_source']=='NAMUH_KAKAO_US' for t in matches):
+            raise ValueError('같은 미국 주식 체결을 이미 저장했습니다. 별도 주문이면 거래내역을 확인한 뒤 직접 입력해주세요.')
+        if any(not t['import_source'] for t in matches) and not row['duplicate_confirmed']:
+            raise ValueError('같은 매매가 장부에 있습니다. 별도 거래인지 확인해주세요.')
+    trade_id = db.new_id()
+    ok, message = trades.execute_trade(db,day,aid,asset_id,kind,quantity,price,currency,
+        import_source=None if foreign else 'NAMUH_KAKAO',broker_order_no=None if foreign else order,
+        transaction=conn,trade_id=trade_id)
+    if not ok:
+        raise ValueError(message)
+    if foreign:
+        c.execute("UPDATE trade_history SET import_source='NAMUH_KAKAO_US' WHERE id=%s",(trade_id,))
+    return dict(trade_id=trade_id)
+
+
 def commit(db,pid,payload):
     payload = plain(payload)
     conn = db.connect()
@@ -151,7 +179,7 @@ def commit(db,pid,payload):
         if existing:
             prior=plain(existing['payload'])
             for old_row in prior['rows']:
-                for key,value in dict(destination_account_id=None,cross_portfolio=False,counterparty_flow_id=None,reported_available_krw=None,reference_date=None,dividend_ex_date=None,gross_amount=None,tax_amount=None,dividend_currency='KRW',fee_amount=None,krw_tax=0,tax_cash_applied=False,tax_already_reflected=False,receipt_rate=0,tax_receipt_id=None).items():
+                for key,value in dict(destination_account_id=None,cross_portfolio=False,counterparty_flow_id=None,reported_available_krw=None,reference_date=None,dividend_ex_date=None,gross_amount=None,tax_amount=None,dividend_currency='KRW',fee_amount=None,krw_tax=0,tax_cash_applied=False,tax_already_reflected=False,receipt_rate=0,tax_receipt_id=None,trade_currency='KRW').items():
                     old_row.setdefault(key,value)
             if prior != payload: raise ValueError('같은 저장 요청의 내용이 바뀌었습니다. 기존 저장 결과를 먼저 확인해주세요.')
             if existing['reversed_at']: raise ValueError('취소된 요청입니다. 새 알림 목록으로 다시 확인해주세요.')
@@ -178,7 +206,8 @@ def commit(db,pid,payload):
             if row['fingerprint']:
                 c.execute('SELECT id FROM nh_notice_items WHERE portfolio_id=%s AND account_id=%s AND event_date=%s AND fingerprint=%s AND reversed_at IS NULL',
                           (pid,row['account_id'],day,row['fingerprint']))
-                if c.fetchone() and not row['duplicate_confirmed']: raise ValueError('이미 반영한 알림입니다. 별도 거래인지 확인해주세요.')
+                if c.fetchone() and (row.get('trade_currency') == 'USD' or not row['duplicate_confirmed']):
+                    raise ValueError('이미 반영한 알림입니다. 기존 기록을 확인해주세요.')
             cash_entries = None
             if row['kind'] in ('DEPOSIT','WITHDRAW'):
                 cash_entries=cash_notice(db,c,pid,row,tracks,owners)
@@ -190,12 +219,8 @@ def commit(db,pid,payload):
                           (row['account_id'],day,row['usd_amount'],row['krw_amount']))
                 if c.fetchone() and not row['duplicate_confirmed']: raise ValueError('동일한 환전 기록이 있습니다. 별도 환전인지 확인해주세요.')
                 result=exchange(db,c,row)
-            elif row['kind']=='BUY':
-                ok,msg=trades.execute_trade(db,row['event_date'],row['account_id'],row['asset_id'],'BUY',row['quantity'],row['price'],
-                    'KRW',1,'NAMUH_KAKAO',row['broker_order_no'],transaction=conn)
-                if not ok: raise ValueError(msg)
-                c.execute("SELECT id FROM trade_history WHERE account_id=%s AND trade_date=%s AND import_source='NAMUH_KAKAO' AND broker_order_no=%s", (row['account_id'],str(day),row['broker_order_no']))
-                result=dict(trade_id=c.fetchone()['id'])
+            elif row['kind'] in ('BUY','SELL'):
+                result=record_trade(db,conn,c,row)
             else:
                 value=number(row['krw_amount'])
                 if value < 0: raise ValueError('원화 예수금은 0 이상이어야 합니다.')
@@ -253,8 +278,8 @@ def undo(db,pid,batch_id):
         items=c.fetchall()
         for item in items:
             row,result=item['payload'],item['result']
-            if item['kind']=='BUY':
-                ok,msg=trades.delete_trades(db,[result['trade_id']],transaction=conn)
+            if item['kind'] in ('BUY','SELL'):
+                ok,msg=trades.delete_trades(db,[result['trade_id']],transaction=conn,restore_from_checkpoint=True)
                 if not ok: raise ValueError(msg)
             elif item['kind']=='EXCHANGE_IN' or (item['kind']=='DIVIDEND' and result.get('usd_event_id')):
                 forex.reverse_latest(c,item['account_id'],result['usd_event_id'])
@@ -264,8 +289,8 @@ def undo(db,pid,batch_id):
         for aid,old in batch['audit']['before'].items():
             c.execute('UPDATE accounts SET deposit_krw=%s,deposit_usd=%s WHERE id=%s', (old['cash']['deposit_krw'],old['cash']['deposit_usd'],aid))
             # Restore exact pre-import holdings, including legacy manually seeded costs.
-            buys={r['asset_id'] for r in batch['payload']['rows'] if r['kind']=='BUY' and r['account_id']==aid}
-            for asset_id in buys:
+            traded_assets={r['asset_id'] for r in batch['payload']['rows'] if r['kind'] in ('BUY','SELL') and r['account_id']==aid}
+            for asset_id in traded_assets:
                 prior=next((h for h in old['holdings'] if h['asset_id']==asset_id),None)
                 if prior:
                     columns=[k for k in prior if k not in ('id','account_id','asset_id')]

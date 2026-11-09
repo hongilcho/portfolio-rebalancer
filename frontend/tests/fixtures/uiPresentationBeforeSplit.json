@@ -3,6 +3,7 @@
   "reviewed_updates": {
     "history_loading": "2026-11-01: initial empty crypto history shows only the loading message, without simultaneously claiming there are no records. Only crypto/empty markup changes; loaded graphs retain their prior markup.",
     "profit_signals": "2026-10-31: reviewed current profit/loss status, signed curve segments and named zero reference. Only three overview and the loaded crypto snapshot change. Existing axes and accounting values remain untouched; geometry, null gaps and real component rendering covered by profitChartSignals tests.",
+    "nh_trade_notices": "2026-11-09: history help adds domestic full sales and US full buys. Only the two history hashes change.",
     "holding_history": "2026-10-27: intentional holdings-history panel in the three overview variants. Existing KPI calculations and all unrelated presentation hashes are preserved. Shared component, date/metric selection, missing observations and mobile pointer selection verified separately.",
     "history": "2026-10-08: reviewed focus layout with input/history split, preserved hidden drafts, selected input methods, read-only paged history; all other snapshots unchanged; withdrawal/transfer support text reviewed, controls covered in nhNoticeControls tests",
     "dashboard": "2026-10-05: moved maturity, dividend and period panels to analysis tab 6; original dashboard markup restored and reviewed",
@@ -30,8 +31,8 @@
     "settings/edit-account": "50372c541f73d242a5c22f43b8ffc1c631afe22e1d5357a240526fdd183fa911",
     "settings/new-US-asset": "cd33edb1f4eb41667dddb49789064e880643c0d959bfbb5b3f8170ad3a412e84",
     "settings/edit-deposit": "bab4e8d4b9825adffea6eb5b99d9615df29eaa96b26f62603185c66c4b06864d",
-    "history/empty": "0b0aec6af09fd7480fb10dfc3f5e3ee8bc1fb74adb77deeb95d68093c61ecd64",
-    "history/filled-forms": "0a22b20a3413816b1388ed851547b32b9f06c25d55a89ae67571e085cd68321a",
+    "history/empty": "55841a2715f8628311d679a151af6a2ad7e142ffc7b90efbaafdb90b0dfc0721",
+    "history/filled-forms": "e5f2d61a552ec1cc59564520e2498fb6a872e6ba89c9b5edbc3265942bace917",
     "overview/KRW": "36bcf64cd04957710a23fccca7ec023e584a3730aaaa204bda9475b9e14e3927",
     "overview/USD": "78e604f6f6173ad9010f4e12c626f74afed72f219fb1a6bf662417690b807c3a",
     "overview/no-crypto": "ff8e9f2607e37b248495e37b0c56b13fbad01007f883d1e07931d68c983d80d8",

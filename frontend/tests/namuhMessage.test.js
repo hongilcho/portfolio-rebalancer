@@ -39,8 +39,8 @@ test('removes initial empty placeholder and splits several complete messages', (
   assert.equal(parseNamuhMessages(message+'\n\n'+message.replace('42954','42955')).length,2);
   assert.equal(appendNamuhRows([{id:'empty',quantity:0,price:0,assetId:''}], [draft(message)], '2026-10-05', ()=>'one').length,1);
 });
-test('rejects sell, partial, USD prices, zero quantity, missing order and wrong code', () => {
-  for (const text of [message.replaceAll('매수','매도'), message.replace('전량','일부'), message.replace('9,320 원','9.32 USD'), message.replace('1주','0주'), message.replace('주문번호 : 42954',''), message.replace('0085P0','VT')])
+test('rejects mismatched side, partial, USD prices, zero quantity, missing order and wrong code', () => {
+  for (const text of [message.replace('매수 전량','매도 전량'), message.replace('전량','일부'), message.replace('9,320 원','9.32 USD'), message.replace('1주','0주'), message.replace('주문번호 : 42954',''), message.replace('0085P0','VT')])
     assert.ok(parse(text).errors.length, text);
 });
 test('rejects malformed comma grouping instead of silently changing the amount', () => {

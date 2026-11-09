@@ -46,7 +46,7 @@ def test_import_identity_and_all_cash_holdings_roll_back_on_write_failure(db):
     db.fail_on = None
     assert record()[0]
 
-@pytest.mark.parametrize('changes', [dict(currency='USD'),dict(trade_type='SELL'),dict(import_source='UNKNOWN'),
+@pytest.mark.parametrize('changes', [dict(currency='USD'),dict(trade_type='INIT'),dict(import_source='UNKNOWN'),
     dict(broker_order_no=''),dict(import_source=None),dict(quantity=1.5),dict(trade_date='bad-date')])
 def test_invalid_imports_do_not_change_ledger(db, changes):
     before = db.state()

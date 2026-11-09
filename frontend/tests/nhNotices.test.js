@@ -165,3 +165,81 @@ test('existing empty ledgers retain date and reconciliation guards',()=>{
   assert.ok(previewNhNotices([e],{'2026-10-08':ctx},[{...state,needs_reconciliation:true}]).errors.some(error=>error.includes('잔고·원가')));
   assert.equal(state.cost_krw,0);
 });
+
+const sale=`[NH투자증권] 매도 주문체결 알림
+
+종 목 명 : 삼성전자
+종목코드 : 005930
+체결종류 : 매도 전량체결
+체결수량 : 50주
+체결단가 : 192,000원
+주문번호 : 0000445807`;
+const usBuy=`[NH투자증권] 해외주식 체결집계 내역 안내
+테*트님 123-45-67***1
+주문일자 : 10월30일
+매매구분 : 매수
+거래국가 : 미국
+종목명   : (VT US)뱅가드 세계 주식 ETF
+주문수량 : 1주
+체결수량 : 1주
+거래통화 : USD
+체결가격 : 155.250`;
+const tradeAssets=[{...assets[0],id:'samsung',ticker:'005930'},{...assets[0],id:'vt',ticker:'VT',market:'US'}];
+const tradeNotices=text=>parseNhNotifications(text,'2026-11-09').map(row=>resolveNhNotice(row,accounts,tradeAssets,'p'));
+
+test('domestic full sale preserves the order number and previews proceeds',()=>{
+  const [parsed]=tradeNotices(sale);
+  assert.equal(parsed.accountId,'');
+  assert.equal(parsed.assetId,'samsung');
+  assert.equal(parsed.kind,'SELL');
+  assert.equal(parsed.brokerOrderNo,'0000445807');
+  assert.deepEqual(parsed.errors,[]);
+  const row={...parsed,accountId:'acc',fingerprint:'a'.repeat(64)};
+  assert.deepEqual(validateNhNotice(row,context,accounts,tradeAssets,'p',[],[]).errors,[]);
+  assert.equal(noticeApiRow(row,context).kind,'SELL');
+  assert.equal(previewNhNotices([row],{'2026-11-09':context},[],tradeAssets).balances.acc.deposit_krw,9600004);
+  const separate={...row,brokerOrderNo:'0000445808',fingerprint:'b'.repeat(64)};
+  assert.deepEqual(validateNhNotice(separate,context,accounts,tradeAssets,'p',[],[row]).errors,[]);
+});
+
+test('US full buy reads the notice date, account, symbol and USD price',()=>{
+  const [row]=tradeNotices(usBuy);
+  assert.deepEqual(row.errors,[]);
+  assert.equal(row.accountId,'acc');
+  assert.equal(row.assetId,'vt');
+  assert.equal(row.eventDate,'2026-10-30');
+  assert.equal(row.tradeCurrency,'USD');
+  assert.equal(row.quantity,1);
+  assert.equal(row.price,155.25);
+  const input=noticeApiRow(row,context);
+  assert.equal(input.trade_currency,'USD');
+  assert.equal(input.broker_order_no,'');
+  const wrongDate={...row,eventDate:'2026-10-31'};
+  assert.ok(validateNhNotice(wrongDate,context,accounts,tradeAssets,'p',[],[]).errors.some(e=>e.includes('월·일')));
+  for(const text of [usBuy.replace('체결수량 : 1주','체결수량 : 0주'),usBuy.replace('주문수량 : 1주','주문수량 : 2주'),usBuy.replace('매수','매도'),usBuy.replace('USD','CAD')])
+    assert.ok(tradeNotices(text)[0].errors.length);
+});
+
+test('US purchase preview debits the native cash and its acquisition cost',()=>{
+  const [row]=tradeNotices(usBuy);
+  const ctx={...context,accounts:[{id:'acc',deposit_krw:4,deposit_usd:200,fee_schedule:{US:[{from:'2026-01-01',rate_pct:'0.07'}]}}]};
+  const contexts={[row.eventDate]:ctx};
+  const ledger=[{account_id:'acc',usd_balance:200,cost_krw:260000,last_event_date:'2026-10-29'}];
+  const preview=previewNhNotices([row],contexts,ledger,tradeAssets);
+  assert.deepEqual(preview.errors,[]);
+  assert.equal(preview.balances.acc.deposit_krw,4);
+  assert.equal(preview.balances.acc.deposit_usd,44.65);
+  assert.ok(Math.abs(preview.costs.acc.cost-58045)<1e-6);
+  assert.equal(preview.fees[0].currency,'USD');
+  assert.ok(previewNhNotices([row],contexts,[],tradeAssets).errors.some(e=>e.includes('시작 기준환율')));
+  assert.ok(previewNhNotices([row],contexts,[{...ledger[0],last_event_date:'2026-10-31'}],tradeAssets).errors.some(e=>e.includes('이전 날짜')));
+});
+
+test('US aggregate repeats stay blocked even with duplicate confirmation',()=>{
+  const [parsed]=tradeNotices(usBuy);
+  const row={...parsed,fingerprint:'b'.repeat(64),duplicateConfirmed:true};
+  const saved={account_id:'acc',asset_id:'vt',trade_date:row.eventDate,trade_type:'BUY',currency:'USD',
+    quantity:1,price:155.25,import_source:'NAMUH_KAKAO_US'};
+  assert.ok(validateNhNotice(row,{...context,trades:[saved]},accounts,tradeAssets,'p',[],[]).errors.some(e=>e.includes('이미 저장')));
+  assert.ok(validateNhNotice(row,context,accounts,tradeAssets,'p',[],[row]).errors.some(e=>e.includes('같은 미국')));
+});

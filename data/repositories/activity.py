@@ -62,13 +62,13 @@ ACTIVITY = '''WITH activity AS (
      'history_pending',EXISTS(SELECT 1 FROM jsonb_array_elements(l.history) h WHERE h->>'decision'='UNKNOWN'))
  FROM ledger_adjustments l JOIN accounts a ON a.id=l.account_id WHERE l.portfolio_id=%(pid)s
  UNION ALL
- SELECT 'CANCELLED_BUY:'||n.id,'TRADE',n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
-   'BUY','KRW',(n.payload->>'quantity')::numeric*(n.payload->>'price')::numeric,COALESCE(ast.name,'삭제된 종목'),
+ SELECT 'CANCELLED_'||n.kind||':'||n.id,'TRADE',n.event_date::text,n.account_id,COALESCE(a.account_alias,'삭제된 계좌'),
+   n.kind,COALESCE(n.payload->>'trade_currency','KRW'),(n.payload->>'quantity')::numeric*(n.payload->>'price')::numeric,COALESCE(ast.name,'삭제된 종목'),
    TRUE,NULL,b.created_at,jsonb_build_object('quantity',n.payload->>'quantity','price',n.payload->>'price',
      'broker_order_no',n.payload->>'broker_order_no','asset_id',n.payload->>'asset_id','previous_batch_id',n.batch_id)
  FROM nh_notice_items n JOIN nh_notice_batches b ON b.id=n.batch_id LEFT JOIN accounts a ON a.id=n.account_id
  LEFT JOIN assets ast ON ast.id=n.payload->>'asset_id'
- WHERE n.portfolio_id=%(pid)s AND n.kind='BUY' AND n.reversed_at IS NOT NULL
+ WHERE n.portfolio_id=%(pid)s AND n.kind IN ('BUY','SELL') AND n.reversed_at IS NOT NULL
 ) '''
 
 

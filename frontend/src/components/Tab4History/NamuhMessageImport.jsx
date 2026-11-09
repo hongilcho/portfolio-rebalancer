@@ -7,11 +7,12 @@ import {isHistoricalWithdrawal,withdrawalCorrectionDraft,settleCorrectionRows} f
 import {kstToday} from '../../utils/depositMaturities';
 import {formatKRW,formatUSD} from '../../utils/formatters';
 import {parseNhNotifications,noticeFingerprint,resolveNhNotice,flowCandidates,chosenFlow,validateNhNotice,
-  noticeApiRow,previewNhNotices,readNoticeDraft,writeNoticeDraft,validNoticeDate,isCashNotice,peerAccount} from '../../utils/nhNotices';
+  noticeApiRow,previewNhNotices,readNoticeDraft,writeNoticeDraft,validNoticeDate,isCashNotice,isTradeNotice,peerAccount} from '../../utils/nhNotices';
 
+import {matchesNamuhAsset} from '../../utils/namuhMessage';
 import {dividendCandidates,chosenDividendDate} from '../../utils/nhDividends';
 
-const names={DIVIDEND:'배당·분배금 입금',BUY:'매수 체결',DEPOSIT:'원화 입금',WITHDRAW:'원화 출금',EXCHANGE_IN:'원화 → 달러 환전'};
+const names={DIVIDEND:'배당·분배금 입금',BUY:'매수 체결',SELL:'매도 체결',DEPOSIT:'원화 입금',WITHDRAW:'원화 출금',EXCHANGE_IN:'원화 → 달러 환전'};
 export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDate,buyRows=[],disabled,ledgers=[],onChanged,focused=false,active=true,onBusyChange,onCorrectionRequest,correctionResult=null,onDraftCleared,executionContext=null,inputScope=''}) {
   const storage=useMemo(()=>draftStorage(inputScope),[inputScope]);
   const connectionKey=executionContextKey(executionContext);
@@ -71,7 +72,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
         const step=executionContext?.step;
         if(step && !(step.kind==='TRANSFER'?isCashNotice(data):data.kind===step.kind))
           throw new Error('선택한 작업과 다른 종류의 알림입니다. 이 작업의 알림을 붙여넣거나 5번에서 별도 기록해주세요.');
-        if(!data.accountId && step && data.kind===step.kind && (data.kind!=='BUY' || data.assetId===step.asset_id)){data.accountId=step.account_id;data.accountWarning='알림에 계좌가 없어 선택한 투자 작업의 계좌를 채웠습니다. 실제 계좌를 확인해주세요.';}
+        if(!data.accountId && step && data.kind===step.kind && (!isTradeNotice(data) || data.assetId===step.asset_id)){data.accountId=step.account_id;data.accountWarning='알림에 계좌가 없어 선택한 투자 작업의 계좌를 채웠습니다. 실제 계좌를 확인해주세요.';}
         const pastCash=isCashNotice(data) && data.eventDate<kstToday();
         added.push({...data,...(pastCash?{applyCash:false}:{}),id:crypto.randomUUID(),fingerprint:await noticeFingerprint(raw)});
       }
@@ -99,12 +100,14 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
     if(!confirmed || (!pendingPayload && !ready))return;
     let payload=pendingPayload;
     try{payload=payload || {request_id:requestId,confirmed:true,expected_cash:preview.expected,rows:executionNotices(ordinaryRows.map(row=>noticeApiRow(row,contexts[row.eventDate])),executionContext)};}catch(error){setMessage(error.message);return;}
-    setSaving(true);setMessage('');setPendingPayload(payload);persist({rows,requestId,pendingPayload:payload});
+    setSaving(true);setMessage('');
     let recorded=false;
     try{
       await requireFeeProtocol(api,accounts);
+      if(payload.rows.some(r=>r.kind==='SELL' || r.trade_currency==='USD') && (await api.getBookkeepingCapabilities()).nh_trade_protocol!==1)throw new Error('NH 매도·해외 매수 백엔드를 먼저 배포해주세요.');
       if(payload.rows.some(r=>r.kind==='DIVIDEND') && (await api.getBookkeepingCapabilities()).nh_dividend_protocol!==1)throw new Error('백엔드 배당 입금 기능을 먼저 배포한 뒤 다시 저장해주세요.');
       if(payload.rows.some(r=>r.dividend_currency==='USD') && (await api.getBookkeepingCapabilities()).foreign_dividend_protocol!==1)throw new Error('해외 배당 백엔드를 먼저 배포해주세요.');
+      setPendingPayload(payload);persist({rows,requestId,pendingPayload:payload});
       const result=await api.commitNhNotices(portfolioId,payload);
       recorded=true;setRows([]);setPendingPayload(null);setConfirmed(false);setRequestId(crypto.randomUUID());
       persist({rows:[]});setReload(n=>n+1);
@@ -118,7 +121,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
     }finally{setSaving(false);}
   };
   const undo=async id=>{
-    if(!window.confirm('이 알림 묶음의 배당·입출금·이체·환전·매수를 모두 되돌릴까요? 이전 기준과 취소 이력은 보존됩니다.'))return;
+    if(!window.confirm('이 알림 묶음의 배당·입출금·이체·환전·매매를 모두 되돌릴까요? 이전 기준과 취소 이력은 보존됩니다.'))return;
     setSaving(true);
     try{const result=await api.undoNhNotices(portfolioId,id);await Promise.allSettled((result.performance_portfolios || []).filter(p=>p!==portfolioId).map(p=>api.capturePerformance(p)));setReload(n=>n+1);setMessage('알림 묶음을 취소하고 이전 잔고·원가를 복원했습니다.');await onChanged();}
     catch(error){setMessage(error.message);}
@@ -147,9 +150,9 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
           const correctionDraft=historical?withdrawalCorrectionDraft(row,context,accounts,portfolioId):null;
           return <div className={focused?"history-notice-row":"trade-row-card"} key={row.id} style={{marginTop:12}}>
             <b>{i+1}. {names[row.kind]}{row.assetName?` · ${row.assetName}`:''}</b>
-            <p>{row.kind==='BUY'?`${row.quantity}주 × ${formatKRW(row.price)} · 주문 ${row.brokerOrderNo || '확인 불가'}`:
+            <p>{isTradeNotice(row)?`${row.quantity}주 × ${row.tradeCurrency==='USD'?'$'+Number(row.price).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:12}):formatKRW(row.price)}${row.brokerOrderNo?' · 주문 '+row.brokerOrderNo:''}`:
               row.kind==='DIVIDEND'?(row.dividendCurrency==='USD'?`달러 입금 ${formatUSD(row.usdAmount)} · 원화 세금 ${formatKRW(row.krwTax)} (${row.taxAlreadyReflected?'이미 반영됨':row.taxCashApplied?'지금 차감':'출금 대기'})`:`실수령 ${formatKRW(row.krwAmount)} · 기준일 ${row.referenceDate}`):isCashNotice(row)?formatKRW(row.krwAmount):`${formatKRW(row.krwAmount)} → ${formatUSD(row.usdAmount)} · 고시환율 ${row.quotedRate}`}</p>
-            {preview.fees.filter(f=>f.id===row.id).map(f=><p key={f.id} className="fee-trade-summary">예상 수수료 {formatKRW(f.amount)}{f.deferred?' · 잔고 부족으로 비용은 정산 대기':' · 예수금에서 함께 차감'}</p>)}
+            {preview.fees.filter(f=>f.id===row.id).map(f=><p key={f.id} className="fee-trade-summary">예상 수수료 {f.currency==='USD'?formatUSD(f.amount):formatKRW(f.amount)}{f.deferred?' · 잔고 부족으로 비용은 정산 대기':' · 예수금에서 함께 차감'}</p>)}
             {row.kind==='WITHDRAW' && Number.isFinite(row.reportedAvailableKrw) && <small>알림의 출금가능금액 {formatKRW(row.reportedAvailableKrw)} · 참고값이며 잔고를 덮어쓰지 않습니다.</small>}
             {focused && <div className="history-row-context">{accounts.find(a=>String(a.id)===row.accountId)?.account_alias || '계좌 선택 필요'} · {row.eventDate} · 미반영</div>}
             {historical && <div className="history-help" aria-label={`알림 ${i+1} 과거 출금 처리`}>
@@ -180,7 +183,8 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
             </>}
             <label>적용 날짜 <input aria-label={`알림 ${i+1} 날짜`} type="date" className="input-text" value={row.eventDate} onChange={e=>edit(i,'eventDate',e.target.value)} /></label>
             <small>{row.occurredAt?`알림 시각 ${row.occurredAt.slice(11,16)}`:'알림에 시각 없음 · 같은 날짜는 목록 순서대로 반영합니다.'}</small>
-            {row.kind==='BUY' && <label>종목 <select aria-label={`알림 ${i+1} 종목`} className="input-select" value={row.assetId} onChange={e=>edit(i,'assetId',e.target.value)}><option value="">종목 선택</option>{assets.filter(a=>a.market==='KR' && !a.is_deposit && String(a.ticker).toUpperCase()===row.ticker && (!a.portfolio_id || String(a.portfolio_id)===String(portfolioId))).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+            {row.tradeCurrency==='USD' && <small>알림의 주문일자를 적용 날짜로 표시했습니다. 저장 전 날짜를 확인하세요. 계좌 달러 평균 취득환율을 적용합니다.</small>}
+            {isTradeNotice(row) && <label>종목 <select aria-label={`알림 ${i+1} 종목`} className="input-select" value={row.assetId} onChange={e=>edit(i,'assetId',e.target.value)}><option value="">종목 선택</option>{assets.filter(a=>matchesNamuhAsset(a,row) && (!a.portfolio_id || String(a.portfolio_id)===String(portfolioId))).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
             {isCashNotice(row) && <>
               <label>입출금 구분 <select aria-label={`알림 ${i+1} 입출금 구분`} className="input-select" value={row.external?'EXTERNAL':row.crossPortfolio?'CROSS':'INTERNAL'} onChange={e=>edit(i,'movement',e.target.value)}><option value="EXTERNAL">{row.kind==='WITHDRAW'?'앱 밖으로 출금':'외부 투자금 입금'}</option><option value="INTERNAL">같은 포트폴리오 안의 계좌 이체</option><option value="CROSS">포트폴리오 간 이체</option></select></label>
               {!row.external && <label>{row.kind==='DEPOSIT'?'출금':'입금'} 상대 계좌 <select aria-label={`알림 ${i+1} 이체 상대 계좌`} className="input-select" value={peerAccount(row) || ''} onChange={e=>edit(i,row.kind==='DEPOSIT'?'sourceAccountId':'destinationAccountId',e.target.value)}><option value="">상대 계좌 선택</option>{allAccounts.filter(a=>String(a.id)!==row.accountId && (row.crossPortfolio?String(a.portfolio_id)!==String(portfolioId):!a.portfolio_id || String(a.portfolio_id)===String(portfolioId))).map(a=><option key={a.id} value={a.id}>{a.portfolio_name?`${a.portfolio_name} · `:''}{a.account_alias}</option>)}</select></label>}
@@ -215,7 +219,7 @@ export default function NamuhMessageImport({accounts,assets,portfolioId,tradeDat
       {storageError && <p role="alert">임시 저장을 사용할 수 없습니다. 저장 결과 확인 전에는 이 화면을 닫지 마세요.</p>}
       {message && <p role="status">{message}</p>}
       {!focused && <details><summary>알림 반영 이력·묶음 취소</summary>{batches.map(batch=><p key={batch.id}>{new Date(batch.created_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})} · {batch.result.items?.length || 0}건 {batch.reversed_at?'(취소됨)':<button type="button" className="btn btn-secondary btn-sm" disabled={saving} onClick={()=>undo(batch.id)}>이 묶음 취소</button>}</p>)}</details>}
-      <details><summary>지원 범위·기록 안내</summary><p>국내 매수 전량 체결, 원화 배당·분배금과 USD 현금 배당 입금, 원화 입출금·계좌 이체, USD 외화매수 알림을 지원합니다. 부분 체결·달러 매도 환전은 직접 입력해주세요. 과거 입출금은 기본으로 기록만 저장하므로 예수금이 중복 반영되지 않는지 확인하세요. 연도가 없는 알림은 화면의 체결 날짜 연도로 해석하므로 과거 알림은 적용 날짜를 확인하세요. 등록 전 목록은 이 기기에 30일간 임시 저장됩니다. 환전 원가는 실제 원화 지출액으로 계산하고 고시환율도 보존합니다. 한 묶음에서 오류가 나면 전부 반영하지 않습니다.</p></details>
+      <details><summary>지원 범위·기록 안내</summary><p>국내 매수·매도와 미국 USD 매수 전량 체결, 원화 배당·분배금과 USD 현금 배당 입금, 원화 입출금·계좌 이체, USD 외화매수 알림을 지원합니다. 부분 체결·해외 매도·달러 매도 환전은 직접 입력해주세요. 과거 입출금은 기본으로 기록만 저장하므로 예수금이 중복 반영되지 않는지 확인하세요. 연도가 없는 알림은 화면의 체결 날짜 연도로 해석하므로 과거 알림은 적용 날짜를 확인하세요. 등록 전 목록은 이 기기에 30일간 임시 저장됩니다. 환전 원가는 실제 원화 지출액으로 계산하고 고시환율도 보존합니다. 한 묶음에서 오류가 나면 전부 반영하지 않습니다.</p></details>
     </div>}
   </section>;
 }
