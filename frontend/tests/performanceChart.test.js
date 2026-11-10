@@ -75,6 +75,23 @@ test('daily range crosses years and is anchored on last recorded date, preservin
   assert.deepEqual(reports, original);
 });
 
+test('opening profit shifts the cumulative series but preserves gaps and daily changes', () => {
+  const reports = [
+    dailyRow('2026-10-05', {profit:0,twr_pct:0,value_krw:10000000}),
+    dailyRow('2026-10-06', {profit:31111,twr_pct:0.31,value_krw:10031111}),
+    dailyRow('2026-10-07', {profit:null,twr_pct:null,ledger_unconfirmed:true}),
+  ];
+  const openingLoss = -639000;
+  const shifted = dailyPerformanceSeries(reports,'profit','all',openingLoss);
+  assert.deepEqual(shifted.map(row => row.value),[-639000,-607889,null]);
+  assert.deepEqual(shifted.map(row => row.profit),[0,31111,null]);
+  assert.deepEqual(shifted.map(row => row.comparison?.profit),[undefined,31111,null]);
+  for (const metric of ['value_krw','twr_pct']) {
+    assert.deepEqual(dailyPerformanceSeries(reports,metric,'all',openingLoss),
+      dailyPerformanceSeries(reports,metric,'all'));
+  }
+});
+
 test('daily comparison removes external flows through cumulative profit and crosses a weekend', () => {
   const reports = [
     dailyRow('2026-11-06', { value_krw: 10000000, net_flow: 0, profit: -1500000, record_kind: 'close' }),

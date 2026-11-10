@@ -5,7 +5,7 @@ import {useCompactLayout} from '../../utils/useCompactLayout';
 import PerformanceChart from './PerformanceChart';
 import { performanceValue } from '../../utils/performanceChart';
 
-export default function PeriodPerformance({ portfolioId, performance, onOpenHistory, sales, salesError }) {
+export default function PeriodPerformance({ portfolioId, performance, onOpenHistory, sales, salesError, baselineHoldingProfit }) {
   const { data, busy, error, notice, run, capture, setNotice } = performance;
   const compact=useCompactLayout();
   const timeWeighted = data?.twr_method === 'closing';
@@ -20,7 +20,7 @@ export default function PeriodPerformance({ portfolioId, performance, onOpenHist
         <button className="btn btn-primary" disabled={busy || !startChecked} onClick={()=>run(async()=>{await api.startPerformance(portfolioId);setNotice('현재 평가액을 시작 기준으로 등록했습니다.');})}>기간 성과 시작 기준 등록</button>
       </div> : <div>
         <PerformanceChart reports={data.reports} dailyReports={data.daily_reports || []} baselineDate={data.tracking.baseline_date}
-          sales={sales} salesError={salesError} timeWeighted={timeWeighted} />
+          sales={sales} salesError={salesError} timeWeighted={timeWeighted} baselineHoldingProfit={baselineHoldingProfit} />
         <details className="period-table-details" open={!compact}><summary>기간 성과 표 보기</summary><div className="table-container"><table className="custom-table" aria-label="기간 성과 표"><thead><tr><th>구분</th><th>기간</th><th>평가 시작/종료</th><th>순입금</th><th>기간 손익</th><th>{timeWeighted ? '종가 기준 시간가중 수익률' : '금액가중 기간 수익률'}</th></tr></thead><tbody>
           {data.reports.map(r=><tr key={`${r.kind}/${r.label}`}><td>{r.kind}</td><td>{r.label}{r.partial && ' (기준 등록 이후)'}<br />{r.start} ~ {r.end}</td><td>{r.start_value==null ? '미기록' : formatKRW(r.start_value)} / {r.end_value==null ? '미기록' : formatKRW(r.end_value)}</td><td>{r.net_flow==null ? '—' : formatKRW(r.net_flow)}</td><td>{r.profit==null ? '—' : formatKRW(r.profit)}{(!timeWeighted || r.ledger_unconfirmed) && r.warning && <p>{r.warning}</p>}</td><td>
             {performanceValue((timeWeighted ? r.twr_pct : r.return_pct) ?? null, 'return_pct')}

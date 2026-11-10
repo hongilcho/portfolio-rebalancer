@@ -6,7 +6,8 @@ import {ProfitStatus,ZeroLine,SignedSelection} from '../common/ProfitChartSignal
 import {realizedDayProfit,saleProfit} from '../../utils/realizedReport';
 import './PerformanceSales.css';
 
-function SelectedDayProfit({row}) {
+function SelectedDayProfit({row, includesOpeningProfit}) {
+  const cumulativeProfit = includesOpeningProfit ? row.value : row.profit;
   const comparison = row.comparison;
   const interval = comparison && !comparison.consecutive;
   const rate = row.twr_interval;
@@ -25,8 +26,8 @@ function SelectedDayProfit({row}) {
       {rate && !sameStart && <small>수익률 기준일 <time>{rate.start}</time></small>}
     </div>
     <div>
-      <span>기준일부터 누적손익</span>
-      <strong style={{color:profitColor(row.profit)}}>{signedProfit(row.profit, 'profit')}</strong>
+      <span>{includesOpeningProfit ? '기준일 이전 손익 포함 누적손익' : '기준일부터 누적손익'}</span>
+      <strong style={{color:profitColor(cumulativeProfit)}}>{signedProfit(cumulativeProfit, 'profit')}</strong>
       <small>선택일 <time>{row.label}</time></small>
     </div>
   </div>;
@@ -54,9 +55,10 @@ function SaleDay({day, rows, missingEvaluation = false}) {
   </div>;
 }
 
-export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate, sales, salesError, timeWeighted = false }) {
+export default function PerformanceChart({ reports = [], dailyReports = [], baselineDate, baselineHoldingProfit, sales, salesError, timeWeighted = false }) {
   const [kind, setKind] = useState(dailyReports.length ? '일' : '월');
   const [metric, setMetric] = useState('return_pct');
+  const [includeOpeningProfit, setIncludeOpeningProfit] = useState(false);
   const [year, setYear] = useState('latest');
   const [range, setRange] = useState('auto');
   const [selectedKey, setSelectedKey] = useState(null);
@@ -68,7 +70,14 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
   const selectedYear = years.includes(year) ? year : years.at(-1);
   const daily = kind === '일';
   const metricField = timeWeighted && metric === 'return_pct' ? 'twr_pct' : metric;
-  const series = daily ? dailyPerformanceSeries(dailyReports, metricField, effectiveRange) : performanceSeries(reports, kind, metricField, selectedYear);
+  const showOpeningOption = daily && metric === 'profit';
+  const baselinePeriodProfit = dailyReports.find(row => row.label === baselineDate && row.start === baselineDate)?.profit;
+  const canIncludeOpeningProfit = Number.isFinite(baselineHoldingProfit) && Number.isFinite(baselinePeriodProfit);
+  const includesOpeningProfit = showOpeningOption && includeOpeningProfit && canIncludeOpeningProfit;
+  const profitOffset = includesOpeningProfit ? baselineHoldingProfit - baselinePeriodProfit : 0;
+  const series = daily
+    ? dailyPerformanceSeries(dailyReports, metricField, effectiveRange, profitOffset)
+    : performanceSeries(reports, kind, metricField, selectedYear);
   const warningFor = row => metricField === 'twr_pct' ? row.twr_warning :
     !timeWeighted || row.ledger_unconfirmed ? row.warning : '';
   const selected = series.find(row => row.key === selectedKey) || series.at(-1);
@@ -119,7 +128,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
     ? timeWeighted
       ? daily ? '종가 기준 누적 시간가중 수익률' : '종가 기준 기간 시간가중 수익률'
       : daily ? '기준일부터 누적 금액가중 수익률' : '금액가중 기간 수익률'
-    : daily ? '기준일부터 누적 손익' : '기간 손익';
+    : daily ? (includesOpeningProfit ? '기준일 이전 손익 포함 누적 손익' : '기준일부터 누적 손익') : '기간 손익';
   const tooltipWidth=Math.min(210,right-left);
   const tooltipX=Math.max(left,Math.min(right-tooltipWidth,selectedX-tooltipWidth/2));
   const segments = daily ? dailyPerformanceSegments(series) : [];
@@ -155,10 +164,18 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         <option value="auto">기본 · 최근 {compact?30:90}일</option><option value="30">최근 기록일 기준 30일</option><option value="90">최근 기록일 기준 90일</option>
         <option value="365">최근 기록일 기준 1년</option><option value="all">전체 기록</option>
       </select></label>}
+      {showOpeningOption && <label>
+        <input type="checkbox" checked={includesOpeningProfit} disabled={!canIncludeOpeningProfit}
+          onChange={event => setIncludeOpeningProfit(event.target.checked)} />
+        기준일 이전 손익 포함
+      </label>}
     </div>
     <p className="performance-chart-caption">{compact && !timeWeighted && daily && metric==='return_pct'?'기준일부터 누적 수익률':metricLabel}
       {daily && baselineDate && <small className="performance-chart-baseline">기준일 <time dateTime={baselineDate}>{baselineDate}</time></small>}
     </p>
+    {showOpeningOption && (canIncludeOpeningProfit
+      ? includesOpeningProfit && <p className="performance-chart-note">기준일 보유자산 손익 {signedProfit(baselineHoldingProfit, 'profit')}에 이후 운용손익을 더해 표시합니다.</p>
+      : <p className="performance-chart-note">기준일 손익 기록이 있어야 시작 손익을 포함할 수 있습니다.</p>)}
     {hasSaleMarks && <p className="performance-sale-legend"><span aria-hidden="true">◆</span> 매도일 · 날짜를 선택하면 실현손익을 볼 수 있습니다.</p>}
     {(daily || !dailyReports.length) && salesError && <p className="performance-chart-note" role="status">매도 기록을 갱신하지 못했습니다.{sales && ' 이전 조회 결과를 표시합니다.'}</p>}
     {!series.length ? <p>표시할 기간 성과 기록이 없습니다. 시작 기준 등록 이후의 평가 기록을 확인해주세요.</p> : <>
@@ -237,7 +254,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
           })}
         </svg>
       </div>
-      {daily && selected && <SelectedDayProfit row={selected}/>}
+      {daily && selected && <SelectedDayProfit row={selected} includesOpeningProfit={includesOpeningProfit}/>}
       {selectedSales && <SaleDay day={selected.label} rows={selectedSales}/>}
       {selected && <div className="performance-chart-detail">
         {daily && <div className="performance-chart-controls" role="group" aria-label="일별 기록 선택">
@@ -249,7 +266,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         {selected.flow_count>0 && <p>외부 입출금 {selected.flow_count}건 반영</p>}
         <details><summary>선택한 기록 상세</summary>
         <p>{selected.start} ~ {selected.end}{selected.partial && ' · 시작 기준 등록 이후'}{selected.ongoing && ' · 최근 평가일까지'}</p>
-        {daily && <p>평가액 {performanceValue(selected.value_krw, 'value_krw')} · 누적 순입금 {performanceValue(selected.net_flow, 'profit')} · 누적 손익 {performanceValue(selected.profit, 'profit')}</p>}
+        {daily && <p>평가액 {performanceValue(selected.value_krw, 'value_krw')} · 누적 순입금 {performanceValue(selected.net_flow, 'profit')} · {includesOpeningProfit ? '기준일부터 누적 손익' : '누적 손익'} {performanceValue(selected.profit, 'profit')}</p>}
         {daily && selected.twr_interval?.warning && <p>선택일 수익률 · {selected.twr_interval.warning}</p>}
         {timeWeighted && <p>기존 금액가중 수익률 (XIRR) {performanceValue(selected.return_pct ?? null, 'return_pct')}
           {selected.warning && <> · {selected.warning}</>}</p>}
@@ -265,7 +282,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         {selected.ongoing && <p className="history-muted">진행 중인 기간 · 최근 평가일까지의 성과입니다.</p>}
       </div>}
       <details><summary>그래프 보는 법</summary>
-      <p>{daily ? '점을 선택하면 해당 날짜의 값을 확인할 수 있습니다. 수익률·손익은 시작 기준일부터의 누적 성과입니다. 표시 범위를 바꿔도 계산 기준일은 바뀌지 않습니다.' : '양수는 위쪽, 음수는 아래쪽으로 표시합니다. 막대를 선택하면 해당 기간의 상세 값을 확인할 수 있습니다.'}</p>
+      <p>{daily ? '점을 선택하면 해당 날짜의 값을 확인할 수 있습니다. ' + (includesOpeningProfit ? '손익은 기준일 보유자산 손익에 이후 운용손익을 더한 값입니다. ' : '수익률·손익은 시작 기준일부터의 누적 성과입니다. ') + '표시 범위를 바꿔도 계산 기준일은 바뀌지 않습니다.' : '양수는 위쪽, 음수는 아래쪽으로 표시합니다. 막대를 선택하면 해당 기간의 상세 값을 확인할 수 있습니다.'}</p>
       {daily && <p>하루 운용손익은 직전 평가일부터의 평가액 변화에서 그 사이 외부 순입금을 뺀 값입니다. 매도 실현손익은 별도 표시합니다.</p>}
       <p className="performance-chart-note">{daily ? '종가 기록은 연속된 거래일 사이에 선을 연결합니다. 주말·휴장일은 건너뛰고, 누락된 거래일과 계산 대기 구간은 연결하지 않습니다. 하루만 기록되면 점 하나가 표시됩니다. 평가액은 입출금으로도 변하므로 수익률과 다릅니다. 기존 조회 기록은 날짜별 상세의 평가 기준으로 구분합니다.' : '계산 대기는 0%·0원으로 표시하지 않습니다. 진행 중인 기간은 최근 평가일까지 표시하며, 정확한 금액과 계산 상태는 아래 표에서 확인할 수 있습니다.'}</p>
       {daily && !series.some(row => row.value !== null) && <p>계산 대기 사유는 선택한 기록에서 확인할 수 있습니다.</p>}

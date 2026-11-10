@@ -34,13 +34,13 @@ export function performanceAxisValue(value, metric, span) {
 
 export const performanceDay = label => Date.parse(`${label}T00:00:00Z`) / 86400000;
 
-export function dailyPerformanceSeries(reports, metric, range = '90') {
+export function dailyPerformanceSeries(reports, metric, range = '90', profitOffset = 0) {
   const ordered = [...reports].sort((a, b) => a.label.localeCompare(b.label));
   const lastDay = ordered.length ? performanceDay(ordered.at(-1).label) : 0;
   return ordered.flatMap((row, index) => {
       if (range !== 'all' && performanceDay(row.label) < lastDay - Number(range) + 1) return [];
       const previous = ordered[index - 1];
-      const raw = row[metric];
+      const raw = metric === 'profit' && Number.isFinite(row.profit) ? row.profit + profitOffset : row[metric];
       const value = typeof raw === 'number' && Number.isFinite(raw)
         ? ['return_pct', 'twr_pct'].includes(metric) ? (Math.abs(raw) < 0.005 ? 0 : raw) : Math.round(raw) : null;
       // The server's cumulative profit already excludes external cash flows.

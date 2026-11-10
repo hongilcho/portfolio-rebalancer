@@ -5,8 +5,13 @@ import {profitColor,splitProfitSegment,zeroReference} from '../../utils/profitCh
 import {ProfitStatus,ZeroLine,ZeroOutside,SignedSelection} from '../common/ProfitChartSignals';
 import './HoldingsPerformance.css';
 
-export default function HoldingsPerformance({scope,current,components=[],includeCrypto=false,initialData,onOpenPeriod}){
-  const {data,loading,error}=useHoldingHistory(scope,includeCrypto,initialData);
+export default function HoldingsPerformance(props) {
+  const history = useHoldingHistory(props.scope, props.includeCrypto, props.initialData);
+  return <HoldingsPerformanceChart {...props} history={history}/>;
+}
+
+export function HoldingsPerformanceChart({scope,current,components=[],includeCrypto=false,initialData,history,onOpenPeriod}){
+  const {data,loading,error}=history;
   const [metric,setMetric]=useState('profit_krw'),[range,setRange]=useState('90'),[period,setPeriod]=useState('day');
   const [selected,setSelected]=useState(null),[breakdown,setBreakdown]=useState(false);
   const heading=useId();
