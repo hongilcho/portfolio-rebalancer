@@ -218,6 +218,11 @@ def add_closing_time_weighted_returns(result):
         if not reason and (begin <= 0 or end < 0 or not math.isfinite(begin) or not math.isfinite(end)):
             reason = '입출금 조정 후의 평가액으로 수익률을 계산할 수 없습니다.'
         factor = None if reason else end / begin
+        interval_rate = None if factor is None else (factor - 1) * 100
+        if interval_rate is not None and not math.isfinite(interval_rate):
+            factor = interval_rate = None
+            reason = '안정적으로 계산할 수 있는 수익률 범위를 벗어났습니다.'
+        row['twr_interval'] = {'start': previous_date, 'pct': interval_rate, 'warning': reason}
         factors.append(factor)
         checkpoints[day] = len(factors)
         pending = row['warning'] if row.get('ledger_unconfirmed') else ''

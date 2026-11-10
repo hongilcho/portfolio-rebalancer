@@ -9,11 +9,20 @@ import './PerformanceSales.css';
 function SelectedDayProfit({row}) {
   const comparison = row.comparison;
   const interval = comparison && !comparison.consecutive;
+  const rate = row.twr_interval;
+  const sameStart = rate?.start === comparison?.date;
   return <div className="performance-day-profits" role="group" aria-label="선택일 운용손익" aria-live="polite" aria-atomic="true">
     <div>
       <span>{interval ? '평가일 간 운용손익' : '하루 운용손익'}</span>
-      <strong style={{color:profitColor(comparison?.profit)}}>{signedProfit(comparison?.profit, 'profit')}</strong>
+      <div className="performance-day-values">
+        <strong style={{color:profitColor(comparison?.profit)}}>{signedProfit(comparison?.profit, 'profit')}</strong>
+        {rate && <span>
+          {sameStart && !interval ? '하루 수익률' : '평가일 간 수익률'}{' '}
+          <strong style={{color:profitColor(rate.pct)}}>{signedProfit(rate.pct, 'return_pct')}</strong>
+        </span>}
+      </div>
       <small>{comparison ? <>직전 평가일 <time>{comparison.date}</time>{interval && ' · 평가 기록 사이'}</> : '직전 평가 기록 없음'}</small>
+      {rate && !sameStart && <small>수익률 기준일 <time>{rate.start}</time></small>}
     </div>
     <div>
       <span>기준일부터 누적손익</span>
@@ -241,6 +250,7 @@ export default function PerformanceChart({ reports = [], dailyReports = [], base
         <details><summary>선택한 기록 상세</summary>
         <p>{selected.start} ~ {selected.end}{selected.partial && ' · 시작 기준 등록 이후'}{selected.ongoing && ' · 최근 평가일까지'}</p>
         {daily && <p>평가액 {performanceValue(selected.value_krw, 'value_krw')} · 누적 순입금 {performanceValue(selected.net_flow, 'profit')} · 누적 손익 {performanceValue(selected.profit, 'profit')}</p>}
+        {daily && selected.twr_interval?.warning && <p>선택일 수익률 · {selected.twr_interval.warning}</p>}
         {timeWeighted && <p>기존 금액가중 수익률 (XIRR) {performanceValue(selected.return_pct ?? null, 'return_pct')}
           {selected.warning && <> · {selected.warning}</>}</p>}
         {daily && selected.recorded_at && <p>마지막 기록 시각 {new Date(selected.recorded_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간)</p>}

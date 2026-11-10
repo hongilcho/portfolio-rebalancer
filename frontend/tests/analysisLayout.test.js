@@ -78,13 +78,15 @@ try {
         record_kind:'close',return_pct:3.72,twr_pct:2.12,profit:123194,warning:''},
       {kind:'일',label:'2026-11-03',start:'2026-10-29',end:'2026-11-03',
         record_kind:'close',previous_close_date:'2026-11-02',return_pct:null,twr_pct:0.75,twr_warning:'',
-        profit:100000,warning:'입출금 부호가 여러 번 바뀌었습니다.'},
+        profit:100000,warning:'입출금 부호가 여러 번 바뀌었습니다.',
+        twr_interval:{start:'2026-11-02',pct:-0.22,warning:''}},
     ];
     const html = renderToStaticMarkup(React.createElement(Chart, {dailyReports,timeWeighted:true,baselineDate:'2026-10-29'}));
     assert.match(html,/2026-11-03 종가 기준 누적 시간가중 수익률 \+0.75%/);
     assert.match(html,/<details><summary>선택한 기록 상세<\/summary>.*기존 금액가중 수익률 \(XIRR\) 계산 대기/);
     assert.doesNotMatch(html,/<title>[^<]*입출금 부호|role="status">입출금 부호/);
     assert.match(html,/−23,194원/);
+    assert.match(html,/하루 수익률 <strong[^>]*>−0.22%<\/strong>/);
     const analysis = renderToStaticMarkup(React.createElement(Analysis, { portfolioId:'default', assets:[], dashboardData:{},
       performance:{...performance,data:{...data,twr_method:'closing',daily_reports:dailyReports,
         reports:[{kind:'월',label:'2026-11',start:'2026-10-30',end:'2026-11-03',

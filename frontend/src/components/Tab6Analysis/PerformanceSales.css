@@ -71,3 +71,10 @@
 .performance-day-profits strong {
   font-size: 1.1rem;
 }
+
+.performance-day-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}

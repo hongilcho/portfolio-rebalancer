@@ -218,6 +218,9 @@ def test_closing_twr_survives_the_november_3_xirr_sign_change():
     assert '부호' in daily[-1]['warning'] and not daily[-1]['twr_warning']
     expected = 1.01 * (15250000/15100000) * (15100000/15250000)
     assert daily[-1]['twr_pct'] == pytest.approx((expected-1)*100)
+    assert daily[-1]['twr_interval'] == {
+        'start': nov2, 'pct': pytest.approx((15100000/15250000-1)*100), 'warning': ''
+    }
     november = next(r for r in result['reports'] if r['label']=='2026-11')
     assert november['twr_pct'] == pytest.approx(0)
     assert result['reports'][-1]['twr_pct'] == pytest.approx(daily[-1]['twr_pct'])
@@ -242,10 +245,13 @@ def test_closing_twr_bridges_no_flow_gap_but_flags_gap_with_flows():
              close(next_close,110,gap_day),close(next_month,121,next_close)]
     no_flow = closing_returns(t,snaps,[])['daily_reports']
     assert [r['twr_pct'] for r in (no_flow[0],no_flow[2],no_flow[3])] == pytest.approx([0,10,21])
+    assert no_flow[2]['twr_interval'] == {'start':first,'pct':pytest.approx(10),'warning':''}
     assert no_flow[1]['twr_pct'] is None
     with_flow = closing_returns(t,snaps,[flow(gap_day,5)])
     assert '종가 기록이 빠진 구간' in with_flow['daily_reports'][2]['twr_warning']
     assert all(r['twr_pct'] is None for r in with_flow['daily_reports'][1:])
+    assert with_flow['daily_reports'][2]['twr_interval']['pct'] is None
+    assert with_flow['daily_reports'][3]['twr_interval'] == {'start':next_close,'pct':pytest.approx(10),'warning':''}
     december = next(r for r in with_flow['reports'] if r['label']=='2026-12')
     assert december['twr_pct'] == pytest.approx(10)
     assert with_flow['reports'][-1]['twr_pct'] is None
